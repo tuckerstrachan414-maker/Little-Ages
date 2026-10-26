@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "sim": "node --experimental-strip-types scripts/sim-headless.ts"
+    "sim": "node --experimental-strip-types scripts/sim-headless.ts",
+    "page": "npm run build && node --experimental-strip-types --no-warnings scripts/page.ts"
   },
   "devDependencies": {
     "@types/node": "^22.15.30",
