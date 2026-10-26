@@ -1,0 +1,1252 @@
+<title>Little Ages Style Board</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Pixelify+Sans:wght@400;500;600;700&family=Silkscreen:wght@400;700&display=swap">
+<style>
+/* Layout: one calm column of "specimen plates"; the pixel art is the loud part, the page chrome stays quiet sage and ink. */
+:root {
+  --bg: #eceee6;
+  --panel: #f7f8f2;
+  --ink: #20271d;
+  --muted: #59634f;
+  --line: #ccd2c2;
+  --art-bg: #dde2d3;
+  --accent: #8a5f0c;
+  --accent-bg: #e3ad2f;
+  --on-accent: #1d1704;
+  --focus: #2b62a0;
+  --f-display: "Pixelify Sans", "Silkscreen", ui-monospace, monospace;
+  --f-body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --f-label: "Silkscreen", "Pixelify Sans", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #141813; --panel: #1c211a; --ink: #e4e8dc; --muted: #9ba590; --line: #313a2e;
+    --art-bg: #232a21; --accent: #e8bb4a; --accent-bg: #e3ad2f; --on-accent: #1d1704; --focus: #86b6ec;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #141813; --panel: #1c211a; --ink: #e4e8dc; --muted: #9ba590; --line: #313a2e;
+  --art-bg: #232a21; --accent: #e8bb4a; --accent-bg: #e3ad2f; --on-accent: #1d1704; --focus: #86b6ec;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 16px; line-height: 1.55; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--bg); }
+.wrap { max-width: 1080px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+header.top { padding-block: 40px 8px; }
+.eyebrow { font-family: var(--f-label); font-size: 12px; letter-spacing: .08em; color: var(--accent); margin: 0 0 6px; }
+h1 { font-family: var(--f-display); font-weight: 600; font-size: clamp(2.4rem, 7vw, 4rem); line-height: 1; margin: 0 0 14px; text-wrap: balance; }
+h2 { font-family: var(--f-display); font-weight: 600; font-size: clamp(1.5rem, 3.6vw, 2rem); line-height: 1.1; margin: 0 0 8px; text-wrap: balance; }
+h3 { font-family: var(--f-display); font-weight: 500; font-size: 1.15rem; margin: 22px 0 10px; }
+p { margin: 0 0 12px; max-width: 66ch; }
+.lede { font-size: 1.06rem; color: var(--muted); }
+main section { padding-block: 34px 10px; border-top: 1px solid var(--line); margin-top: 26px; }
+main section:first-of-type { border-top: 0; margin-top: 8px; }
+.note { color: var(--muted); font-size: .95rem; }
+
+canvas.px { image-rendering: pixelated; image-rendering: crisp-edges; display: block; max-width: 100%; height: auto; background: var(--art-bg); }
+
+/* direction cards */
+.dir-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 430px), 1fr)); gap: 20px; margin-top: 18px; }
+.dir-card { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; display: flex; flex-direction: column; }
+.dir-card canvas { width: 100%; }
+.dir-meta { padding: 14px 16px 16px; display: grid; grid-template-columns: 1fr auto; gap: 4px 14px; align-items: start; }
+.dir-meta h3 { margin: 0; display: flex; align-items: center; gap: 10px; }
+.dir-meta p { grid-column: 1; margin: 0; color: var(--muted); font-size: .95rem; min-width: 0; }
+.dir-meta .pick { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
+.tag { font-family: var(--f-label); font-size: 13px; line-height: 1; padding: 4px 6px 3px; border: 2px solid var(--ink); border-radius: 3px; }
+.swatches { display: flex; gap: 3px; margin-top: 8px; }
+.swatches i { width: 14px; height: 14px; border-radius: 2px; display: block; box-shadow: inset 0 0 0 1px rgba(0,0,0,.18); }
+
+/* buttons */
+button { font: inherit; color: inherit; }
+.pick, .seg button, .era button, .btn {
+  font-family: var(--f-display); font-size: 1rem; font-weight: 500; line-height: 1;
+  padding: 9px 14px 8px; border: 2px solid var(--ink); border-radius: 4px; background: transparent; cursor: pointer;
+  box-shadow: 0 3px 0 var(--ink); transform: translateY(0); transition: transform .08s, box-shadow .08s, background .12s;
+}
+.pick:hover, .seg button:hover, .era button:hover, .btn:hover { background: color-mix(in srgb, var(--accent-bg) 22%, transparent); }
+.pick:active, .seg button:active, .era button:active, .btn:active { transform: translateY(2px); box-shadow: 0 1px 0 var(--ink); }
+.pick[aria-pressed="true"], .seg button[aria-pressed="true"], .era button[aria-pressed="true"] { background: var(--accent-bg); color: var(--on-accent); border-color: var(--ink); }
+.pick[aria-pressed="true"]::before { content: "\2713  "; }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+/* sticky preview switcher */
+.viewbar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); padding-block: 10px; margin-top: 30px; }
+.viewbar .wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.viewbar .lbl { font-family: var(--f-label); font-size: 12px; letter-spacing: .06em; color: var(--muted); }
+.seg { display: flex; flex-wrap: wrap; gap: 8px; }
+.seg button { font-size: .92rem; padding: 7px 10px 6px; }
+@media (max-width: 560px) { .seg .nm { display: none; } .seg button { padding: 7px 13px 6px; } .viewbar { padding-block: 8px; } .viewbar .wrap { flex-wrap: nowrap; } }
+
+/* specimen cells */
+.cells, .opts { --s: 4; }
+.cells.big { --s: 5; }
+.cells.mid { --s: 3; }
+@media (max-width: 560px) { .cells, .opts { --s: 3; } .cells.big { --s: 4; } .cells.mid { --s: 2.6; } }
+.cells { display: flex; flex-wrap: wrap; gap: 14px 12px; align-items: flex-end; }
+.cell { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.cell canvas { border-radius: 4px; }
+.cell figcaption { font-family: var(--f-label); font-size: 11px; letter-spacing: .05em; color: var(--muted); text-align: center; max-width: 16ch; line-height: 1.25; }
+.op { font-family: var(--f-display); font-size: 2rem; color: var(--muted); align-self: center; padding: 0 2px 22px; }
+.wide { width: 100%; border-radius: 6px; }
+
+/* interface stage */
+.era { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 14px; }
+.era button { font-size: .9rem; padding: 7px 10px 6px; }
+.ui-stage { position: relative; container-type: inline-size; border-radius: 6px; overflow: hidden; }
+.ui-stage canvas { width: 100%; }
+.hud { position: absolute; inset: 0; pointer-events: none; font-size: clamp(9px, 1.55cqw, 15px); }
+.hud > * { position: absolute; pointer-events: auto; }
+.hud .date { top: 3%; left: 2%; display: flex; gap: .8em; align-items: center; padding: .55em .9em; }
+.hud .date .spd { display: flex; gap: .35em; }
+.hud .date .spd span { padding: .1em .4em; border-radius: 2px; }
+.hud .date .spd span.on { outline: 1px solid currentColor; }
+.hud .find { top: 3%; right: 2%; padding: .55em .9em; display: flex; gap: .9em; }
+.hud .news { left: 2%; bottom: 4%; width: 34%; padding: .6em .9em; }
+.hud .news p { margin: 0; line-height: 1.35; max-width: none; }
+.hud .news p + p { margin-top: .35em; }
+.hud .card { right: 2%; top: 17%; width: 30%; padding: .8em .95em; }
+.hud .card .who { display: flex; gap: .7em; align-items: center; margin-bottom: .5em; }
+.hud .card canvas { width: 3.4em; height: auto; background: transparent; border-radius: 2px; }
+.hud .card .nm { font-weight: 700; font-size: 1.12em; line-height: 1.1; }
+.hud .card .sub { opacity: .78; font-size: .92em; }
+.hud .card .bar { display: grid; grid-template-columns: 5.2em 1fr; gap: .5em; align-items: center; margin: .25em 0; font-size: .9em; }
+.hud .card .bar b { display: block; height: .55em; border-radius: 1px; background: color-mix(in srgb, currentColor 24%, transparent); position: relative; }
+.hud .card .bar b i { position: absolute; inset: 0 auto 0 0; background: currentColor; border-radius: 1px; }
+.hud .card .why { margin: .6em 0 .5em; line-height: 1.35; max-width: none; }
+.hud .card .acts { display: flex; gap: .5em; flex-wrap: wrap; }
+.hud .card .acts span { padding: .2em .5em; border: 1px solid currentColor; border-radius: 2px; font-size: .88em; }
+.hud .tools { right: 2%; bottom: 4%; display: flex; gap: .5em; padding: .45em .6em; }
+.hud .tools span { padding: .15em .45em; }
+@container (max-width: 600px) {
+  .hud { position: static; display: grid; gap: 8px; padding: 10px; font-size: 13px; background: var(--art-bg); }
+  .hud > * { position: static; width: auto !important; }
+}
+
+/* era skins: each skin is its own fixed material, identical in light and dark */
+.skin-stone .hud > * { background: #6c675d radial-gradient(circle at 20% 30%, #7a756a 0 1px, transparent 2px) 0 0 / 7px 6px; color: #f3eee2; border: 3px solid #45413a; box-shadow: inset 2px 2px 0 #8a8577, inset -2px -2px 0 #4e4a42; clip-path: polygon(6px 0, calc(100% - 4px) 0, 100% 5px, 100% calc(100% - 6px), calc(100% - 7px) 100%, 4px 100%, 0 calc(100% - 4px), 0 6px); font-family: var(--f-display); }
+.skin-bronze .hud > * { background: linear-gradient(160deg, #c8924a, #96622a 70%, #7d4f20); color: #2a1706; border: 3px solid #5a3712; border-radius: 3px; box-shadow: inset 0 1px 0 #e7b875, 0 2px 0 #3b220a; font-family: var(--f-display); }
+.skin-medieval .hud > * { background: #ecd9ad radial-gradient(ellipse at center, transparent 55%, rgba(122,84,40,.22)); color: #3a2814; border: 2px solid #7a5a35; outline: 1px solid #7a5a35; outline-offset: -6px; border-radius: 2px; font-family: var(--f-display); }
+.skin-industrial .hud > * { background: #2d3229; color: #eee5c6; border: 3px solid #c39b47; border-radius: 2px; box-shadow: inset 0 0 0 1px #6b5526; background-image: radial-gradient(circle, #e0c070 0 1.5px, transparent 2px), radial-gradient(circle, #e0c070 0 1.5px, transparent 2px); background-size: 100% 100%; background-position: 5px 5px, calc(100% - 5px) calc(100% - 5px); background-repeat: no-repeat; font-family: var(--f-label); font-size: .92em; }
+.skin-modern .hud > * { background: rgba(250, 251, 252, .84); color: #1b2128; border: 1px solid rgba(20, 30, 40, .14); border-radius: 10px; box-shadow: 0 6px 20px rgba(10, 20, 30, .18); backdrop-filter: blur(6px); font-family: var(--f-body); }
+.skin-space .hud > * { background: rgba(6, 26, 44, .72) repeating-linear-gradient(0deg, rgba(110, 240, 255, .07) 0 1px, transparent 1px 3px); color: #c8fbff; border: 1px solid #63e6f5; border-radius: 4px; box-shadow: 0 0 12px rgba(99, 230, 245, .45), inset 0 0 10px rgba(99, 230, 245, .18); font-family: var(--f-label); font-size: .92em; }
+
+/* picks */
+.pickrow { display: grid; gap: 12px; margin: 18px 0 26px; }
+.pickrow .opts { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-end; }
+.opt { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.opt canvas { border-radius: 4px; }
+#copy-box { min-height: 120px; margin-top: 10px; }
+textarea { width: 100%; max-width: 66ch; min-height: 110px; font: inherit; color: var(--ink); background: var(--panel); border: 2px solid var(--line); border-radius: 4px; padding: 10px 12px; }
+textarea:focus-visible { border-color: var(--focus); }
+.status { font-size: .92rem; color: var(--muted); min-height: 1.4em; }
+.save-line { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 12px; }
+footer { padding-block: 40px 60px; color: var(--muted); font-size: .9rem; }
+@media (prefers-reduced-motion: reduce) { .pick, .seg button, .era button, .btn { transition: none; } }
+</style>
+
+<header class="top wrap">
+  <p class="eyebrow">Little Ages / Step 0</p>
+  <h1>Style board</h1>
+  <p class="lede">Everything on this page is drawn live by code, using the same approach the game will use: people, homes and land are assembled from parts and colored by genetics, culture and season, so nothing is copy-pasted. Look through it, then make your picks at the bottom. They save to this page, and I can read them from here.</p>
+</header>
+
+<main>
+  <section id="directions" class="wrap">
+    <h2>Art direction</h2>
+    <p>The same Stone Age camp in four looks. The farmer hoes, the fisher waits for a bite, someone is chopping wood, and the kids are chasing the dog around the fire.</p>
+    <div class="dir-grid" id="dir-grid"></div>
+  </section>
+
+  <div class="viewbar">
+    <div class="wrap">
+      <span class="lbl">View below in</span>
+      <div class="seg" id="viewseg" role="group" aria-label="Art direction for the previews below"></div>
+    </div>
+  </div>
+
+  <section id="people" class="wrap">
+    <h2>People</h2>
+    <p>An adult is 8 by 16 pixels. You should be able to tell age, sex, ancestry and family resemblance at a glance.</p>
+    <h3>One family line, every age</h3>
+    <div class="cells big" id="cells-ages"></div>
+    <h3>Different ancestries</h3>
+    <div class="cells big" id="cells-anc"></div>
+    <h3>Genetics in one family</h3>
+    <p class="note">A dark-skinned mother with tight curls and a light-skinned father with straight brown hair. Their children land in between, and each one comes out a little different.</p>
+    <div class="cells big" id="cells-family"></div>
+  </section>
+
+  <section id="actions" class="wrap">
+    <h2>Actions</h2>
+    <p>Every job has its own animation, so you can tell what anyone is doing from across the map. Talking shows little picture bubbles about what the conversation is about.</p>
+    <div class="cells" id="cells-actions"></div>
+  </section>
+
+  <section id="homes" class="wrap">
+    <h2>Homes and cultures</h2>
+    <p>Each culture builds in its own style. Inside one culture, homes still differ by wealth, size and how well they are kept up.</p>
+    <div class="cells" id="cells-homes"></div>
+  </section>
+
+  <section id="seasons" class="wrap">
+    <h2>Seasons and biomes</h2>
+    <p>The same patch of riverside through one year, then three very different places to live.</p>
+    <div class="cells mid" id="cells-seasons"></div>
+  </section>
+
+  <section id="underground" class="wrap">
+    <h2>Underground</h2>
+    <p>Cross-section view. A miner climbs the shaft while another works the copper vein. Groundwater collects in the cave below, and the layer view will show these same tunnels from above.</p>
+    <canvas class="px wide" id="cv-under" width="192" height="108" aria-label="Cross-section of a mine under a village"></canvas>
+  </section>
+
+  <section id="interface" class="wrap">
+    <h2>Interface</h2>
+    <p>Corner cards over the world. The layout never moves, but its material changes with the era of the most advanced civilization. Click through the eras.</p>
+    <div class="era" id="eraseg" role="group" aria-label="Interface era"></div>
+    <div class="ui-stage skin-stone" id="ui-stage">
+      <canvas class="px" id="cv-ui" width="192" height="112" aria-label="The camp with interface cards on top"></canvas>
+      <div class="hud" id="hud">
+        <div class="date"><span id="hud-date">Late Spring, Year 340</span><span class="spd"><span>II</span><span class="on">&gt;</span><span>&gt;&gt;</span><span>&gt;&gt;&gt;</span></span></div>
+        <div class="find"><span>Find</span><span>Book</span><span>Menu</span></div>
+        <div class="news">
+          <p>Tovu and Rin were married by the river.</p>
+          <p>Ama caught three fish before noon.</p>
+          <p>Old Kesh says the elk have gone north.</p>
+        </div>
+        <div class="card">
+          <div class="who"><canvas class="px" id="cv-portrait" width="12" height="20"></canvas><div><div class="nm">Ama, 34</div><div class="sub">Fisher, mother of three</div></div></div>
+          <div class="bar"><span>Food</span><b><i style="width:32%"></i></b></div>
+          <div class="bar"><span>Rest</span><b><i style="width:70%"></i></b></div>
+          <div class="bar"><span>Belonging</span><b><i style="width:84%"></i></b></div>
+          <p class="why"><strong>Why fishing?</strong> Her kids are hungry, the river is close, and fish were biting yesterday.</p>
+          <div class="acts"><span>Family</span><span>Memories</span><span>Follow</span></div>
+        </div>
+        <div class="tools"><span>Map</span><span>Tree</span><span>Nudge</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="picks" class="wrap">
+    <h2>Your picks</h2>
+    <p>Pick one in each row. Mixing is fine; describe it in the notes, for example "A's colors with C's softer outlines."</p>
+
+    <div class="pickrow">
+      <h3>Art direction</h3>
+      <div class="opts" id="pick-direction"></div>
+    </div>
+    <div class="pickrow">
+      <h3>Outlines</h3>
+      <p class="note">Outlines can be chosen separately from the direction.</p>
+      <div class="opts" id="pick-outline"></div>
+    </div>
+    <div class="pickrow">
+      <h3>Proportions</h3>
+      <div class="opts" id="pick-proportion"></div>
+    </div>
+    <div class="pickrow">
+      <h3>Notes</h3>
+      <label for="notes" class="note">Anything you love, hate or want changed.</label>
+      <textarea id="notes" placeholder="e.g. Hearth colors, but make the water brighter. Love the dog."></textarea>
+      <div class="save-line">
+        <button class="btn" id="copy-btn" type="button">Copy my picks</button>
+        <span class="status" id="status" role="status"></span>
+      </div>
+    </div>
+  </section>
+</main>
+<footer class="wrap">Little Ages style board. All art is generated in your browser from code; no images are used.</footer>
+
+<script>
+"use strict";
+/* ---------- color ---------- */
+const hex2rgb = h => [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)];
+const rgb2hex = (r,g,b) => "#" + [r,g,b].map(v => Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,"0")).join("");
+function rgb2hsl(r,g,b){ r/=255; g/=255; b/=255; const mx=Math.max(r,g,b), mn=Math.min(r,g,b); let h=0,s=0; const l=(mx+mn)/2;
+  if(mx!==mn){ const d=mx-mn; s=l>0.5?d/(2-mx-mn):d/(mx+mn);
+    h = mx===r ? (g-b)/d+(g<b?6:0) : mx===g ? (b-r)/d+2 : (r-g)/d+4; h*=60; } return [h,s,l]; }
+function hsl2rgb(h,s,l){ h=((h%360)+360)%360; const c=(1-Math.abs(2*l-1))*s, x=c*(1-Math.abs((h/60)%2-1)), m=l-c/2;
+  let r=0,g=0,b=0; if(h<60){r=c;g=x}else if(h<120){r=x;g=c}else if(h<180){g=c;b=x}else if(h<240){g=x;b=c}else if(h<300){r=x;b=c}else{r=c;b=x}
+  return [(r+m)*255,(g+m)*255,(b+m)*255]; }
+const clamp01 = v => Math.max(0, Math.min(1, v));
+function mix(a, b, t){ const A=hex2rgb(a), B=hex2rgb(b); return rgb2hex(A[0]+(B[0]-A[0])*t, A[1]+(B[1]-A[1])*t, A[2]+(B[2]-A[2])*t); }
+/* hue-shifted shading: shadows lean cool, highlights lean warm, the way pixel artists ramp colors */
+function shade(hex, amt){ const [h,s,l]=rgb2hsl(...hex2rgb(hex)); const toward = amt>0 ? 235 : 50;
+  let dh = ((toward - h + 540) % 360) - 180; const nh = h + dh*Math.min(0.18, Math.abs(amt)*0.5);
+  return rgb2hex(...hsl2rgb(nh, clamp01(s + Math.abs(amt)*0.12), clamp01(l - amt))); }
+
+/* ---------- the four art directions ---------- */
+const DIRS = {
+  A: { name: "Hearth", blurb: "Warm earth tones and soft brown outlines, like a picture book.", hue: 5, sat: 0.96, con: 1.0, lit: 0.01, outline: "dark", oc: "#3b2a22", shadeAmt: 0.13, sky: "#f0d9a8" },
+  B: { name: "Toybox", blurb: "Bright and punchy with crisp dark outlines. Reads instantly at any zoom.", hue: 0, sat: 1.32, con: 1.1, lit: 0.02, outline: "dark", oc: "#1b1626", shadeAmt: 0.12, sky: "#bfe6ff" },
+  C: { name: "Dawn", blurb: "Soft pastels and gentle outlines. Dreamy and calm.", hue: 2, sat: 0.72, con: 0.74, lit: 0.13, outline: "soft", oc: null, shadeAmt: 0.08, sky: "#f6e3ea" },
+  D: { name: "Field Notes", blurb: "Muted, natural colors with outlines tinted from each object. Grounded and realistic.", hue: -6, sat: 0.62, con: 0.96, lit: -0.015, outline: "sel", oc: null, shadeAmt: 0.14, sky: "#d9dccd" },
+};
+const DIR_KEYS = ["A","B","C","D"];
+const gradeCache = {};
+function grade(dk, hex){ const key = dk+hex; const c = gradeCache[key]; if (c) return c;
+  const d = DIRS[dk]; let [h,s,l] = rgb2hsl(...hex2rgb(hex));
+  /* warm or cool the whole world a touch */
+  h += d.hue * (1 - Math.abs(l-0.5)*1.2);
+  s = clamp01(s * d.sat);
+  l = clamp01(0.5 + (l - 0.5) * d.con + d.lit);
+  return gradeCache[key] = rgb2hex(...hsl2rgb(h,s,l)); }
+
+/* ---------- base palette (graded per direction at draw time) ---------- */
+const P = {
+  grass:"#6fa147", grassD:"#58873a", grassL:"#8dbb58", grassDD:"#46702f",
+  flowerY:"#ecd26a", flowerP:"#e690a4", flowerW:"#f4f1e6",
+  dirt:"#9a6a42", dirtD:"#7b5233", dirtL:"#b6865a",
+  path:"#b8946a", pathD:"#9c7a54",
+  sand:"#dcc58e", sandD:"#c3a86f",
+  water:"#3d84a6", waterD:"#2e6a89", waterL:"#79bfd2", foam:"#dff2f3",
+  stone:"#8b8a83", stoneD:"#66655f", stoneL:"#adaca2",
+  wood:"#7a4e2d", woodD:"#583720", woodL:"#9d6b41",
+  thatch:"#c99a4e", thatchD:"#a07636", thatchL:"#e4bd6c",
+  leaf:"#4c8a3a", leafD:"#376a2b", leafL:"#73ab4b", trunk:"#6b4a2c",
+  fire:"#f29a36", fireL:"#ffe27c", fireD:"#d3492a", smoke:"#d7d6cf", ember:"#ff7a3a",
+  snow:"#f3f5f7", snowD:"#cbd5e0", ice:"#b9dbe8",
+  adobe:"#c98d5f", adobeD:"#a76f47", adobeL:"#e0ad7e",
+  moss:"#6f8f3e", log:"#8a5a34", logD:"#64401f",
+  ore:"#3fa58a", oreCu:"#d07a3c", coal:"#2c2a2a", gold:"#f2c94c",
+  soil:"#6e4a30", soilD:"#563823", rock:"#77736b", rockD:"#5d5a54", rockL:"#8d8980", deep:"#4c4a48",
+  hide:"#a77a4e", hideD:"#86603a", linen:"#ddd0ae", ochre:"#a8453a", indigo:"#3c5a8a", moss2:"#5e7d3a", yel:"#c9a03a", wool:"#e6dfcd", dark:"#3c3530",
+  eye:"#231a17", white:"#ffffff", blush:"#e88a8a",
+  dog:"#b07a44", dogD:"#7e5530", duck:"#e9e3d0", duckH:"#3f7a4a", beak:"#f0a030",
+  deer:"#9a6a3c", deerD:"#6e4a28",
+};
+
+/* ---------- skin and hair from genetics ---------- */
+const SKIN_STOPS = [[0,"#f7dccb"],[0.18,"#efc3a3"],[0.36,"#d9a277"],[0.54,"#b47b50"],[0.72,"#8a5634"],[0.88,"#64391f"],[1,"#452616"]];
+function skinOf(mel, under=0){ let i=0; while(i<SKIN_STOPS.length-2 && mel>SKIN_STOPS[i+1][0]) i++;
+  const [a,ca]=SKIN_STOPS[i], [b,cb]=SKIN_STOPS[i+1]; let c = mix(ca, cb, clamp01((mel-a)/(b-a)));
+  if (under) { const [h,s,l]=rgb2hsl(...hex2rgb(c)); c = rgb2hex(...hsl2rgb(h + under*6, s, l)); } return c; }
+const HAIR = { black:"#1f1a17", dkbrown:"#3a2416", brown:"#64412a", auburn:"#8b3f24", red:"#b4562c", blond:"#d6b062", ash:"#a8987a", gray:"#a8a39b", white:"#e4e1da" };
+
+/* ---------- grids: sprites are 2D arrays of base colors ---------- */
+function grid(w,h){ const g = { w, h, px: new Array(w*h).fill(null) }; return g; }
+function put(g,x,y,c){ x|=0; y|=0; if (c && x>=0 && y>=0 && x<g.w && y<g.h) g.px[y*g.w+x] = c; }
+function get(g,x,y){ return (x>=0 && y>=0 && x<g.w && y<g.h) ? g.px[y*g.w+x] : null; }
+function rect(g,x,y,w,h,c){ for(let j=0;j<h;j++) for(let i=0;i<w;i++) put(g,x+i,y+j,c); }
+function hline(g,x,y,w,c){ rect(g,x,y,w,1,c); }
+function vline(g,x,y,h,c){ rect(g,x,y,1,h,c); }
+function mirror(g){ const m = grid(g.w,g.h); for(let y=0;y<g.h;y++) for(let x=0;x<g.w;x++) m.px[y*g.w+(g.w-1-x)] = g.px[y*g.w+x]; return m; }
+
+/* outline pass on graded colors: dark = one ink color, sel = darker version of the touching pixel, soft = gentle version of sel */
+function outlined(g, dk, mode){
+  const d = DIRS[dk]; mode = mode || d.outline;
+  const o = grid(g.w+2, g.h+2);
+  for (let y=0;y<g.h;y++) for (let x=0;x<g.w;x++){ const c=g.px[y*g.w+x]; if(c) o.px[(y+1)*o.w+x+1] = grade(dk,c); }
+  if (mode === "none") return o;
+  const src = o.px.slice();
+  for (let y=0;y<o.h;y++) for (let x=0;x<o.w;x++){
+    if (src[y*o.w+x]) continue;
+    let n = null;
+    for (const [dx,dy] of [[0,1],[0,-1],[1,0],[-1,0]]) { const xx=x+dx, yy=y+dy; if (xx>=0&&yy>=0&&xx<o.w&&yy<o.h && src[yy*o.w+xx]) { n = src[yy*o.w+xx]; if (dy===-1) break; } }
+    if (!n) continue;
+    if (mode === "dark") o.px[y*o.w+x] = d.oc || "#2a2220";
+    else if (mode === "sel") o.px[y*o.w+x] = shade(n, 0.30);
+    else if (mode === "soft") o.px[y*o.w+x] = shade(n, 0.16);
+  }
+  return o;
+}
+/* sprite cache: key -> small canvas, so animated scenes stay cheap */
+const spriteCache = new Map();
+function toCanvas(g){ const c = document.createElement("canvas"); c.width=g.w; c.height=g.h; const x=c.getContext("2d");
+  for (let y=0;y<g.h;y++) for (let i=0;i<g.w;i++){ const p=g.px[y*g.w+i]; if(p){ x.fillStyle=p; x.fillRect(i,y,1,1); } } return c; }
+let OUTLINE_OVERRIDE = null;
+function sprite(key, dk, mode, build){ const m = mode || OUTLINE_OVERRIDE || ""; const k = dk+"|"+m+"|"+key; let c = spriteCache.get(k);
+  if (!c) { c = toCanvas(outlined(build(), dk, m || undefined)); spriteCache.set(k, c); } return c; }
+/* draw a sprite so its feet (bottom center) land on x,y */
+function stamp(ctx, c, x, y, flip){ const dx = Math.round(x - c.width/2), dy = Math.round(y - c.height + 1);
+  if (!flip) { ctx.drawImage(c, dx, dy); return; }
+  ctx.save(); ctx.translate(dx + c.width, dy); ctx.scale(-1,1); ctx.drawImage(c, 0, 0); ctx.restore(); }
+/* raw graded fills for terrain */
+function fill(ctx, dk, c, x, y, w=1, h=1){ ctx.fillStyle = grade(dk,c); ctx.fillRect(x|0,y|0,w,h); }
+
+/* ---------- deterministic randomness ---------- */
+function hash(x,y,s=0){ let h = (x*374761393 + y*668265263 + s*2147483647) | 0; h = (h ^ (h >>> 13)) * 1274126177 | 0; return ((h ^ (h >>> 16)) >>> 0) / 4294967295; }
+function rng(seed){ let s = seed >>> 0 || 1; return () => { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return s / 4294967295; }; }
+
+/* ---------- people ---------- */
+/* body plans per age; "cute" trades body for a bigger head */
+const AGE = {
+  toddler:{hw:6,hh:4,th:2,lh:1,sw:4}, child:{hw:6,hh:4,th:3,lh:2,sw:4}, teen:{hw:6,hh:4,th:5,lh:4,sw:4},
+  adult:{hw:6,hh:5,th:5,lh:4,sw:6}, elder:{hw:6,hh:5,th:5,lh:3,sw:6,stoop:1},
+};
+const AGE_CUTE = {
+  toddler:{hw:6,hh:5,th:2,lh:1,sw:4}, child:{hw:8,hh:5,th:3,lh:1,sw:4}, teen:{hw:8,hh:5,th:4,lh:3,sw:4},
+  adult:{hw:8,hh:6,th:4,lh:3,sw:6}, elder:{hw:8,hh:6,th:4,lh:2,sw:6,stoop:1},
+};
+let PROPORTION = "balanced";
+const col = c => (c && c[0] === "#") ? c : (P[c] || HAIR[c] || c);
+
+/* returns {g, tip} — tip is where a held rod or tool ends (grid coords), used by scenes for fishing lines */
+function personGrid(sp, frame){
+  const cute = (sp.cute ?? (PROPORTION === "cute"));
+  const A = (cute ? AGE_CUTE : AGE)[sp.age];
+  const g = grid(16, 24), cx = 8, fy = 23, f = frame & 3, act = sp.act || "stand";
+  const sit = act === "sit" || act === "cook";
+  const legH = sit ? 1 : A.lh;
+  const T = 1 + A.hh + A.th + legH + 1;
+  const y0 = fy - T + 1, hy = y0 + 1, ty = hy + A.hh, ly = ty + A.th;
+  const stoop = A.stoop || 0;
+  const skin = skinOf(sp.mel ?? 0.5, sp.under || 0), skinD = shade(skin, 0.09);
+  let hairC = col(sp.hair || "black"); if (sp.gray) hairC = mix(hairC, HAIR.white, sp.gray);
+  const hairD = shade(hairC, 0.07), hairL = shade(hairC, -0.06);
+  const top = col(sp.top || "hide"), topD = shade(top, 0.1), topL = shade(top, -0.06);
+  const bot = col(sp.bottom || sp.top || "hide"), botD = shade(bot, 0.1);
+  const foot = sp.shoes ? col(sp.shoes) : shade(skin, 0.15);
+  const eye = col(sp.eye || "eye");
+  const side = sp.view === "side";
+  const wear = sp.wear || "tunic";
+  const stride = (act === "walk" || act === "run" || act === "carry" || act === "canewalk") ? [0,1,0,-1][f] * (act === "run" ? 2 : 1) : 0;
+  let tip = null;
+  const hw = side ? A.hw - 1 : A.hw;
+  const hx = side ? cx - 3 + stoop : cx - A.hw/2;
+  const hY = hy + stoop;               /* head top row (skin) */
+  const ey = hY + Math.floor(A.hh/2);  /* eye row */
+  const longHair = ["long","wavy","braids","shaggy"].includes(sp.style);
+
+  /* back hair goes behind everything */
+  if (longHair && sp.style !== "braids") {
+    const bottom = ty + (sp.style === "shaggy" ? 1 : 2) + (sp.style === "wavy" ? 1 : 0);
+    if (side) { for (let y = hY+1; y <= bottom; y++) for (let x = hx-1; x <= hx+1; x++) put(g, x, y, (x+y)%3 ? hairC : hairD); }
+    else for (let y = hY+1; y <= bottom; y++) for (let x = hx-1; x <= hx+hw; x++) put(g, x, y, (sp.style === "wavy" && (x+y)%2) ? hairD : hairC);
+  }
+
+  /* legs and feet */
+  if (sit) {
+    rect(g, cx-3, ly, 6, 1, wear === "dress" || wear === "wrap" ? top : (wear === "loin" || sp.bareLegs) ? skin : bot);
+    put(g, cx+2, ly, wear === "dress" ? topD : botD);
+    put(g, cx-3, fy, foot); put(g, cx-2, fy, foot); put(g, cx+1, fy, foot); put(g, cx+2, fy, foot);
+  } else if (!side) {
+    const legC = (wear === "loin" || wear === "furs" || sp.bareLegs) ? skin : bot, legCD = (legC === skin) ? skinD : botD;
+    const liftL = (act === "walk" || act === "run") && f === 1, liftR = (act === "walk" || act === "run") && f === 3;
+    for (let r = 0; r < legH - (liftL ? 1 : 0); r++) { put(g, cx-2, ly+r, legC); put(g, cx-1, ly+r, legCD); }
+    for (let r = 0; r < legH - (liftR ? 1 : 0); r++) { put(g, cx, ly+r, legC); put(g, cx+1, ly+r, legCD); }
+    put(g, cx-2, fy - (liftL?1:0), foot); put(g, cx-1, fy - (liftL?1:0), foot);
+    put(g, cx, fy - (liftR?1:0), foot); put(g, cx+1, fy - (liftR?1:0), foot);
+  } else {
+    const legC = (wear === "loin" || wear === "furs" || sp.bareLegs) ? skin : bot, legCD = (legC === skin) ? skinD : botD;
+    const base = cx - 1;
+    const legAt = (s, c, fc) => {
+      for (let r = 0; r < legH; r++) { const dx = Math.round(s * (r+1) / legH); put(g, base+dx, ly+r, c); put(g, base+dx+1, ly+r, c); }
+      const dx = Math.round(s); put(g, base+dx, fy, fc); put(g, base+dx+1, fy, fc); put(g, base+dx+2, fy, fc);
+    };
+    legAt(-stride, legCD, shade(foot, 0.08));   /* far leg */
+    legAt(stride, legC, foot);                  /* near leg */
+  }
+
+  /* torso and clothes */
+  const sw = side ? 4 : A.sw, sx = side ? cx - 2 : cx - A.sw/2;
+  const bodyC = wear === "loin" ? skin : top, bodyD = wear === "loin" ? skinD : topD;
+  for (let r = 0; r < A.th; r++) for (let i = 0; i < sw; i++) {
+    let c = (side ? i === 0 : i === sw-1) ? bodyD : bodyC;
+    if (wear === "furs" && (i*3 + r*5) % 7 === 0) c = topL;
+    put(g, sx+i, ty+r, c);
+  }
+  if (sp.sex === "f" && !side && (wear === "dress" || wear === "wrap") && A.th >= 4 && (sp.age === "adult" || sp.age === "teen" || sp.age === "elder")) {
+    put(g, sx, ty+A.th-1, null); put(g, sx+sw-1, ty+A.th-1, null);   /* waist */
+  }
+  if (wear === "tunic" || wear === "loin") hline(g, sx, ty+A.th-1, sw, wear === "loin" ? col("hide") : shade(top, 0.18));
+  if (wear === "loin") { if (sp.beads) for (let i = 1; i < sw-1; i++) put(g, sx+i, ty, i%2 ? col("wool") : col("ochre")); rect(g, sx, ly, sw, 1, col("hide")); put(g, cx-1, ly+1, col("hideD")); }
+  if (wear === "wrap" && !side) { put(g, sx, ty, skin); put(g, sx+1, ty, skin); for (let r = 0; r < A.th; r++) put(g, sx + Math.min(sw-1, r+1), ty + r, topD); }
+  if (wear === "furs" && !sit) for (let i = 0; i < sw; i++) if (i % 2 === 0) put(g, sx+i, ly, top);
+  if ((wear === "dress" || wear === "wrap") && !sit) {
+    const rows = wear === "dress" ? Math.max(1, legH - 1) : Math.max(1, legH - 2);
+    for (let r = 0; r < rows; r++) { const grow = side ? (r > 0 ? 1 : 0) : (r > 0 ? 1 : 0);
+      for (let i = -grow; i < sw + grow; i++) put(g, sx+i, ly+r, (side ? i <= 0 : i >= sw-1) ? topD : top); }
+  }
+  if (sp.cloak) { for (let r = 0; r < A.th + 1; r++) { put(g, side ? sx-1 : sx-1, ty+r, col(sp.cloak)); if (!side) put(g, sx+sw, ty+r, shade(col(sp.cloak),0.1)); } }
+
+  /* arms */
+  const sleeve = (wear === "loin" || wear === "wrap" && false) ? skin : top;
+  const armLen = Math.max(1, Math.min(3, A.th - 1));
+  const armDown = (x, c = sleeve) => { for (let r = 0; r < armLen; r++) put(g, x, ty+r, c); put(g, x, ty+armLen, skin); };
+  if (!side) {
+    if (act === "talk" && f === 1) { put(g, sx+sw, ty, sleeve); put(g, sx+sw+1, ty-1, skin); armDown(sx-1); }
+    else if (act === "talk" && f === 3) { put(g, sx-1, ty, sleeve); put(g, sx-2, ty-1, skin); armDown(sx+sw); }
+    else if (act === "wave") { armDown(sx-1); put(g, sx+sw, ty, sleeve); put(g, sx+sw+1, ty-1, sleeve); put(g, sx+sw+1 + (f%2), ty-2, skin); }
+    else if (act === "holdbaby") {
+      armDown(sx-1); armDown(sx+sw);
+      const wrapC = col(sp.babyWrap || "linen");
+      rect(g, cx-3, ty+1, 4, 3, wrapC); put(g, cx, ty+3, shade(wrapC, 0.12)); put(g, cx-3, ty+3, shade(wrapC, 0.06)); hline(g, cx-3, ty+2, 4, shade(wrapC, 0.08));
+      const bs = skinOf(sp.babyMel ?? sp.mel ?? 0.5); rect(g, cx-3, ty-1+1, 3, 2, bs); put(g, cx-3, ty, col(sp.hair || "black")); put(g, cx-2, ty, col(sp.hair || "black")); put(g, cx-1, ty+1, col("eye"));
+      put(g, sx-1, ty+2, skin); put(g, sx+sw, ty+2, skin); put(g, cx+1, ty+2, skin);
+    }
+    else if (act === "cook") {
+      armDown(sx-1);
+      put(g, sx+sw, ty, sleeve); put(g, sx+sw+1, ty+1, skin);
+      const b = f % 2; put(g, sx+sw+2, ty+1+b, col("woodL")); put(g, sx+sw+3, ty+2+b, col("wood")); put(g, sx+sw+4, ty+3+b, col("woodD"));
+    }
+    else if (act === "cane") {
+      armDown(sx-1); put(g, sx+sw, ty, sleeve); put(g, sx+sw, ty+1, sleeve); put(g, sx+sw+1, ty+2, skin);
+      for (let y = ty+3; y <= fy; y++) put(g, sx+sw+1, y, col("woodL"));
+    }
+    else if (act === "climb") { const a = f % 2; put(g, sx-1, ty-1+a, sleeve); put(g, sx-1, ty-2+a, skin); put(g, sx+sw, ty-a, sleeve); put(g, sx+sw, ty-1-a, skin); put(g, sx-1, ty+a, sleeve); put(g, sx+sw, ty+1-a, sleeve); }
+    else { armDown(sx-1); armDown(sx+sw); }
+  } else {
+    const ax = cx;  /* near shoulder */
+    const sleeveS = shade(sleeve, 0.13);
+    if (act === "chop" || act === "hoe" || act === "pick" || act === "hammer") {
+      const up = f < 2;
+      const metal = col(sp.toolHead || "stoneL"), handle = col("woodL");
+      if (act === "hammer") {
+        if (up) { put(g, ax+1, ty, sleeveS); put(g, ax+2, ty-1, skin); put(g, ax+2, ty-2, handle); put(g, ax+2, ty-3, handle); rect(g, ax+1, ty-4, 3, 1, metal); }
+        else { put(g, ax+1, ty+1, sleeveS); put(g, ax+2, ty+1, skin); put(g, ax+3, ty+1, handle); put(g, ax+4, ty+1, handle); rect(g, ax+5, ty, 1, 3, metal); }
+      } else if (up) {
+        put(g, ax+1, ty, sleeveS); put(g, ax+2, ty-1, sleeveS); put(g, ax+2, ty-2, skin);
+        put(g, ax+1, ty-3, handle); put(g, ax, ty-4, handle); put(g, ax-1, ty-5, handle);
+        if (act === "chop") { put(g, ax-2, ty-6, metal); put(g, ax-2, ty-5, metal); put(g, ax-1, ty-6, metal); }
+        else if (act === "hoe") { put(g, ax-2, ty-5, metal); put(g, ax-2, ty-4, metal); }
+        else { put(g, ax-2, ty-6, metal); put(g, ax, ty-6, metal); put(g, ax-1, ty-6, metal); put(g, ax-3, ty-5, metal); put(g, ax+1, ty-5, metal); }
+      } else {
+        put(g, ax+1, ty+1, sleeveS); put(g, ax+2, ty+2, skin);
+        const len = act === "hoe" ? 5 : 3;
+        for (let i = 1; i <= len; i++) put(g, ax+2+i, ty+2+i, handle);
+        const ex = ax+2+len, eyy = ty+2+len;
+        if (act === "chop") { put(g, ex+1, eyy, metal); put(g, ex+1, eyy+1, metal); put(g, ex, eyy+1, metal); }
+        else if (act === "hoe") { put(g, ex+1, eyy, metal); put(g, ex+1, eyy+1, metal); }
+        else { put(g, ex+1, eyy-1, metal); put(g, ex+1, eyy, metal); put(g, ex+1, eyy+1, metal); }
+      }
+    } else if (act === "fish") {
+      put(g, ax+1, ty+1, sleeveS); put(g, ax+2, ty+1, skin);
+      const rod = col("woodL"); const bob = (f === 2) ? 1 : 0;
+      put(g, ax+3, ty, rod); put(g, ax+4, ty-1, rod); put(g, ax+5, ty-2+bob, rod); put(g, ax+6, ty-3+bob, rod); put(g, ax+7, ty-4+bob, rod);
+      tip = [ax+7, ty-4+bob];
+    } else if (act === "carry") {
+      put(g, ax, ty, sleeveS); put(g, ax+1, ty-1, sleeveS); put(g, ax+1, ty-2, skin);
+    } else if (act === "canewalk") {
+      put(g, ax, ty, sleeveS); put(g, ax+1, ty+1, sleeveS); put(g, ax+2, ty+2, skin);
+      for (let y = ty+3; y <= fy; y++) put(g, ax+3, y, col("woodL"));
+    } else {
+      const swing = act === "run" ? [0,2,0,-2][f] : -stride;
+      for (let r = 0; r < armLen; r++) put(g, ax + Math.round(swing * r / Math.max(1, armLen)), ty + r, r === 0 ? shade(sleeveS, -0.03) : sleeveS);
+      put(g, ax + swing, ty + armLen, skin);
+    }
+  }
+
+  /* head */
+  for (let r = 0; r < A.hh; r++) for (let i = 0; i < hw; i++) {
+    const edge = (r === 0 || r === A.hh-1) && (i === 0 || i === hw-1);
+    if (edge) continue;
+    put(g, hx+i, hY+r, (!side && i === hw-1) || (side && i === 0) ? skinD : skin);
+  }
+  if (side) { put(g, hx+hw-2, ey, eye); if (cute) put(g, hx+hw-2, ey-1, eye); put(g, hx+1, hY+A.hh-1, skinD); }
+  else {
+    const e1 = hx + (cute ? 2 : 1), e2 = hx + hw - (cute ? 3 : 2);
+    put(g, e1, ey, eye); put(g, e2, ey, eye);
+    if (cute) { put(g, e1, ey-1, eye); put(g, e2, ey-1, eye); put(g, e1-1, ey+1, col("blush")); put(g, e2+1, ey+1, col("blush")); }
+    if (act === "talk" && (f === 1 || f === 3)) put(g, cx-1, hY+A.hh-1, shade(skin, 0.3));
+    if (act === "sleepface") { put(g, e1, ey, skinD); put(g, e2, ey, skinD); }
+  }
+
+  /* front hair and beards */
+  const st = sp.style || "short";
+  const crown = () => { for (let i = 1; i < hw-1; i++) put(g, hx+i, hY-1, hairC); for (let i = 0; i < hw; i++) put(g, hx+i, hY, i % 3 === 1 ? hairL : hairC); };
+  if (st !== "bald") {
+    if (side) {
+      for (let i = 0; i < hw-1; i++) put(g, hx+i, hY-1, hairC);
+      for (let i = 0; i < hw; i++) put(g, hx+i, hY, hairC);
+      for (let r = 1; r < A.hh-1; r++) put(g, hx, hY+r, hairD);
+      if (st !== "crop") for (let r = 1; r < A.hh-2; r++) put(g, hx+1, hY+r, hairC);
+      if (st === "bun") { put(g, hx-1, hY-1, hairC); put(g, hx-1, hY, hairD); put(g, hx-2, hY-1, hairD); }
+      if (st === "topknot") { put(g, hx+1, hY-2, hairC); put(g, hx+2, hY-2, hairC); }
+      if (st === "coils" || st === "puffs") { for (let i = -1; i < hw-1; i++) put(g, hx+i, hY-2, (i%2) ? hairC : hairD); for (let r = -1; r < A.hh-1; r++) { put(g, hx-1, hY+r, hairD); put(g, hx, hY+r, hairC); } }
+      if (st === "braids") for (let y = hY+1; y <= ty+3; y++) put(g, hx-1, y, y % 2 ? hairC : hairD);
+    } else {
+      crown();
+      if (st === "short" || st === "long" || st === "wavy" || st === "shaggy" || st === "bun" || st === "topknot" || st === "braids") { put(g, hx, hY+1, hairC); put(g, hx+hw-1, hY+1, hairD); }
+      if (st === "crop") { for (let i = 2; i < hw-2; i++) put(g, hx+i, hY, skin); }
+      if (st === "shaggy") { put(g, hx+1, hY+1, hairC); put(g, hx+hw-2, hY+1, hairC); }
+      if (st === "bun") { rect(g, cx-1, hY-3, 2, 2, hairC); put(g, cx, hY-2, hairD); }
+      if (st === "topknot") { put(g, cx-1, hY-2, hairC); put(g, cx, hY-2, hairD); }
+      if (st === "coils") {
+        for (let i = 0; i < hw; i++) put(g, hx+i, hY-2, (i%2) ? hairD : hairC);
+        for (let r = -1; r <= 1; r++) { put(g, hx-1, hY+r, hairD); put(g, hx+hw, hY+r, hairD); }
+        for (let i = 0; i < hw; i++) put(g, hx+i, hY-1, (i%2) ? hairC : hairL);
+        put(g, hx, hY+1, hairC); put(g, hx+hw-1, hY+1, hairC);
+      }
+      if (st === "puffs") { rect(g, hx-1, hY-2, 2, 2, hairC); rect(g, hx+hw-1, hY-2, 2, 2, hairC); put(g, hx-1, hY-2, hairL); }
+      if (st === "braids") for (let y = hY+1; y <= ty+3; y++) { put(g, hx-1, y, y % 2 ? hairC : hairD); put(g, hx+hw, y, y % 2 ? hairD : hairC); }
+    }
+  } else if (!side) { put(g, hx, hY+1, hairC); put(g, hx+hw-1, hY+1, hairD); put(g, hx, hY+2, hairC); put(g, hx+hw-1, hY+2, hairD); }
+  else { put(g, hx, hY+1, hairD); put(g, hx, hY+2, hairD); }
+  if (sp.beard) {
+    if (side) { for (let r = ey+1; r < hY+A.hh; r++) for (let x = hx+1; x <= hx+hw-1; x++) put(g, x, r, hairC); put(g, hx+hw-1, hY+A.hh, hairD); put(g, hx+hw-2, hY+A.hh, hairC); }
+    else { for (let r = ey+1; r < hY+A.hh; r++) for (let i = 0; i < hw; i++) put(g, hx+i, r, (i === hw-1) ? hairD : hairC);
+      for (let i = 1; i < hw-1; i++) put(g, hx+i, hY+A.hh, hairC);
+      put(g, cx-1, ey+1, skin); put(g, cx, ey+1, skin); }
+  }
+  if (sp.hat) { const hc = col(sp.hat); for (let i = -1; i <= hw; i++) put(g, hx+i, hY-1, hc); for (let i = 1; i < hw-1; i++) put(g, hx+i, hY-2, shade(hc,-0.05)); }
+
+  /* basket on the head */
+  if (act === "carry") {
+    const bc = col("thatch"), bd = col("thatchD");
+    const bx = side ? hx-1 : hx-1, bw = hw + 2, by = hY - 4;
+    for (let i = 0; i < bw; i++) { put(g, bx+i, by+1, i%2 ? bc : bd); put(g, bx+i, by+2, i%2 ? bd : bc); }
+    for (let i = 1; i < bw-1; i++) put(g, bx+i, by, sp.load ? col(sp.load) : col("flowerY"));
+    if (sp.load2) { put(g, bx+2, by, col(sp.load2)); put(g, bx+4, by, col(sp.load2)); }
+  }
+  return { g, tip };
+}
+function personSprite(dk, sp, frame, mode){
+  const key = JSON.stringify(sp) + "|" + (frame & 3) + "|" + PROPORTION;
+  let tip = null;
+  const c = sprite(key, dk, mode, () => { const r = personGrid(sp, frame); tip = r.tip; return r.g; });
+  if (tip) c._tip = tip;
+  return c;
+}
+/* draw a person with feet at x,y; returns the absolute rod tip if any */
+function drawPerson(ctx, dk, sp, frame, x, y, flip, mode){
+  const c = personSprite(dk, sp, frame, mode);
+  stamp(ctx, c, x, y, flip);
+  if (!c._tip) return null;
+  const dx = Math.round(x - c.width/2), dy = Math.round(y - c.height + 1);
+  const tx = flip ? dx + c.width - 1 - (c._tip[0]+1) : dx + c._tip[0] + 1;
+  return [tx, dy + c._tip[1] + 1];
+}
+function babyGrid(sp){
+  const g = grid(12, 8), skin = skinOf(sp.mel ?? 0.5), bc = col("thatch"), bd = col("thatchD");
+  for (let i = 1; i < 11; i++) { put(g, i, 5, i%2 ? bc : bd); put(g, i, 6, i%2 ? bd : bc); }
+  put(g, 0, 4, bd); put(g, 11, 4, bd); for (let i = 2; i < 10; i++) put(g, i, 7, bd);
+  rect(g, 1, 4, 10, 1, bc);
+  rect(g, 4, 2, 6, 3, col(sp.top || "wool")); put(g, 9, 4, shade(col(sp.top||"wool"),0.1));
+  rect(g, 1, 1, 3, 3, skin); put(g, 1, 1, null); put(g, 2, 2, col("eye")); put(g, 2, 0, col(sp.hair || "black")); put(g, 3, 1, col(sp.hair || "black"));
+  put(g, 3, 3, shade(skin, 0.08));
+  return g;
+}
+
+/* ---------- land ---------- */
+const SEASON_GRASS = {
+  spring: ["grass","grassD","grassL"], summer: ["grass","grassD","grassL"],
+  autumn: ["#9a9a4a","#7d7c3a","#b8ad5c"], winter: ["snow","snowD","#ffffff"],
+};
+function ground(ctx, dk, x0, y0, w, h, seed, season = "summer", kind = "grass"){
+  let [base, dark, light] = SEASON_GRASS[season];
+  if (kind === "sand") [base, dark, light] = ["sand","sandD","#e8d6a6"];
+  if (kind === "tundra") [base, dark, light] = ["snow","snowD","ice"];
+  if (kind === "jungle") [base, dark, light] = ["#3f7d32","#2f6327","#5a9a3e"];
+  fill(ctx, dk, col(base), x0, y0, w, h);
+  for (let y = y0; y < y0+h; y++) for (let x = x0; x < x0+w; x++) {
+    const n = hash(x, y, seed);
+    if (n < 0.03) fill(ctx, dk, col(dark), x, y);
+    else if (n < 0.05) fill(ctx, dk, col(light), x, y);
+    else if (n > 0.991 && (kind === "grass" || kind === "jungle") && season !== "winter") { fill(ctx, dk, col(dark), x, y); fill(ctx, dk, col(dark), x-1, y-1); fill(ctx, dk, col(dark), x+1, y-1); }
+    else if (n > 0.986 && n <= 0.991 && kind === "grass" && (season === "spring" || season === "summer")) fill(ctx, dk, col(n > 0.989 ? "flowerY" : season === "spring" ? "flowerP" : "flowerW"), x, y);
+    else if (n > 0.985 && kind === "tundra") fill(ctx, dk, col("#9fb0a0"), x, y);
+    else if (n > 0.988 && kind === "sand") fill(ctx, dk, col("#b89a62"), x, y);
+  }
+}
+function tree(ctx, dk, x, y, r, season = "summer", seed = 1){
+  /* x,y = trunk base */
+  const t = col("trunk"), tD = shade(t, 0.1);
+  fill(ctx, dk, tD, x-2, y, 5, 1);
+  fill(ctx, dk, t, x-1, y-r, 2, r+1); fill(ctx, dk, tD, x, y-r, 1, r+1);
+  if (season === "winter") {
+    for (let i = 0; i < r; i++) { fill(ctx, dk, t, x-1-i, y-r-1-i); fill(ctx, dk, t, x+1+i, y-r-2-i); }
+    fill(ctx, dk, t, x, y-r-1, 1, r+2);
+    for (let i = 0; i < r; i++) { fill(ctx, dk, col("snow"), x-1-i, y-r-2-i); fill(ctx, dk, col("snow"), x+1+i, y-r-3-i); }
+    fill(ctx, dk, col("snow"), x, y-2*r-2);
+    return;
+  }
+  let [cL, cM, cD] = ["leafL","leaf","leafD"];
+  if (season === "autumn") [cL, cM, cD] = (seed % 3 === 0) ? ["#f0b84a","#d98a2e","#b0601e"] : ["#e8c24e","#c99a2e","#96701e"];
+  const cy = y - r - Math.round(r*0.7);
+  for (let j = -r; j <= r; j++) for (let i = -r-1; i <= r+1; i++) {
+    const d = (i*i)/((r+1)*(r+1)) + (j*j)/(r*r);
+    const wob = hash(x+i, cy+j, seed) * 0.25;
+    if (d > 1 - wob*0.4) continue;
+    const lightSide = (i + j) < -r*0.5, darkSide = (i + j) > r*0.6;
+    let c = lightSide ? cL : darkSide ? cD : cM;
+    if (hash(x+i, cy+j, seed+7) < 0.12) c = lightSide ? cM : cD;
+    fill(ctx, dk, col(c), x+i, cy+j);
+  }
+  if (season === "spring") for (let k = 0; k < r*2; k++) { const a = hash(k, x, seed)*6.28, rr = hash(x, k, seed)*r*0.9; fill(ctx, dk, col(k%3 ? "flowerP" : "flowerW"), x + Math.round(Math.cos(a)*rr), cy + Math.round(Math.sin(a)*rr*0.8)); }
+}
+function pine(ctx, dk, x, y, h, snowy){
+  fill(ctx, dk, col("trunk"), x, y-2, 1, 3);
+  for (let i = 0; i < h; i++) { const w = Math.floor((i+2)/1.6); const yy = y - 2 - h + i;
+    for (let k = -w; k <= w; k++) fill(ctx, dk, col(k < 0 ? "leafD" : k === 0 ? "leaf" : (i%3 === 0 ? "leafL" : "leaf")), x+k, yy);
+    if (snowy && i % 3 === 0) for (let k = -w; k <= w; k++) if ((k+i)%2 === 0) fill(ctx, dk, col("snow"), x+k, yy); }
+}
+function palm(ctx, dk, x, y, h){
+  for (let i = 0; i < h; i++) fill(ctx, dk, col(i%2 ? "trunk" : "woodL"), x + Math.round(Math.sin(i/4)*1.5), y - i);
+  const tx = x + Math.round(Math.sin((h-1)/4)*1.5), ty = y - h;
+  for (const [dx, dy] of [[-1,0],[-2,1],[-3,1],[-4,2],[1,0],[2,0],[3,1],[4,2],[0,-1],[-1,-2],[1,-2],[2,-2],[-2,-1]]) fill(ctx, dk, col(dy > 0 ? "leafD" : "leaf"), tx+dx, ty+dy);
+}
+function bush(ctx, dk, x, y, seed, berries){
+  for (let j = -3; j <= 0; j++) for (let i = -3; i <= 3; i++) { if (i*i/12 + j*j/10 > 1) continue; fill(ctx, dk, col(j < -1 && i < 1 ? "leafL" : i > 1 ? "leafD" : "leaf"), x+i, y+j); }
+  if (berries) for (let k = 0; k < 4; k++) fill(ctx, dk, col("ochre"), x - 2 + Math.floor(hash(k, x, seed)*5), y - 2 + Math.floor(hash(x, k, seed)*3));
+}
+function rock(ctx, dk, x, y, w = 4){
+  fill(ctx, dk, col("stone"), x, y-2, w, 2); fill(ctx, dk, col("stoneL"), x+1, y-3, w-2, 1); fill(ctx, dk, col("stoneD"), x+w-1, y-2, 1, 2);
+}
+function river(ctx, dk, x0, x1, y0, y1, frame, edge){
+  for (let y = y0; y < y1; y++) {
+    const xl = edge(y);
+    fill(ctx, dk, col("sandD"), xl-3, y); fill(ctx, dk, col("sand"), xl-2, y, 2, 1);
+    fill(ctx, dk, col("waterD"), xl, y, 1, 1);
+    fill(ctx, dk, col("water"), xl+1, y, x1-xl-1, 1);
+    for (let x = xl+5; x < x1; x++) if (hash(x, y, 3) < 0.025) fill(ctx, dk, col("waterD"), x, y);
+    /* drifting light glints */
+    for (let x = xl+2; x < x1; x++) { const h = hash(x, y, 9); if (h < 0.016) { const p = (frame + Math.floor(h*800)) % 16; if (p < 5) fill(ctx, dk, col(p === 2 ? "foam" : "waterL"), x + (p>>1), y, p === 2 ? 2 : 1, 1); } }
+  }
+}
+function fire(ctx, dk, x, y, frame){
+  /* stone ring */
+  for (const [dx,dy] of [[-4,0],[-3,1],[-1,2],[1,2],[3,1],[4,0],[-3,-1],[3,-1]]) fill(ctx, dk, col(dy > 0 ? "stoneD" : "stone"), x+dx, y+dy, dx === -1 || dx === 1 ? 2 : 1, 1);
+  fill(ctx, dk, col("logD"), x-2, y, 5, 1); fill(ctx, dk, col("log"), x-1, y-1, 3, 1);
+  const f = frame % 4;
+  const shapes = [[[0,-2],[-1,-2],[1,-2],[0,-3],[-1,-3],[0,-4],[1,-5]],[[0,-2],[-1,-2],[1,-2],[0,-3],[1,-3],[0,-4],[-1,-5]],[[0,-2],[-1,-2],[1,-2],[0,-3],[-1,-3],[0,-4],[0,-5],[0,-6]],[[0,-2],[-1,-2],[1,-2],[1,-3],[0,-3],[0,-4],[1,-5]]];
+  shapes[f].forEach(([dx,dy], i) => fill(ctx, dk, col(i < 3 ? "fireD" : i < 5 ? "fire" : "fireL"), x+dx, y+dy));
+  fill(ctx, dk, col("fireL"), x, y-2);
+  /* smoke drifts up and right */
+  for (let k = 0; k < 4; k++) { const t = (frame*0.5 + k*4) % 16; const sx = x + Math.round(Math.sin(t/3)*1.5 + t*0.35), sy = y - 7 - Math.round(t*1.3);
+    if (t < 13) fill(ctx, dk, col("smoke"), sx, sy, t > 6 ? 2 : 1, 1); }
+}
+function bubble(ctx, dk, x, y, icon){
+  /* x,y = bottom tip; a 9x8 speech bubble with a pixel icon */
+  const bx = x - 4, by = y - 9;
+  fill(ctx, dk, "#ffffff", bx, by, 9, 7); fill(ctx, dk, "#ffffff", bx-1, by+1, 11, 5);
+  ctx.fillStyle = grade(dk, "#3b3330");
+  ctx.fillRect(bx, by-1, 9, 1); ctx.fillRect(bx, by+7, 9, 1); ctx.fillRect(bx-1, by, 1, 1); ctx.fillRect(bx+9, by, 1, 1); ctx.fillRect(bx-2, by+1, 1, 5); ctx.fillRect(bx+10, by+1, 1, 5); ctx.fillRect(bx-1, by+6, 1, 1); ctx.fillRect(bx+9, by+6, 1, 1);
+  fill(ctx, dk, "#ffffff", x-1, by+7, 2, 1); ctx.fillRect(x-2, by+7, 1, 1); ctx.fillRect(x+1, by+7, 1, 1); ctx.fillRect(x-1, by+8, 2, 1);
+  const I = ICONS[icon]; I.px.forEach((row, j) => [...row].forEach((ch, i) => { if (ch !== ".") fill(ctx, dk, col(I.c[ch]), bx + 2 + i, by + 1 + j); }));
+}
+const ICONS = {
+  fish: { c: { a: "water", b: "waterD", e: "eye" }, px: [".....", "aa.a.", "aaaab", "aa.a."] .concat([]) },
+  heart:{ c: { a: "#e0485a", b: "#b03040" }, px: [".a.a.", "aaaab", ".aab.", "..b.."] },
+  deer: { c: { a: "deer", b: "deerD" }, px: ["b...b", ".b.b.", ".aaa.", "a.a.a"] },
+  sun:  { c: { a: "fireL", b: "fire" }, px: ["a.a.a", ".bbb.", "abbba", ".bbb."] },
+  angry:{ c: { a: "#d0402a" }, px: ["a.a.a", ".a.a.", "a.a.a", ".a.a."] },
+  baby: { c: { a: "wool", b: "#d9a277" }, px: [".bb..", ".bb..", "aaaa.", ".aaa."] },
+};
+function zzz(ctx, dk, x, y, frame){ const t = frame % 12; ctx.fillStyle = grade(dk, "#f4f4f8");
+  const z = (zx, zy) => { ctx.fillRect(zx, zy, 3, 1); ctx.fillRect(zx+1, zy+1, 1, 1); ctx.fillRect(zx, zy+2, 3, 1); };
+  if (t < 9) z(x + (t>>2), y - (t>>1)); if (t > 4) z(x + 3 + ((t-5)>>2), y - 5 - ((t-5)>>1)); }
+
+/* ---------- animals ---------- */
+function dogGrid(f){ const g = grid(10, 7), c = col("dog"), d = col("dogD");
+  rect(g, 2, 2, 5, 2, c); put(g, 2, 3, d); rect(g, 6, 1, 3, 2, c); put(g, 9, 2, d); put(g, 8, 1, col("eye")); put(g, 6, 0, d);
+  put(g, 1, 1 + (f%2), c); put(g, 0, (f%2), c);
+  const L = [[2,5],[3,6],[5,6],[6,5]]; const A = f % 2 ? [[2,4],[4,4],[5,4],[7,4]] : [[3,4],[3,4],[6,4],[6,4]];
+  A.forEach(([x,y], i) => { put(g, x, y, i%2 ? d : c); put(g, x, y+1, i%2 ? d : c); });
+  return g; }
+function duckGrid(f){ const g = grid(7, 5), c = col("duck"), h = col("duckH");
+  rect(g, 1, 2, 5, 2, c); put(g, 0, 2, c); put(g, 5, 1 + (f%2 ? 0 : 0), c); rect(g, 4, 0, 2, 2, h); put(g, 6, 1, col("beak")); put(g, 5, 0, col("eye")); put(g, 2, 2, shade(c, 0.12));
+  return g; }
+function deerGrid(f){ const g = grid(11, 10), c = col("deer"), d = col("deerD");
+  rect(g, 2, 4, 6, 3, c); hline(g, 2, 6, 6, d); put(g, 1, 4, col("wool"));
+  const head = f % 4 < 2; /* grazing head down or up */
+  if (head) { rect(g, 8, 6, 2, 2, c); put(g, 9, 8, d); put(g, 8, 5, c); put(g, 8, 6, d); }
+  else { rect(g, 8, 2, 2, 2, c); put(g, 8, 4, c); put(g, 10, 3, d); put(g, 9, 2, col("eye")); put(g, 8, 0, d); put(g, 8, 1, d); put(g, 10, 0, d); put(g, 9, 1, d); }
+  for (const x of [2, 3, 6, 7]) { put(g, x, 7, x%2 ? d : c); put(g, x, 8, x%2 ? d : c); put(g, x, 9, d); }
+  return g; }
+
+/* ---------- buildings: three cultures, three levels of wealth ---------- */
+const DARK = "#2a1d18";
+function roundHut(level){
+  const w = [14, 18, 22][level], wh = [5, 6, 7][level], rh = [8, 10, 12][level];
+  const g = grid(w + 8, rh + wh + 4), cx = Math.floor(g.w/2), yb = g.h - 1, wallTop = yb - wh + 1, x0 = cx - w/2;
+  for (let y = wallTop; y <= yb; y++) for (let i = 0; i < w; i++) {
+    if (y === yb && (i === 0 || i === w-1)) continue;
+    let c = i >= w - 3 ? col("adobeD") : i < 3 ? col("adobeL") : col("adobe");
+    if ((y - wallTop) % 2 === 1 && (i + y) % 4 === 0) c = shade(c, 0.08);
+    put(g, x0+i, y, c);
+  }
+  if (level >= 1) for (let i = 1; i < w-1; i++) put(g, x0+i, wallTop+2, (i % 3 === 0) ? col("wool") : col("ochre"));
+  if (level === 2) for (let i = 2; i < w-2; i += 4) { put(g, x0+i, wallTop+4, col("indigo")); put(g, x0+i+1, wallTop+5, col("indigo")); }
+  const apex = wallTop - rh;
+  for (let r = 0; r < rh; r++) {
+    const hw = Math.round(1 + (r / (rh-1)) * (w/2 + 2));
+    for (let x = cx - hw; x < cx + hw; x++) {
+      const rel = (x - cx) / Math.max(1, hw);
+      let c = rel < -0.45 ? col("thatchL") : rel > 0.4 ? col("thatchD") : col("thatch");
+      if ((Math.floor((x - cx) * 5 / (hw + 2)) + r) % 4 === 0) c = shade(c, 0.07);
+      if (level === 0 && hash(x, r, 4) < 0.06) c = col("woodD");
+      put(g, x, apex + r + 1, c);
+    }
+  }
+  const eaves = apex + rh;
+  for (let x = cx - w/2 - 2; x < cx + w/2 + 2; x++) if (x % 2 === 0) put(g, x, eaves + 1, col("thatchD"));
+  put(g, cx, apex, col("woodD")); put(g, cx-1, apex, col("woodD")); if (level === 2) { put(g, cx, apex-1, col("woodD")); put(g, cx, apex-2, col("ochre")); put(g, cx+1, apex-2, col("ochre")); }
+  const dw = level === 0 ? 3 : 4, dh = wh - 1;
+  for (let y = 0; y < dh; y++) for (let i = 0; i < dw; i++) { if (y === 0 && (i === 0 || i === dw-1)) continue; put(g, cx - Math.floor(dw/2) + i, yb - dh + 1 + y, DARK); }
+  if (level === 1) { rect(g, x0 + w - 2, wallTop + 1, 3, 4, col("hide")); put(g, x0 + w, wallTop + 4, col("hideD")); }
+  if (level === 2) { rect(g, x0 - 3, yb - 2, 3, 3, col("adobeD")); put(g, x0 - 2, yb - 3, col("adobeD")); put(g, x0 - 2, yb - 2, DARK);
+    for (let y = yb - wh - 4; y <= yb; y++) put(g, x0 + w + 1, y, col("woodL")); put(g, x0 + w + 2, yb - wh - 4, col("ochre")); put(g, x0 + w + 2, yb - wh - 3, col("ochre")); put(g, x0 + w + 3, yb - wh - 4, col("ochre")); }
+  return g;
+}
+function longhouse(level){
+  const w = [18, 24, 30][level], wh = [6, 7, 8][level], rh = [7, 8, 10][level];
+  const g = grid(w + 10, wh + rh + 7), cx = Math.floor(g.w/2), yb = g.h - 1, x0 = cx - Math.floor(w/2), wallTop = yb - wh + 1, roofTop = wallTop - rh;
+  /* walls of vertical planks */
+  for (let y = wallTop; y <= yb; y++) for (let i = 0; i < w; i++) {
+    let c = i % 3 === 2 ? col("woodD") : (i % 6 < 3 ? col("woodL") : col("wood"));
+    if (i >= w - 2) c = col("woodD");
+    if (y === wallTop) c = shade(c, 0.12);
+    put(g, x0 + i, y, c);
+  }
+  hline(g, x0, yb, w, col("logD")); vline(g, x0, wallTop, wh, col("logD")); vline(g, x0 + w - 1, wallTop, wh, col("logD"));
+  /* roof plane: thatch, sod, or shingles by wealth */
+  for (let r = 0; r < rh; r++) {
+    const inset = Math.max(0, 2 - r), sag = (level === 0 && r === 0) ? 1 : 0;
+    for (let x = x0 - 2 + inset; x < x0 + w + 2 - inset; x++) {
+      let c;
+      if (level === 0) { c = (r % 2) ? col("thatch") : col("thatchL"); if (x > cx + w/4) c = shade(c, 0.07); if (hash(x, r, 6) < 0.07) c = col("thatchD"); }
+      else if (level === 1) { c = (r + Math.floor(x / 3)) % 4 === 0 ? col("leafD") : col("moss"); if (r === 0 && x % 2 === 0) c = col("grassL"); }
+      else { c = ((Math.floor((x + (r % 2) * 2) / 4)) % 2) ? col("wood") : col("woodL"); if (r % 2 === 1 && x % 4 === 0) c = col("woodD"); }
+      if (r === 0) c = shade(c, -0.04);
+      if (r === rh - 1) c = shade(c, 0.12);
+      put(g, x, roofTop + r + sag * ((x > x0 + 3 && x < x0 + w - 4) ? 1 : 0), c);
+    }
+  }
+  for (let x = x0 - 2; x < x0 + w + 2; x++) if (x % 2 === 0) put(g, x, wallTop, level === 0 ? col("thatchD") : col("logD"));
+  /* door, lintel, windows */
+  const dw = level === 2 ? 6 : 4;
+  rect(g, cx - dw/2, yb - wh + 3, dw, wh - 3, DARK); hline(g, cx - dw/2 - 1, yb - wh + 2, dw + 2, col("logD"));
+  if (level >= 1) for (const wx of [x0 + 3, x0 + w - 6]) { rect(g, wx, wallTop + 2, 3, 2, DARK); hline(g, wx, wallTop + 4, 3, col("woodL")); }
+  /* smoke hole */
+  put(g, cx + 3, roofTop + 1, DARK); put(g, cx + 4, roofTop + 1, DARK);
+  if (level === 2) {
+    for (const [ex, dir] of [[x0, -1], [x0 + w - 1, 1]]) { put(g, ex, roofTop - 1, col("woodL")); put(g, ex + dir, roofTop - 2, col("woodL")); put(g, ex - dir, roofTop - 1, col("woodL")); put(g, ex - 2*dir, roofTop - 2, col("woodL")); }
+    for (const sx of [x0 + 9, x0 + w - 12]) { rect(g, sx, wallTop + 2, 3, 3, col("ochre")); put(g, sx + 1, wallTop + 3, col("yel")); }
+    for (let y = roofTop - 4; y <= yb; y++) put(g, x0 + w + 3, y, col("woodL"));
+    rect(g, x0 + w + 4, roofTop - 4, 3, 4, col("indigo")); put(g, x0 + w + 6, roofTop - 1, null);
+  }
+  if (level === 0) { rect(g, x0 + 2, wallTop + 2, 2, 2, DARK); put(g, x0 + w - 4, wallTop - 1, col("woodD")); }
+  return g;
+}
+function adobeHouse(level){
+  const g = grid(36, 30), yb = 29;
+  const box = (x0, w, fh, th, yBase, vigas) => {
+    const top = yBase - fh - th + 1, front = yBase - fh + 1;
+    rect(g, x0, top, w, th, col("adobeL")); hline(g, x0, top, w, shade(col("adobeL"), -0.04));
+    for (let y = front; y <= yBase; y++) for (let i = 0; i < w; i++) put(g, x0 + i, y, i >= w - 2 ? col("adobeD") : ((i * 7 + y * 3) % 11 === 0 ? shade(col("adobe"), 0.06) : col("adobe")));
+    hline(g, x0, front, w, col("adobeD"));
+    if (vigas) for (let i = 2; i < w - 1; i += 3) { put(g, x0 + i, front + 1, col("woodD")); }
+    return { top, front };
+  };
+  if (level === 0) {
+    const b = box(11, 14, 8, 4, yb, true);
+    rect(g, 16, yb - 4, 3, 5, DARK); rect(g, 21, b.front + 3, 2, 2, DARK);
+    rect(g, 8, yb - 2, 3, 3, col("adobeD")); put(g, 9, yb - 3, col("adobeD"));
+  } else if (level === 1) {
+    const b = box(8, 18, 9, 5, yb, true);
+    rect(g, 14, yb - 5, 3, 6, DARK); hline(g, 13, yb - 6, 5, col("woodD"));
+    rect(g, 20, b.front + 3, 2, 2, DARK); put(g, 19, b.front + 3, col("woodL")); put(g, 22, b.front + 3, col("woodL"));
+    for (let y = b.top - 2; y <= yb; y++) { put(g, 26 + Math.floor((y - b.top) / 6), y, col("woodL")); put(g, 28 + Math.floor((y - b.top) / 6), y, col("woodL")); if (y % 3 === 0) { put(g, 27 + Math.floor((y - b.top)/6), y, col("wood")); } }
+    for (const [px, c] of [[5, "ochre"], [7, "adobeD"]]) { rect(g, px, yb - 2, 2, 3, col(c)); }
+  } else {
+    box(3, 24, 9, 5, yb, true);
+    const up = box(5, 13, 7, 4, yb - 14, true);
+    rect(g, 9, up.front + 3, 3, 4, DARK);
+    rect(g, 12, yb - 5, 4, 6, DARK); hline(g, 11, yb - 6, 6, col("woodD"));
+    rect(g, 20, yb - 6, 2, 2, DARK);
+    for (let y = up.front - 2; y <= yb - 14; y++) { put(g, 20, y, col("woodL")); put(g, 22, y, col("woodL")); if (y % 2 === 0) put(g, 21, y, col("wood")); }
+    for (let i = 0; i < 8; i++) put(g, 24 + i, yb - 15 + Math.floor(i / 3), i % 2 ? col("ochre") : col("yel"));
+    for (let y = yb - 15; y <= yb; y++) put(g, 31, y + Math.floor(0), col("woodL"));
+    rect(g, 0, yb - 2, 2, 3, col("ochre")); rect(g, 27, yb - 2, 3, 3, col("adobeD"));
+  }
+  return g;
+}
+function frameGrid(progress){
+  /* a hut being built: poles first, then thatch rows */
+  const g = grid(20, 22), cx = 10, yb = 21;
+  for (const x of [3, 8, 12, 16]) for (let y = yb - 6; y <= yb; y++) put(g, x, y, col("woodL"));
+  for (let r = 0; r < 12; r++) { const hw = Math.round(1 + r / 11 * 8); put(g, cx - hw, yb - 18 + r, col("wood")); put(g, cx + hw - 1, yb - 18 + r, col("woodD")); }
+  for (let r = 12 - progress; r < 12; r++) { const hw = Math.round(1 + r / 11 * 8); for (let x = cx - hw + 1; x < cx + hw - 1; x++) put(g, x, yb - 18 + r, (x + r) % 4 ? col("thatch") : col("thatchD")); }
+  hline(g, 3, yb - 6, 14, col("wood"));
+  return g;
+}
+function rackGrid(){
+  const g = grid(14, 10);
+  for (const x of [1, 12]) for (let y = 1; y < 10; y++) put(g, x, y, col("woodL"));
+  hline(g, 0, 1, 14, col("wood"));
+  rect(g, 2, 2, 4, 5, col("hide")); put(g, 5, 6, col("hideD")); rect(g, 7, 2, 4, 4, col("linen"));
+  for (const x of [3, 8]) { put(g, x + 1, 7 + (x % 2), col("water")); }
+  return g;
+}
+function logGrid(w = 9){ const g = grid(w, 3); rect(g, 0, 0, w, 2, col("log")); hline(g, 0, 1, w, col("logD")); put(g, 0, 0, col("woodL")); put(g, 0, 1, col("thatchD")); return g; }
+function stumpGrid(){ const g = grid(6, 5); rect(g, 0, 1, 6, 4, col("log")); hline(g, 0, 0, 6, col("thatchL")); put(g, 2, 0, col("thatchD")); vline(g, 5, 1, 4, col("logD")); return g; }
+function potGrid(){ const g = grid(5, 5); rect(g, 1, 0, 3, 1, col("adobeD")); rect(g, 0, 1, 5, 3, col("adobe")); rect(g, 1, 4, 3, 1, col("adobeD")); put(g, 4, 2, col("adobeD")); return g; }
+function bedGrid(sp){
+  const g = grid(18, 7), skin = skinOf(sp.mel ?? .5), h = col(sp.hair || "black"), bl = col(sp.blanket || "indigo");
+  rect(g, 0, 4, 18, 3, col("hide")); hline(g, 0, 6, 18, col("hideD"));
+  rect(g, 0, 2, 5, 3, col("wool")); hline(g, 0, 4, 5, shade(col("wool"), 0.1));
+  rect(g, 1, 1, 3, 3, skin); hline(g, 1, 0, 3, h); put(g, 0, 1, h); put(g, 0, 2, h); put(g, 3, 2, shade(skin, 0.3)); put(g, 2, 2, shade(skin, 0.3));
+  rect(g, 4, 2, 13, 3, bl); hline(g, 4, 1, 12, shade(bl, -0.05)); for (const x of [8, 12]) put(g, x, 3, shade(bl, 0.12)); hline(g, 4, 4, 13, shade(bl, 0.1));
+  return g;
+}
+
+/* ---------- the camp: one living Stone Age scene ---------- */
+const BAND = {
+  farmer:  { age:"adult", sex:"m", mel:.58, hair:"black", style:"shaggy", beard:true, wear:"loin", beads:true, view:"side", act:"hoe" },
+  chopper: { age:"adult", sex:"m", mel:.5, hair:"dkbrown", style:"short", wear:"furs", top:"hide", view:"side", act:"chop" },
+  fisher:  { age:"adult", sex:"f", mel:.62, hair:"black", style:"braids", wear:"wrap", top:"ochre", view:"side", act:"fish" },
+  cook:    { age:"adult", sex:"f", mel:.55, hair:"black", style:"bun", wear:"dress", top:"hide", act:"cook" },
+  elder:   { age:"elder", sex:"m", mel:.6, hair:"black", gray:.9, style:"bald", beard:true, wear:"tunic", top:"wool", act:"cane" },
+  talkA:   { age:"adult", sex:"m", mel:.66, hair:"black", style:"crop", wear:"tunic", top:"moss2", act:"talk" },
+  talkB:   { age:"teen", sex:"f", mel:.5, hair:"dkbrown", style:"long", wear:"wrap", top:"yel", act:"talk" },
+  carrier: { age:"adult", sex:"f", mel:.48, hair:"dkbrown", style:"long", wear:"dress", top:"linen", view:"side", act:"carry", load:"ochre", load2:"leaf" },
+  builder: { age:"adult", sex:"m", mel:.7, hair:"black", style:"topknot", wear:"tunic", top:"hide", view:"side", act:"hammer" },
+  kid:     { age:"child", sex:"m", mel:.56, hair:"black", style:"coils", wear:"tunic", top:"hide", bareLegs:true, view:"side", act:"run" },
+};
+const bgCache = {};
+const campPathY = px => 92 + Math.round(Math.sin(px / 18) * 3) - (px > 90 ? Math.round((px - 90) / 6) : 0);
+function campBackground(dk){
+  if (bgCache[dk]) return bgCache[dk];
+  const c = document.createElement("canvas"); c.width = 192; c.height = 112; const x = c.getContext("2d");
+  ground(x, dk, 0, 0, 192, 112, 11);
+  /* field with furrows and young sprouts */
+  for (let y = 76; y < 108; y++) for (let i = 6; i < 62; i++) {
+    const row = (y - 76) % 3; fill(x, dk, col(row === 0 ? "dirtD" : row === 1 ? "dirt" : "dirtL"), i, y);
+    if (row === 1 && (i + y) % 5 === 0 && i < 52) { fill(x, dk, col("leafL"), i, y - 1); fill(x, dk, col("leaf"), i, y); }
+  }
+  /* footpath from the field past the fire to the river */
+  const pathY = campPathY;
+  for (let px = 62; px < 150; px++) { const py = pathY(px); for (let k = -1; k <= 1; k++) fill(x, dk, col(hash(px, py + k, 2) < 0.18 ? "pathD" : "path"), px, py + k); }
+  for (let py = 60; py < 92; py++) { const ppx = 96 + Math.round(Math.sin(py / 7) * 1.5); for (let k = -1; k <= 1; k++) fill(x, dk, col(hash(ppx + k, py, 5) < 0.18 ? "pathD" : "path"), ppx + k, py); }
+  /* trees and rocks */
+  tree(x, dk, 10, 30, 7, "summer", 1); tree(x, dk, 28, 22, 8, "summer", 2); tree(x, dk, 6, 52, 6, "summer", 3);
+  tree(x, dk, 140, 18, 6, "summer", 4); tree(x, dk, 130, 8, 5, "summer", 5);
+  bush(x, dk, 52, 18, 1, true); bush(x, dk, 70, 104, 2, false); bush(x, dk, 138, 64, 3, true);
+  rock(x, dk, 66, 74, 5); rock(x, dk, 142, 104, 4); rock(x, dk, 20, 70, 3);
+  bgCache[dk] = c; return c;
+}
+const riverEdge = y => 154 + Math.round(5 * Math.sin(y / 13)) + Math.round(2 * Math.sin(y / 5));
+function drawCamp(ctx, dk, frame){
+  const bg = campBackground(dk);
+  ctx.drawImage(bg, 0, 0);
+  river(ctx, dk, 0, 192, 0, 112, frame, riverEdge);
+  const items = [];
+  const S = (fn, y) => items.push({ y, fn });
+  const P2 = (sp, fr, x, y, flip) => S(() => drawPerson(ctx, dk, sp, fr, x, y, flip), y);
+  const G = (key, build, x, y, flip) => S(() => stamp(ctx, sprite(key, dk, null, build), x, y, flip), y);
+
+  G("hut1", () => roundHut(1), 76, 50); G("hut2", () => roundHut(0), 116, 58); G("hut3", () => roundHut(2), 40, 64);
+  G("frame", () => frameGrid(5), 166 - 34, 40);
+  G("rack", rackGrid, 70, 70);
+  G("pot", potGrid, 88, 52);
+  G("stump", stumpGrid, 57, 46);
+  G("log", () => logGrid(9), 85, 80);
+
+  const slow = Math.floor(frame / 2);
+  P2(BAND.farmer, slow, 30, 92, false);
+  P2(BAND.chopper, slow, 50, 46, false);
+  P2(BAND.builder, slow + 1, 124, 40, false);
+  P2(BAND.elder, 0, 70, 58, false);
+  P2(BAND.cook, slow, 86, 80, false);
+  S(() => fire(ctx, dk, 97, 79, frame), 79);
+
+  /* fisher on the bank; line and bobber drawn after */
+  S(() => {
+    const tip = drawPerson(ctx, dk, BAND.fisher, Math.floor(frame / 3) % 4, 152, 74, false);
+    if (tip) { const bite = (frame % 48) > 40; const bx = tip[0] + 4, by = 82 + (bite ? 1 : 0);
+      ctx.fillStyle = grade(dk, "#e9e4d8"); for (let i = 0; i <= by - tip[1]; i++) ctx.fillRect(tip[0] + Math.round(i * 4 / Math.max(1, by - tip[1])), tip[1] + i, 1, 1);
+      fill(ctx, dk, col("ochre"), bx, by); fill(ctx, dk, "#ffffff", bx, by - 1);
+      if (bite) { fill(ctx, dk, col("foam"), bx - 2, by + 1); fill(ctx, dk, col("foam"), bx + 2, by + 1); } }
+  }, 74);
+
+  /* two neighbors talking; the bubble changes subject every few seconds */
+  const topic = ["fish", "deer", "heart", "sun", "baby"][Math.floor(frame / 24) % 5];
+  const speakerA = Math.floor(frame / 12) % 2 === 0;
+  P2(speakerA ? BAND.talkA : { ...BAND.talkA, act: "stand" }, slow, 114, 88, false);
+  P2(!speakerA ? BAND.talkB : { ...BAND.talkB, act: "stand" }, slow, 124, 88, false);
+  S(() => bubble(ctx, dk, speakerA ? 114 : 124, speakerA ? 70 : 72, topic), 200);
+
+  /* carrier walks the path to the river and back */
+  const T = 160, t = frame % T, goingRight = t < T/2, u = goingRight ? t / (T/2) : 1 - (t - T/2) / (T/2);
+  const cxp = 66 + u * 70, pathY = campPathY;
+  P2(BAND.carrier, Math.floor(frame / 2), cxp, pathY(Math.round(cxp)) + 2, !goingRight);
+
+  /* kid and dog chase each other around the fire */
+  const a = frame / 14, kx = 97 + Math.cos(a) * 17, ky = 84 + Math.sin(a) * 6;
+  const da = a - 0.75, dx = 97 + Math.cos(da) * 17, dy = 84 + Math.sin(da) * 6;
+  const kFlip = Math.sin(a) > 0, dFlip = Math.sin(da) > 0;
+  P2(BAND.kid, frame, kx, ky, kFlip);
+  G("dog" + (frame % 2), () => dogGrid(frame % 2), dx, dy, dFlip);
+
+  /* a deer at the treeline and a duck on the river */
+  G("deer" + (Math.floor(frame / 10) % 4), () => deerGrid(Math.floor(frame / 10) % 4), 104, 24, false);
+  const dy2 = 108 - ((frame * 0.35) % 120); const dx2 = 176 + Math.round(Math.sin(frame / 20) * 3);
+  if (dy2 > 4) G("duck" + (Math.floor(frame / 6) % 2), () => duckGrid(Math.floor(frame / 6) % 2), dx2, dy2, true);
+
+  items.sort((p, q) => p.y - q.y).forEach(i => i.fn());
+}
+
+/* ---------- small specimen scenes ---------- */
+function groundStrip(ctx, dk, w, h, seed, kind = "grass", season = "summer"){ ground(ctx, dk, 0, 0, w, h, seed, season, kind); }
+const FAMILY = {
+  baby:     { age:"baby", mel:.52, hair:"black" },
+  toddler:  { age:"toddler", sex:"f", mel:.5, hair:"black", style:"puffs", wear:"tunic", top:"wool", bareLegs:true, act:"wave" },
+  child:    { age:"child", sex:"m", mel:.54, hair:"black", style:"coils", wear:"tunic", top:"hide", bareLegs:true },
+  teenF:    { age:"teen", sex:"f", mel:.5, hair:"dkbrown", style:"braids", wear:"wrap", top:"yel" },
+  teenM:    { age:"teen", sex:"m", mel:.56, hair:"black", style:"short", wear:"loin", beads:true },
+  woman:    { age:"adult", sex:"f", mel:.52, hair:"dkbrown", style:"long", wear:"dress", top:"ochre" },
+  man:      { age:"adult", sex:"m", mel:.58, hair:"black", style:"short", beard:true, wear:"tunic", top:"hide" },
+  mother:   { age:"adult", sex:"f", mel:.5, hair:"black", style:"bun", wear:"wrap", top:"indigo", act:"holdbaby", babyMel:.47, babyWrap:"yel" },
+  elderF:   { age:"elder", sex:"f", mel:.5, hair:"dkbrown", gray:.85, style:"bun", wear:"dress", top:"moss2" },
+  elderM:   { age:"elder", sex:"m", mel:.56, hair:"black", gray:.9, style:"bald", beard:true, wear:"tunic", top:"wool", act:"cane" },
+};
+const AGES_ROW = [["baby","Baby"],["toddler","Toddler, 2"],["child","Child, 7"],["teenF","Teen girl, 14"],["teenM","Teen boy, 15"],["woman","Woman, 31"],["man","Man, 33"],["mother","Mother and baby"],["elderF","Elder, 66"],["elderM","Elder, 71"]];
+const ANCESTRY = [
+  [{ age:"adult", sex:"f", mel:.08, hair:"blond", style:"braids", wear:"furs", top:"#8d7f6a", eye:"#3b5f8a" }, "Fjord folk"],
+  [{ age:"adult", sex:"m", mel:.2, hair:"red", style:"shaggy", beard:true, wear:"furs", top:"hide", eye:"#4a6b3a" }, "Pine folk"],
+  [{ age:"adult", sex:"f", mel:.36, under:-1, hair:"dkbrown", style:"wavy", wear:"dress", top:"linen" }, "Olive hills folk"],
+  [{ age:"adult", sex:"m", mel:.46, hair:"black", style:"topknot", wear:"tunic", top:"indigo" }, "Steppe folk"],
+  [{ age:"adult", sex:"f", mel:.6, hair:"black", style:"long", wear:"wrap", top:"moss2" }, "Reed folk"],
+  [{ age:"adult", sex:"m", mel:.8, hair:"black", style:"coils", wear:"loin", beads:true }, "Salt plains folk"],
+  [{ age:"adult", sex:"f", mel:.94, hair:"black", style:"puffs", wear:"wrap", top:"yel" }, "Jungle folk"],
+];
+
+const ACTIONS = [
+  { label: "Walk", w: 30, h: 30, draw(c, dk, f){ groundStrip(c, dk, 30, 30, 21); drawPerson(c, dk, { ...FAMILY.woman, view:"side", act:"walk" }, Math.floor(f/2), 15, 26); } },
+  { label: "Run", w: 30, h: 30, draw(c, dk, f){ groundStrip(c, dk, 30, 30, 22); drawPerson(c, dk, { ...FAMILY.child, view:"side", act:"run" }, f, 15, 26); } },
+  { label: "Chop wood", w: 34, h: 30, draw(c, dk, f){ groundStrip(c, dk, 34, 30, 23); stamp(c, sprite("stump", dk, null, stumpGrid), 22, 27); drawPerson(c, dk, BAND.chopper, Math.floor(f/2), 12, 27); } },
+  { label: "Hoe", w: 36, h: 30, draw(c, dk, f){ for (let y = 0; y < 30; y++) for (let x = 0; x < 36; x++) fill(c, dk, col(y % 3 === 0 ? "dirtD" : y % 3 === 1 ? "dirt" : "dirtL"), x, y); drawPerson(c, dk, BAND.farmer, Math.floor(f/2), 12, 26); } },
+  { label: "Fish", w: 36, h: 30, draw(c, dk, f){ groundStrip(c, dk, 36, 30, 24); river(c, dk, 0, 36, 0, 30, f, () => 22);
+      const tip = drawPerson(c, dk, BAND.fisher, Math.floor(f/3) % 4, 11, 27);
+      if (tip) { const by = 22 + ((f % 40) > 33 ? 1 : 0); c.fillStyle = grade(dk, "#e9e4d8"); for (let i = 0; i <= by - tip[1]; i++) c.fillRect(tip[0] + Math.round(i * 4 / Math.max(1, by - tip[1])), tip[1] + i, 1, 1); fill(c, dk, col("ochre"), tip[0] + 4, by); } } },
+  { label: "Carry", w: 30, h: 32, draw(c, dk, f){ groundStrip(c, dk, 30, 32, 25); drawPerson(c, dk, BAND.carrier, Math.floor(f/2), 15, 29); } },
+  { label: "Build", w: 34, h: 30, draw(c, dk, f){ groundStrip(c, dk, 34, 30, 26); for (let y = 8; y < 28; y++) fill(c, dk, col(y % 4 ? "woodL" : "wood"), 25, y, 2, 1); fill(c, dk, col("wood"), 20, 12, 10, 1); drawPerson(c, dk, BAND.builder, Math.floor(f/2), 14, 27); } },
+  { label: "Talk", w: 38, h: 34, draw(c, dk, f){ groundStrip(c, dk, 38, 34, 27); const a = Math.floor(f / 10) % 2 === 0;
+      drawPerson(c, dk, a ? BAND.talkA : { ...BAND.talkA, act:"stand" }, Math.floor(f/2), 12, 31); drawPerson(c, dk, !a ? BAND.talkB : { ...BAND.talkB, act:"stand" }, Math.floor(f/2), 25, 31);
+      bubble(c, dk, a ? 12 : 25, a ? 14 : 16, ["fish","heart","angry","deer"][Math.floor(f / 20) % 4]); } },
+  { label: "Cook", w: 36, h: 30, draw(c, dk, f){ groundStrip(c, dk, 36, 30, 28); stamp(c, sprite("log", dk, null, () => logGrid(9)), 13, 28); drawPerson(c, dk, BAND.cook, Math.floor(f/2), 13, 27); fire(c, dk, 26, 27, f); } },
+  { label: "Sleep", w: 34, h: 30, draw(c, dk, f){ groundStrip(c, dk, 34, 30, 29); stamp(c, sprite("bed", dk, null, () => bedGrid(FAMILY.man)), 17, 25); zzz(c, dk, 6, 14, Math.floor(f/2)); } },
+  { label: "Mine", w: 36, h: 30, draw(c, dk, f){ for (let y = 0; y < 30; y++) for (let x = 0; x < 36; x++) fill(c, dk, col(x > 26 ? (hash(x,y,8) < .2 ? "oreCu" : "rock") : y > 26 ? "rockD" : "deep"), x, y);
+      drawPerson(c, dk, { ...BAND.chopper, act:"pick", toolHead:"stoneL" }, Math.floor(f/2), 15, 26); if (Math.floor(f/2) % 4 >= 2 && f % 2) fill(c, dk, col("fireL"), 26, 18 + (f % 3)); } },
+];
+const HOMES = [];
+[["Reed folk", roundHut, "grass"], ["Forest folk", longhouse, "grass"], ["Dry-land folk", adobeHouse, "sand"]].forEach(([folk, fn, kind], ci) => {
+  ["humble", "comfortable", "chief's"].forEach((lv, l) => HOMES.push({ label: `${folk}, ${lv}`, w: 48, h: 38, draw(c, dk){ groundStrip(c, dk, 48, 38, 40 + ci*3 + l, kind); if (kind === "sand" && l === 2) palm(c, dk, 4, 35, 12); stamp(c, sprite(`home${ci}${l}`, dk, null, () => fn(l)), 24, 36); } }));
+});
+function seasonCell(season){
+  return { label: season[0].toUpperCase() + season.slice(1), w: 64, h: 48, draw(c, dk, f){
+    groundStrip(c, dk, 64, 48, 60, "grass", season);
+    const frozen = season === "winter";
+    for (let y = 0; y < 48; y++) { const xl = 50 + Math.round(Math.sin(y / 9) * 2);
+      for (let x = xl; x < 64; x++) fill(c, dk, col(frozen ? (hash(x, y, 2) < .15 ? "snowD" : "ice") : x === xl ? "waterD" : "water"), x, y);
+      fill(c, dk, col(frozen ? "snowD" : "sand"), xl - 2, y, 2, 1); }
+    tree(c, dk, 12, 22, 6, season, 7);
+    stamp(c, sprite(`seasonhut${season}`, dk, null, () => { const g = roundHut(0); if (frozen) { for (let x = 0; x < g.w; x++) for (let y = 0; y < g.h; y++) if (g.px[y*g.w+x] && (y === 0 || !g.px[(y-1)*g.w+x]) && y < g.h - 6) { put(g, x, y, col("snow")); put(g, x, y+1, col("snow")); } } return g; }), 30, 30);
+    if (season === "spring") drawPerson(c, dk, { ...BAND.farmer, beads:false }, Math.floor(f/2), 16, 44);
+    if (season === "summer") { const tip = drawPerson(c, dk, BAND.fisher, Math.floor(f/3) % 4, 42, 42); if (tip) { c.fillStyle = grade(dk, "#e9e4d8"); for (let i = 0; i < 6; i++) c.fillRect(tip[0] + Math.round(i/2), tip[1] + i, 1, 1); } }
+    if (season === "autumn") { drawPerson(c, dk, { ...BAND.carrier, load:"#d98a2e", load2:"ochre" }, Math.floor(f/2), 18 + (Math.floor(f/2) % 40) * 0.5, 44); for (let k = 0; k < 5; k++) { const t = (f + k * 9) % 40; fill(c, dk, col(k % 2 ? "#d98a2e" : "#e8c24e"), 8 + k * 3 + Math.round(Math.sin(t / 4) * 2), 10 + t); } }
+    if (frozen) { drawPerson(c, dk, { ...BAND.chopper, act:"stand", view:"front", top:"#8d7f6a" }, 0, 18, 44); fire(c, dk, 26, 44, f);
+      for (let k = 0; k < 26; k++) { const x = Math.floor(hash(k, 1, 3) * 64), sp = 1 + (k % 3); const y = Math.floor((f * sp * 0.5 + hash(k, 2, 3) * 48)) % 48; fill(c, dk, "#ffffff", x + Math.round(Math.sin((f + k) / 6)), y); } }
+  } };
+}
+const SEASONS = ["spring","summer","autumn","winter"].map(seasonCell).concat([
+  { label: "Desert", w: 64, h: 48, draw(c, dk, f){ groundStrip(c, dk, 64, 48, 70, "sand");
+      for (let x = 0; x < 64; x++) { const h = Math.round(6 + Math.sin(x / 9) * 3); for (let y = 0; y < h; y++) fill(c, dk, col(y < 2 ? "#e8d6a6" : "sandD"), x, y + 4); }
+      palm(c, dk, 50, 34, 14); palm(c, dk, 58, 40, 11); stamp(c, sprite("home20", dk, null, () => adobeHouse(0)), 22, 40);
+      drawPerson(c, dk, { ...ANCESTRY[5][0], view:"side", act:"walk", wear:"wrap", top:"wool" }, Math.floor(f/2), 40 + (Math.floor(f/2) % 20) * 0.3, 46); } },
+  { label: "Tundra", w: 64, h: 48, draw(c, dk, f){ groundStrip(c, dk, 64, 48, 71, "tundra");
+      pine(c, dk, 8, 24, 10, true); pine(c, dk, 18, 18, 8, true); pine(c, dk, 56, 22, 9, true);
+      stamp(c, sprite("tundrahouse", dk, null, () => longhouse(0)), 34, 34);
+      drawPerson(c, dk, { ...ANCESTRY[0][0], view:"side", act:"walk" }, Math.floor(f/2), 20, 45);
+      for (let k = 0; k < 18; k++) { const x = Math.floor(hash(k, 4, 3) * 64), y = Math.floor((f * 0.8 + hash(k, 5, 3) * 48)) % 48; fill(c, dk, "#ffffff", x + Math.round(Math.sin((f + k) / 5)), y); } } },
+  { label: "Rainforest", w: 64, h: 48, draw(c, dk, f){ groundStrip(c, dk, 64, 48, 72, "jungle");
+      for (const [x, y, r, s] of [[6, 22, 7, 1], [22, 14, 8, 2], [52, 18, 7, 3], [40, 8, 6, 4], [60, 40, 5, 5]]) tree(c, dk, x, y, r, "summer", s);
+      for (let k = 0; k < 6; k++) for (let y = 0; y < 10 + k; y++) fill(c, dk, col("leafD"), 10 + k * 9, y);
+      stamp(c, sprite("junglehut", dk, null, () => roundHut(1)), 30, 40);
+      drawPerson(c, dk, { ...ANCESTRY[6][0], act:"wave" }, Math.floor(f/3), 46, 46); bush(c, dk, 14, 46, 9, true); } },
+]);
+
+/* ---------- underground cross-section ---------- */
+function drawUnder(c, dk, f){
+  const W = 192, H = 108, gy = 24;
+  c.fillStyle = grade(dk, DIRS[dk].sky); c.fillRect(0, 0, W, gy);
+  for (let x = 0; x < W; x++) { fill(c, dk, col("grass"), x, gy, 1, 2); if (hash(x, 1, 1) < .4) fill(c, dk, col("grassL"), x, gy - 1); }
+  for (let y = gy + 2; y < H; y++) for (let x = 0; x < W; x++) {
+    let k;
+    if (y < gy + 16 + Math.round(Math.sin(x / 11) * 2)) k = hash(x, y, 1) < .12 ? "soilD" : "soil";
+    else { const band = Math.floor((y + Math.sin(x / 17) * 3) / 7) % 3; k = band === 0 ? "rock" : band === 1 ? "rockD" : "rockL"; if (hash(x, y, 2) < .06) k = "rockD"; }
+    const vein = Math.abs((y - 62) - (x - 110) * 0.25) < 2.5 && x > 90 && x < 150;
+    if (vein && hash(x, y, 3) < .55) k = hash(x, y, 4) < .5 ? "oreCu" : "ore";
+    if (Math.abs(y - (92 + Math.sin(x / 8) * 2)) < 1.5 && x < 80) k = "coal";
+    fill(c, dk, col(k), x, y);
+  }
+  for (const [x, y] of [[20, 30], [24, 32], [150, 29], [154, 31], [158, 30]]) fill(c, dk, col("trunk"), x, y, 1, 3);
+  /* shaft with ladder and supports */
+  for (let y = gy; y < 84; y++) { fill(c, dk, DARK, 66, y, 9, 1); if (y % 10 === 0) fill(c, dk, col("woodD"), 65, y, 11, 1); fill(c, dk, col("woodD"), 65, y); fill(c, dk, col("woodD"), 75, y); }
+  for (let y = gy; y < 84; y++) { fill(c, dk, col("woodL"), 68, y); fill(c, dk, col("woodL"), 72, y); if (y % 3 === 0) fill(c, dk, col("wood"), 69, y, 3, 1); }
+  /* tunnel along the vein */
+  for (let y = 72; y < 84; y++) fill(c, dk, DARK, 75, y, 60, 1);
+  for (let x = 84; x < 134; x += 14) { fill(c, dk, col("woodD"), x, 72, 1, 12); fill(c, dk, col("woodD"), x - 2, 72, 5, 1); }
+  fill(c, dk, col("rockD"), 75, 84, 60, 1);
+  const flick = f % 3; fill(c, dk, col("fireL"), 99, 74 - (flick === 1 ? 1 : 0)); fill(c, dk, col("fire"), 99, 75); fill(c, dk, col("woodL"), 99, 76, 1, 2);
+  /* cave and groundwater */
+  for (let y = 86; y < 106; y++) for (let x = 140; x < 188; x++) { const dx = (x - 164) / 24, dy = (y - 96) / 10; if (dx*dx + dy*dy < 1) fill(c, dk, y > 97 ? col(hash(x + f, y, 5) < .05 ? "waterL" : "water") : DARK, x, y); }
+  for (const x of [150, 158, 171, 178]) fill(c, dk, col("rockL"), x, 87, 1, 2 + (x % 3));
+  if (f % 16 < 8) fill(c, dk, col("waterL"), 158, 89 + Math.floor((f % 16) / 1));
+  /* surface life */
+  stamp(c, sprite("underhut", dk, null, () => roundHut(1)), 32, gy + 1);
+  tree(c, dk, 152, gy, 6, "summer", 9);
+  drawPerson(c, dk, { ...BAND.carrier }, Math.floor(f/2), 100 + (Math.floor(f/2) % 40), gy + 1, false);
+  /* climber on the ladder and miner at the face */
+  const cyc = f % 80, up = cyc < 40, yy = up ? 82 - cyc * 1.3 : 30 + (cyc - 40) * 1.3;
+  drawPerson(c, dk, { ...BAND.chopper, act: "climb", view: "front", wear:"tunic", top:"hide" }, Math.floor(f/2), 70.5, Math.round(yy));
+  drawPerson(c, dk, { ...BAND.builder, act:"pick", toolHead:"#c87a3c" }, Math.floor(f/2), 124, 83);
+  if (Math.floor(f/2) % 4 >= 2 && f % 2) { fill(c, dk, col("fireL"), 133, 75 + (f % 4)); fill(c, dk, col("oreCu"), 132, 79); }
+  stamp(c, sprite("orebasket", dk, null, () => { const g = grid(6, 4); rect(g, 0, 1, 6, 3, col("thatch")); for (let i = 1; i < 5; i++) put(g, i, 0, i % 2 ? col("oreCu") : col("ore")); return g; }), 112, 83);
+}
+
+/* ---------- page wiring ---------- */
+const reduced = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+const drawables = [];
+let viewDir = "A";
+function addDrawable(cv, draw, opts = {}){ const d = { cv, ctx: cv.getContext("2d"), draw, fixedDir: opts.dir || null, visible: true, last: -1 }; d.ctx.imageSmoothingEnabled = false; drawables.push(d); return d; }
+function makeCell(parent, spec){
+  const fig = document.createElement("figure"); fig.className = "cell";
+  const cv = document.createElement("canvas"); cv.className = "px"; cv.width = spec.w; cv.height = spec.h; cv.style.width = `calc(${spec.w}px * var(--s))`;
+  cv.setAttribute("role", "img"); cv.setAttribute("aria-label", spec.label);
+  const cap = document.createElement("figcaption"); cap.textContent = spec.label;
+  fig.append(cv, cap); parent.append(fig);
+  addDrawable(cv, (c, dk, f) => { c.clearRect(0, 0, spec.w, spec.h); spec.draw(c, dk, f); });
+}
+function swatchColors(dk){ return ["grass","water","thatch","ochre","indigo","#d9a277"].map(k => grade(dk, col(k))); }
+
+/* direction cards */
+const dirGrid = document.getElementById("dir-grid");
+DIR_KEYS.forEach(dk => {
+  const d = DIRS[dk], art = document.createElement("article"); art.className = "dir-card";
+  art.innerHTML = `<canvas class="px" width="192" height="112" role="img" aria-label="${d.name}: a Stone Age camp"></canvas>
+    <div class="dir-meta"><h3><span class="tag">${dk}</span>${d.name}</h3><p>${d.blurb}</p>
+    <button class="pick" type="button" data-key="direction" data-val="${dk}" aria-pressed="false">Pick ${dk}</button></div>`;
+  const sw = document.createElement("div"); sw.className = "swatches"; swatchColors(dk).forEach(c => { const i = document.createElement("i"); i.style.background = c; sw.append(i); });
+  art.querySelector(".dir-meta p").after(sw);
+  dirGrid.append(art);
+  addDrawable(art.querySelector("canvas"), (c, k, f) => drawCamp(c, k, f), { dir: dk });
+});
+/* preview switcher */
+const viewseg = document.getElementById("viewseg");
+DIR_KEYS.forEach(dk => { const b = document.createElement("button"); b.type = "button"; b.dataset.dir = dk; b.innerHTML = `${dk}<span class="nm"> ${DIRS[dk].name}</span>`; b.setAttribute("aria-label", `${dk} ${DIRS[dk].name}`); b.setAttribute("aria-pressed", dk === viewDir ? "true" : "false"); b.onclick = () => setView(dk); viewseg.append(b); });
+function setView(dk){ viewDir = dk; viewseg.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", b.dataset.dir === dk ? "true" : "false")); redrawAll(); }
+
+/* specimen cells */
+const agesEl = document.getElementById("cells-ages");
+AGES_ROW.forEach(([k, label]) => makeCell(agesEl, { label, w: k === "baby" ? 16 : 20, h: 23, draw(c, dk, f){
+  groundStrip(c, dk, c.canvas.width, 23, 31);
+  if (k === "baby") { stamp(c, sprite("baby", dk, null, () => babyGrid(FAMILY.baby)), 8, 20); return; }
+  drawPerson(c, dk, FAMILY[k], Math.floor(f / 3), c.canvas.width / 2, 21); } }));
+const ancEl = document.getElementById("cells-anc");
+ANCESTRY.forEach(([sp, label]) => makeCell(ancEl, { label, w: 20, h: 23, draw(c, dk){ groundStrip(c, dk, 20, 23, 33); drawPerson(c, dk, sp, 0, 10, 21); } }));
+const famEl = document.getElementById("cells-family");
+const MOM = { age:"adult", sex:"f", mel:.86, hair:"black", style:"coils", wear:"wrap", top:"yel" };
+const DAD = { age:"adult", sex:"m", mel:.12, hair:"brown", style:"short", beard:true, wear:"tunic", top:"indigo", eye:"#3b5f8a" };
+const KIDS = [
+  [{ age:"child", sex:"f", mel:.5, hair:"dkbrown", style:"puffs", wear:"tunic", top:"wool", bareLegs:true }, "Daughter, 8"],
+  [{ age:"child", sex:"m", mel:.42, hair:"#4a3020", style:"short", wear:"tunic", top:"hide", bareLegs:true, eye:"#4a6b3a" }, "Son, 6"],
+  [{ age:"toddler", sex:"f", mel:.58, hair:"dkbrown", style:"coils", wear:"tunic", top:"ochre", bareLegs:true }, "Daughter, 3"],
+];
+makeCell(famEl, { label: "Mother", w: 20, h: 23, draw(c, dk){ groundStrip(c, dk, 20, 23, 34); drawPerson(c, dk, MOM, 0, 10, 21); } });
+famEl.insertAdjacentHTML("beforeend", '<span class="op" aria-hidden="true">+</span>');
+makeCell(famEl, { label: "Father", w: 20, h: 23, draw(c, dk){ groundStrip(c, dk, 20, 23, 35); drawPerson(c, dk, DAD, 0, 10, 21); } });
+famEl.insertAdjacentHTML("beforeend", '<span class="op" aria-hidden="true">&rarr;</span>');
+KIDS.forEach(([sp, label], i) => makeCell(famEl, { label, w: 18, h: 23, draw(c, dk){ groundStrip(c, dk, 18, 23, 36 + i); drawPerson(c, dk, sp, 0, 9, 21); } }));
+const actEl = document.getElementById("cells-actions"); ACTIONS.forEach(a => makeCell(actEl, a));
+const homeEl = document.getElementById("cells-homes"); HOMES.forEach(h => makeCell(homeEl, h));
+const seasEl = document.getElementById("cells-seasons"); SEASONS.forEach(s => makeCell(seasEl, s));
+addDrawable(document.getElementById("cv-under"), (c, dk, f) => { c.clearRect(0, 0, 192, 108); drawUnder(c, dk, f); });
+
+/* interface stage */
+const ERAS = [["stone","Stone Age","Late Spring, Year 340"],["bronze","Bronze Age","Flood season, Year 1,618"],["medieval","Medieval","Harvest month, Year 2,903"],["industrial","Industrial","Day 112, Year 3,644"],["modern","Modern","Apr 22, Year 4,071, 10:42"],["space","Space Age","Cycle 3, Day 41, Year 4,390"]];
+const stage = document.getElementById("ui-stage"), eraseg = document.getElementById("eraseg");
+ERAS.forEach(([k, name, date], i) => { const b = document.createElement("button"); b.type = "button"; b.textContent = name; b.setAttribute("aria-pressed", i === 0 ? "true" : "false");
+  b.onclick = () => { ERAS.forEach(([kk]) => stage.classList.remove("skin-" + kk)); stage.classList.add("skin-" + k); document.getElementById("hud-date").textContent = date;
+    eraseg.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b ? "true" : "false")); };
+  eraseg.append(b); });
+addDrawable(document.getElementById("cv-ui"), (c, dk, f) => drawCamp(c, dk, f));
+const portrait = document.getElementById("cv-portrait"); portrait.width = 18; portrait.height = 18;
+addDrawable(portrait, (c, dk) => { c.clearRect(0, 0, 18, 18); drawPerson(c, dk, { ...BAND.fisher, view:"front", act:"stand" }, 0, 9, 25); });
+
+/* picks */
+const state = { direction: null, outline: null, proportion: null, notes: "" };
+const pickDir = document.getElementById("pick-direction");
+DIR_KEYS.forEach(dk => { const o = document.createElement("div"); o.className = "opt";
+  const sw = document.createElement("div"); sw.className = "swatches"; swatchColors(dk).forEach(c => { const i = document.createElement("i"); i.style.background = c; sw.append(i); });
+  const b = document.createElement("button"); b.className = "pick"; b.type = "button"; b.dataset.key = "direction"; b.dataset.val = dk; b.setAttribute("aria-pressed", "false"); b.textContent = `${dk} ${DIRS[dk].name}`;
+  o.append(sw, b); pickDir.append(o); });
+const OUTLINES = [["dark","Dark ink"],["sel","Tinted"],["soft","Soft"],["none","No outline"]];
+const pickOut = document.getElementById("pick-outline");
+OUTLINES.forEach(([m, label]) => { const o = document.createElement("div"); o.className = "opt";
+  const cv = document.createElement("canvas"); cv.className = "px"; cv.width = 44; cv.height = 32; cv.style.width = "calc(44px * var(--s))"; cv.setAttribute("role", "img"); cv.setAttribute("aria-label", label + " example");
+  const b = document.createElement("button"); b.className = "pick"; b.type = "button"; b.dataset.key = "outline"; b.dataset.val = m; b.setAttribute("aria-pressed", "false"); b.textContent = label;
+  o.append(cv, b); pickOut.append(o);
+  addDrawable(cv, (c, dk, f) => { groundStrip(c, dk, 44, 32, 50); stamp(c, sprite("hutO", dk, m, () => roundHut(0)), 30, 26); drawPerson(c, dk, FAMILY.woman, 0, 10, 29, false, m); drawPerson(c, dk, FAMILY.child, 0, 18, 29, false, m); }); });
+const PROPS = [["balanced","Balanced"],["cute","Cute, bigger heads"]];
+const pickProp = document.getElementById("pick-proportion");
+PROPS.forEach(([p, label]) => { const o = document.createElement("div"); o.className = "opt";
+  const cv = document.createElement("canvas"); cv.className = "px"; cv.width = 58; cv.height = 30; cv.style.width = "calc(58px * var(--s))"; cv.setAttribute("role", "img"); cv.setAttribute("aria-label", label + " example");
+  const b = document.createElement("button"); b.className = "pick"; b.type = "button"; b.dataset.key = "proportion"; b.dataset.val = p; b.setAttribute("aria-pressed", "false"); b.textContent = label;
+  o.append(cv, b); pickProp.append(o);
+  const cute = p === "cute";
+  addDrawable(cv, (c, dk) => { groundStrip(c, dk, 58, 30, 51); [FAMILY.man, FAMILY.woman, FAMILY.child, FAMILY.elderF].forEach((sp, i) => drawPerson(c, dk, { ...sp, cute }, 0, 8 + i * 14, 28)); }); });
+
+function applyState(){
+  document.querySelectorAll(".pick[data-key]").forEach(b => b.setAttribute("aria-pressed", state[b.dataset.key] === b.dataset.val ? "true" : "false"));
+  document.getElementById("notes").value = state.notes || "";
+  OUTLINE_OVERRIDE = state.outline || null;
+  PROPORTION = state.proportion || "balanced";
+  if (state.direction && state.direction !== viewDir) setView(state.direction); else redrawAll();
+}
+document.addEventListener("click", e => {
+  const b = e.target.closest(".pick[data-key]"); if (!b) return;
+  const k = b.dataset.key, v = b.dataset.val;
+  state[k] = state[k] === v ? null : v;
+  applyState(); save();
+});
+const statusEl = document.getElementById("status");
+const setStatus = t => { statusEl.textContent = t; };
+let db = null, saving = Promise.resolve(), noteTimer = 0;
+const DOC = "picks/board";
+function save(){
+  if (!db) { setStatus("Saved in this view only. Use Copy my picks to send them to me."); return; }
+  const body = { ...state, updatedAt: new Date().toISOString() };
+  setStatus("Saving...");
+  saving = saving.then(() => db.doc(DOC).set(body)).then(() => setStatus("Saved. I can read your picks from here."))
+    .catch(err => setStatus(err && err.code === "invalid_argument" ? "This copy is view-only, so picks can't be saved here." : "Couldn't save just now. Copy my picks still works."));
+}
+document.getElementById("notes").addEventListener("input", e => { state.notes = e.target.value.slice(0, 4000); clearTimeout(noteTimer); noteTimer = setTimeout(save, 900); });
+function picksText(){
+  const name = (k, v) => !v ? "not picked" : k === "direction" ? `${v} ${DIRS[v].name}` : k === "outline" ? OUTLINES.find(o => o[0] === v)[1] : PROPS.find(o => o[0] === v)[1];
+  return `Little Ages style picks\nDirection: ${name("direction", state.direction)}\nOutlines: ${name("outline", state.outline)}\nProportions: ${name("proportion", state.proportion)}\nNotes: ${state.notes || "none"}`;
+}
+document.getElementById("copy-btn").addEventListener("click", () => {
+  const text = picksText();
+  const fallback = () => { let t = document.getElementById("copy-box"); if (!t) { t = document.createElement("textarea"); t.id = "copy-box"; t.readOnly = true; t.setAttribute("aria-label", "Your picks as text"); document.querySelector(".save-line").after(t); }
+    t.value = text; t.focus(); t.select(); setStatus("Couldn't copy automatically. Your picks are selected in the box below; copy them from there."); };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(() => setStatus("Copied. Paste it to me in chat."), fallback); else fallback();
+});
+(async () => {
+  try {
+    if (!window.claude || typeof window.claude.use !== "function") { setStatus("Picks are kept on claude.ai. Here, use Copy my picks."); return; }
+    db = await window.claude.use("db");
+    if (!db) { setStatus("Use Copy my picks to send your choices."); return; }
+    const snap = await db.doc(DOC).get();
+    if (snap.exists) { Object.assign(state, snap.data()); delete state.updatedAt; applyState(); setStatus("Your saved picks are loaded."); }
+    else setStatus("Your picks save automatically.");
+  } catch (e) { setStatus("Use Copy my picks to send your choices."); }
+})();
+
+/* ---------- animation: 8 frames a second, only for canvases on screen ---------- */
+const io = "IntersectionObserver" in window ? new IntersectionObserver(es => es.forEach(en => { const d = drawables.find(x => x.cv === en.target); if (d) d.visible = en.isIntersecting; }), { rootMargin: "120px" }) : null;
+drawables.forEach(d => io && io.observe(d.cv));
+function render(d, f){ try { d.ctx.imageSmoothingEnabled = false; d.draw(d.ctx, d.fixedDir || viewDir, f); } catch (e) { console.error(e); } d.last = f; }
+function redrawAll(){ const f = currentFrame(); drawables.forEach(d => render(d, f)); }
+const t0 = performance.now();
+const currentFrame = () => reduced ? 0 : Math.floor((performance.now() - t0) / 125);
+function tick(){ const f = currentFrame(); drawables.forEach(d => { if (d.visible && d.last !== f) render(d, f); }); requestAnimationFrame(tick); }
+redrawAll();
+if (!reduced) requestAnimationFrame(tick);
+</script>
