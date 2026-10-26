@@ -252,6 +252,7 @@ export class PeopleUI {
     const d = this.person;
     if (this.threads && d && px > -40 && px < W + 40) {
       const rel: [Kin | null, string, string][] = [[d.partner, "#e07a8a", ""], [d.mother, "#7fbf5a", ""], [d.father, "#7fbf5a", ""], ...d.children.map(k => [k, "#7fbf5a", ""] as [Kin, string, string]), ...d.siblings.map(k => [k, "#a4cf6a", ""] as [Kin, string, string]), ...d.friends.map(k => [k, "#7fb3e6", ""] as [Kin, string, string]), ...d.rivals.map(k => [k, "#e0584a", ' stroke-dasharray="5 4"'] as [Kin, string, string])];
+      const labels: { x: number; y: number; w: number; text: string }[] = [];
       for (const [k, col, dash] of rel) {
         if (!k || !k.alive) continue;
         const q = pos.get(k.id); if (!q) continue;
@@ -259,7 +260,17 @@ export class PeopleUI {
         if (qx < -40 || qx > W + 40 || qy < -40 || qy > H + 40) continue;
         s += `<line x1="${px}" y1="${headY}" x2="${qx}" y2="${qy}" stroke="#14110c" stroke-width="4" stroke-opacity=".5"${dash}/><line x1="${px}" y1="${headY}" x2="${qx}" y2="${qy}" stroke="${col}" stroke-width="2"${dash}/>`;
         s += `<rect x="${qx - 3}" y="${qy - 3}" width="6" height="6" fill="${col}" stroke="#14110c" stroke-width="1.5"/>`;
-        if (cam.z >= 4) s += `<text class="rel-label" x="${(px + qx) / 2}" y="${(headY + qy) / 2 - 5}" text-anchor="middle">${esc(k.rel)}: ${esc(k.name)}</text>`;
+        /* a name by each end, for anyone not standing right beside the pinned person */
+        const text = `${k.rel}: ${k.name}`;
+        if (cam.z >= 4 && Math.hypot(qx - px, qy - headY) > 16 && labels.length < 8) labels.push({ x: qx, y: qy - 9, w: text.length * 6.6 + 6, text });
+      }
+      /* names that would overprint each other stack upward instead, so every one stays readable */
+      const placed: typeof labels = [];
+      for (const l of labels) {
+        for (let k = 0; k < 10; k++) { const hit = placed.find(o => Math.abs(o.x - l.x) < (o.w + l.w) / 2 && Math.abs(o.y - l.y) < 12); if (!hit) break; l.y = hit.y - 12; }
+        placed.push(l);
+        const x = Math.max(l.w / 2 + 4, Math.min(W - l.w / 2 - 4, l.x));
+        s += `<text class="rel-label" x="${x}" y="${l.y}" text-anchor="middle">${esc(l.text)}</text>`;
       }
     }
     this.svg.innerHTML = s;

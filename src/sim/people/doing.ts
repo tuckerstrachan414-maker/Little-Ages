@@ -1,4 +1,4 @@
-import { Species, Flag } from "../../shared/types.ts";
+import { Species, Flag, DAY_SECONDS } from "../../shared/types.ts";
 import { Anim, Bubble } from "../../shared/people.ts";
 import { Food, Goal, Know, Mem, Place, St, Skill, YEAR, step, type Person, type Step } from "./person.ts";
 import { MEAT, type Society } from "./society.ts";
@@ -89,11 +89,15 @@ function go(s: Society, p: Person, st: Step, dt: number): void {
       let k0 = 0, bd = Math.hypot(p.x - b.x, p.y - b.y);
       for (let k = 0; k < r.length; k += 2) { const d = Math.hypot(r[k] - p.x, r[k + 1] - p.y); if (d < bd) { bd = d; k0 = k + 2; } }
       const join = k0 === 0 ? [b.x, b.y] : [r[k0 - 2], r[k0 - 1]];
-      const lead = bd > 3 ? s.walker.route(p.x, p.y, join[0], join[1]) ?? [] : [];
-      p.path = [...lead, ...r.slice(k0), tx, ty];
-    } else p.path = s.walker.route(p.x, p.y, tx, ty);
-    /* far from home with no easy way back: search harder, and failing that, head straight for camp */
-    if (!p.path && Math.hypot(tx - b.x, ty - b.y) < 8 && Math.hypot(p.x - b.x, p.y - b.y) > 8) p.path = s.walker.route(p.x, p.y, tx, ty, 60000) ?? [tx, ty];
+      const lead = bd > 3 ? s.walker.route(p.x, p.y, join[0], join[1]) : [];
+      /* no way onto the band's track from here: find their own way to the new camp */
+      p.path = lead ? [...lead, ...r.slice(k0), tx, ty] : s.walker.route(p.x, p.y, tx, ty, 40000);
+    } else {
+      /* the way home may be long (round a lake that thawed under them): for that, search as far as it takes */
+      const home = Math.hypot(tx - b.x, ty - b.y) < 8;
+      p.path = s.walker.route(p.x, p.y, tx, ty, home ? 40000 : 9000, home);
+      if (!p.path && home && s.walker.reach(p.x, p.y, tx, ty)) p.lost = s.time + DAY_SECONDS * 2;
+    }
     p.pi = 0;
     if (!p.path) {
       /* somewhere they cannot get to: forget it as a place to go */
@@ -104,7 +108,7 @@ function go(s: Society, p: Person, st: Step, dt: number): void {
   st.t += dt;
   if (walkPath(s, p, speedOf(s, p, !!st.run) * dt)) next(p);
   /* passing water: a quick drink and a full skin on the way */
-  if (p.water < 0.8 && s.isFresh(p.x + 1, p.y) || p.water < 0.8 && s.isFresh(p.x - 1, p.y) || p.water < 0.8 && s.isFresh(p.x, p.y + 1) || p.water < 0.8 && s.isFresh(p.x, p.y - 1)) { p.water = 1; if (s.age(p) >= 12) p.skin = 1; }
+  if (p.water < 0.8 && s.isFresh(p.x + 1, p.y) || p.water < 0.8 && s.isFresh(p.x - 1, p.y) || p.water < 0.8 && s.isFresh(p.x, p.y + 1) || p.water < 0.8 && s.isFresh(p.x, p.y - 1)) { p.water = 1; if (s.age(p) >= 6) p.skin = 1; }
   p.anim = st.run ? Anim.Run : p.carryAmt > 0 && p.carryKind !== Food.Wood ? Anim.Carry : s.age(p) > 70 || p.injury > 0.4 ? Anim.CaneWalk : Anim.Walk;
   if (p.carryKind === Food.Wood && p.carryAmt > 0) p.anim = Anim.Carry;
 }
@@ -202,7 +206,7 @@ function work(s: Society, p: Person, st: Step, dt: number, anim: number): void {
       for (const cid of p.children) { const c = s.byId.get(cid); if (c && s.age(c) >= 1 && s.age(c) < 7 && c.food < 1 && Math.hypot(c.x - p.x, c.y - p.y) < 3) s.eatFromStore(c, b, 0.8); }
       break;
     }
-    case St.Drink: p.water = 1; if (s.age(p) >= 12) p.skin = 1; break;
+    case St.Drink: p.water = 1; if (s.age(p) >= 6) p.skin = 1; break;
     case St.Look: {
       s.learnSurroundings(p, 26);
       const wat = s.waterNear(p.x, p.y, 6);

@@ -37,6 +37,7 @@ export function decide(s: Society, p: Person, forced?: Goal): void {
     commit(s, p, { g: Goal.Flee, v: 9, plan: () => [step(St.Go, fx, fy, 0, 0, { run: true }), step(St.Sit, fx, fy, 0, 4)], why: () => `${p.name} is running back to camp because ${she(p)} saw ${dangerSeen(p)} nearby.`, icon: Bubble.Fear });
     return;
   }
+  if (s.time < p.lost || !s.walker.reach(p.x, p.y, b.x, b.y) && !(b.moving && s.walker.reach(p.x, p.y, b.moving.x, b.moving.y))) { stranded(s, p); return; }
   if (b.moving) {
     const m = b.moving, lead = s.byId.get(m.by);
     /* the band carries its food with it: a hungry walker eats on the way */
@@ -71,11 +72,14 @@ export function decide(s: Society, p: Person, forced?: Goal): void {
   const [fx, fy] = s.fireSpot(p), [hx, hy] = s.homeSpot(p);
 
   /* --- sleep --- */
-  /* the evening is spent at the fire; bed comes once it is properly dark */
+  /* the evening is spent at the fire; bed comes once it is properly dark. Caught far out on a mild night, they sleep where they are */
   const bedtime = s.dayFrac() > 0.87 || s.dayFrac() < 0.21;
-  if (bedtime) add({ g: Goal.Sleep, v: 1.15 + tired, plan: () => [step(St.Go, hx, hy), step(St.Sleep, hx, hy, 0, 40)], why: () => `${p.name} is sleeping because it is night${cold > 0.4 ? ` and ${she(p)} is huddled against the cold` : ""}.`, icon: Bubble.Zzz });
-  else if (dusk && dc < 30) add({ g: Goal.Sleep, v: 0.1 + tired * tired * 1.1, plan: () => [step(St.Go, hx, hy), step(St.Sleep, hx, hy, 0, 40)], why: () => `${p.name} is turning in early, tired out from the day.`, icon: Bubble.Zzz });
-  else if (p.rest < 0.3) add({ g: Goal.Sleep, v: tired * tired * 1.3, plan: () => [step(St.Go, hx, hy), step(St.Sleep, hx, hy, 0, 14)], why: () => `${p.name} is napping because ${she(p)} is worn out.`, icon: Bubble.Zzz });
+  const [ox, oy] = s.dryNear(p.x, p.y), far = dc > 40 && T > 6;
+  const bed = (dur: number, out: boolean) => out ? [step(St.Sleep, ox, oy, 0, dur)] : [step(St.Go, hx, hy), step(St.Sleep, hx, hy, 0, dur)];
+  const rough = (out: boolean) => out ? `, out under the sky because camp is too far to walk back to` : "";
+  if (bedtime) add({ g: Goal.Sleep, v: 1.15 + tired, plan: () => bed(40, far), why: () => `${p.name} is sleeping because it is night${rough(far)}${cold > 0.4 ? ` and ${she(p)} is huddled against the cold` : ""}.`, icon: Bubble.Zzz });
+  else if (dusk && dc < 30) add({ g: Goal.Sleep, v: 0.1 + tired * tired * 1.1, plan: () => bed(40, false), why: () => `${p.name} is turning in early, tired out from the day.`, icon: Bubble.Zzz });
+  else if (p.rest < 0.3) add({ g: Goal.Sleep, v: tired * tired * 1.3, plan: () => bed(14, far), why: () => `${p.name} is napping because ${she(p)} is worn out${rough(far)}.`, icon: Bubble.Zzz });
 
   /* --- toddlers stay close to their mother or whoever minds them --- */
   if (st === "toddler") {
@@ -152,19 +156,20 @@ export function decide(s: Society, p: Person, forced?: Goal): void {
   const evening = dusk && !bedtime && dc < 10;
   if (!bedtime && (lonely > 0.2 || evening) && st !== "baby") {
     const t = talkTarget(s, p);
-    if (t) add({ g: Goal.Talk, v: (lonely * (0.3 + tr[5] * 0.6) + (evening ? 0.35 + tr[5] * 0.2 : 0)) * 0.8 + (p.moveWish > 0.5 ? 0.1 : 0), plan: () => [step(St.Go, t.x, t.y, t.id), step(St.Talk, 0, 0, t.id, 6)], why: () => talkWhy(s, p, t), icon: Bubble.Sun });
+    /* an empty belly crowds out a chat in daylight; evenings at the fire are another matter */
+    if (t) add({ g: Goal.Talk, v: (lonely * (0.3 + tr[5] * 0.6) * (1 - 0.75 * Math.max(hunger, kidsHungry)) + (evening ? 0.35 + tr[5] * 0.2 : 0)) * 0.8 + (p.moveWish > 0.5 ? 0.1 : 0), plan: () => [step(St.Go, t.x, t.y, t.id), step(St.Talk, 0, 0, t.id, 6)], why: () => talkWhy(s, p, t), icon: Bubble.Sun });
   }
   if (!bedtime && st === "adult" && !p.partner && p.longing > 0.25) {
     const c = courtTarget(s, p);
     /* nobody to court at home: go and visit a band of one's own people */
     if (!c && p.longing > 0.45 && !dark && !p.baby) {
       const other = p.places.filter(pl => pl.k === Place.Camp && pl.ref !== p.band && s.bandById.has(pl.ref)).map(pl => s.bandById.get(pl.ref)!).sort((a, c2) => Math.hypot(a.x - p.x, a.y - p.y) - Math.hypot(c2.x - p.x, c2.y - p.y))[0];
-      if (other && Math.hypot(other.x - p.x, other.y - p.y) < 110) {
+      if (other && Math.hypot(other.x - p.x, other.y - p.y) < 110 && s.walkable(b.x, b.y, other.x, other.y)) {
         const [vx, vy] = s.dryNear(other.x + Math.cos(p.id) * 2, other.y + Math.sin(p.id) * 1.5);
-        add({ g: Goal.Visit, v: p.longing * (0.45 + tr[5] * 0.35), plan: () => [step(St.Go, vx, vy), step(St.Sit, vx, vy, 0, 12)], why: () => `${p.name} is visiting the ${other.name}, hoping to find someone to marry. There is nobody for ${herObj(p)} at home.`, icon: Bubble.Heart });
+        add({ g: Goal.Visit, v: p.longing * (0.45 + tr[5] * 0.35) * (1 - 0.8 * hunger), plan: () => [step(St.Go, vx, vy), step(St.Sit, vx, vy, 0, 12)], why: () => `${p.name} is visiting the ${other.name}, hoping to find someone to marry. There is nobody for ${herObj(p)} at home.`, icon: Bubble.Heart });
       }
     }
-    if (c) add({ g: Goal.Court, v: p.longing * c.a * (0.65 + tr[5] * 0.5) * 1.3, plan: () => [step(St.Go, c.q.x, c.q.y, c.q.id), step(St.Talk, 0, 0, c.q.id, 7, { a: 1 })], why: () => `${p.name} is spending time with ${c.q.name} because ${she(p)} is sweet on ${herObj(c.q)}${s.op(c.q, p.id) > 0.3 ? `, and ${c.q.name} seems to like ${herObj(p)} back` : ""}.`, icon: Bubble.Heart });
+    if (c) add({ g: Goal.Court, v: p.longing * c.a * (0.65 + tr[5] * 0.5) * 1.3 * (1 - 0.6 * hunger), plan: () => [step(St.Go, c.q.x, c.q.y, c.q.id), step(St.Talk, 0, 0, c.q.id, 7, { a: 1 })], why: () => `${p.name} is spending time with ${c.q.name} because ${she(p)} is sweet on ${herObj(c.q)}${s.op(c.q, p.id) > 0.3 ? `, and ${c.q.name} seems to like ${herObj(p)} back` : ""}.`, icon: Bubble.Heart });
   }
   if (worker && !night) {
     const sickOne = tendTarget(s, p);
@@ -183,7 +188,7 @@ export function decide(s: Society, p: Person, forced?: Goal): void {
     const who = needsClothes(s, p);
     if (who) add({ g: Goal.Craft, v: 0.55 * (0.4 + tr[7] * 0.6), plan: () => [step(St.Go, fx, fy), step(St.Craft, fx, fy, who.id, 14)], why: () => `${p.name} is sewing ${s.tempC(b.x, b.y) < 0 ? "furs" : "hide clothes"} for ${who === p ? "${her}self".replace("${her}", her(p)) : who.name} because ${who === p ? `${her(p)} own are worn thin` : `${who.name} has nothing warm to wear`}.` });
   }
-  if (canHunt(s, p, age) && p.spear < 0.25 && p.knows & Know.Spear && !night) add({ g: Goal.Spear, v: 0.4 + tr[3] * 0.15 + tr[7] * 0.15, plan: () => [step(St.Go, fx, fy), step(St.Knap, fx, fy, 0, 10)], why: () => `${p.name} is knapping a new spear point because ${her(p)} old spear ${p.spear <= 0 ? "broke" : "is falling apart"}.` });
+  if (age >= 14 && age <= 62 && p.spear < 0.25 && p.knows & Know.Spear && !night && !p.pregnantBy) add({ g: Goal.Spear, v: 0.4 + tr[3] * 0.15 + tr[7] * 0.15, plan: () => [step(St.Go, fx, fy), step(St.Knap, fx, fy, 0, 10)], why: () => p.spear <= 0 && s.age(p) < 18 ? `${p.name} is knapping ${her(p)} first spear point, old enough now to hunt.` : `${p.name} is knapping a new spear point because ${her(p)} old spear ${p.spear <= 0 ? "broke" : "is falling apart"}.` });
 
   /* --- exploring --- */
   if (worker && !dark && age < 60 && p.injury < 0.2 && !(p.baby && s.age(s.byId.get(p.baby)!) < 1)) {
@@ -198,6 +203,46 @@ export function decide(s: Society, p: Person, forced?: Goal): void {
   pick(s, p, opts);
 }
 
+/*
+  Cut off from the band by water: the ice went out under a winter crossing, or the band
+  moved on. Someone stranded with nobody to wait for goes to live with a band they know
+  and can walk to. Otherwise they live off the land where they are, drinking where they
+  can, eating what they gather and sleeping rough, until the ice comes back.
+*/
+function stranded(s: Society, p: Person): void {
+  const b = s.band(p), age = s.age(p);
+  const family = b.members.some(id => id === p.partner || (p.children.includes(id) && s.age(s.byId.get(id)!) < 14));
+  if (!family || age < 14) {
+    const camps = p.places.filter(pl => pl.k === Place.Camp && pl.ref !== b.id).map(pl => s.bandById.get(pl.ref)).filter((o): o is NonNullable<typeof o> => !!o && !o.moving && s.walker.reach(p.x, p.y, o.x, o.y));
+    const to = camps.sort((a, c) => (a.culture === b.culture ? 0 : 80) + Math.hypot(a.x - p.x, a.y - p.y) - (c.culture === b.culture ? 0 : 80) - Math.hypot(c.x - p.x, c.y - p.y))[0];
+    if (to) {
+      s.moveTo(p, to);
+      s.event("leave", Bubble.Home, `${p.name}, ${s.time < p.lost ? "unable to find the way back to" : "cut off by the water from"} the ${b.name}, went to live with the ${to.name}.`, p.x, p.y, [p.id], to.id);
+      p.lost = 0;
+      decide(s, p); return;
+    }
+  }
+  const opts: Option[] = [];
+  const add = (o: Option) => { if (o.v > 0) opts.push(o); };
+  const hunger = clamp01(1 - p.food / 1.4), thirst = clamp01(1 - p.water), tired = 1 - p.rest;
+  const night = s.dayFrac() > 0.87 || s.dayFrac() < 0.21;
+  const alone = s.time < p.lost && s.walker.reach(p.x, p.y, b.x, b.y) ? `${p.name} cannot find the way back to the ${b.name}` : `${p.name} is cut off from the ${b.name} by the water`;
+  const w = s.waterNear(p.x, p.y, 14);
+  if (w && thirst > 0.35 && s.walker.reach(p.x, p.y, w[0], w[1])) add({ g: Goal.Drink, v: thirst * 2.3, plan: () => [step(St.Go, w[0], w[1]), step(St.Drink, w[0], w[1], 0, 1.5)], why: () => `${alone}, and is going for a drink.`, icon: Bubble.Drop });
+  if (night || p.rest < 0.3) add({ g: Goal.Sleep, v: (night ? 1.15 : 0) + tired, plan: () => [step(St.Sleep, p.x, p.y, 0, night ? 40 : 14)], why: () => `${alone}, and is sleeping rough.`, icon: Bubble.Zzz });
+  if (!night) {
+    if (p.carryAmt > 0 && p.carryKind > 0 && p.carryKind < 4 && hunger > 0.2) add({ g: Goal.Eat, v: hunger * 1.9, plan: () => [step(St.Eat, p.x, p.y, 0, 3, { a: 1 })], why: () => `${alone}, and is eating the ${foodWord(p.carryKind)} ${she(p)} found.`, icon: Bubble.Meat });
+    let patch: [number, number] = [p.x, p.y], bv = s.eco.plantsAt(p.x, p.y) * 0.06;
+    for (const pl of p.places) if (pl.k === Place.Plants) { const d = Math.hypot(pl.x - p.x, pl.y - p.y); const v = estimate(pl, s.time) / (1 + d / 10); if (d < 25 && v > bv && s.walker.reach(p.x, p.y, pl.x, pl.y)) { bv = v; patch = [pl.x, pl.y]; } }
+    add({ g: Goal.Gather, v: 0.2 + hunger * 1.5, plan: () => [step(St.Go, patch[0], patch[1]), step(St.Gather, patch[0], patch[1], 0, 4.5, { a: 3 }), step(St.Eat, patch[0], patch[1], 0, 3, { a: 1 })], why: () => `${alone}, and is living off the land, gathering what ${she(p)} can find to eat.`, icon: Bubble.Berries });
+    add({ g: Goal.Explore, v: 0.15 + p.traits[4] * 0.2, plan: () => [step(St.Look, p.x, p.y, 0, 3)], why: () => `${alone}, and is looking for a way back.`, icon: Bubble.Question });
+  }
+  add({ g: Goal.Rest, v: 0.1, plan: () => [step(St.Sit, p.x, p.y, 0, 8)], why: () => `${alone}, and is resting${family && s.time >= p.lost ? `, waiting for the ice to come back` : ""}.` });
+  for (const o of opts) o.v *= 0.92 + s.rng.next() * 0.16;
+  opts.sort((a, c) => c.v - a.v);
+  for (const o of opts) if (commit(s, p, o)) return;
+}
+
 function pick(s: Society, p: Person, opts: Option[]): void {
   /* a little noise so people are not perfectly predictable */
   for (const o of opts) o.v *= 0.92 + s.rng.next() * 0.16;
@@ -206,12 +251,16 @@ function pick(s: Society, p: Person, opts: Option[]): void {
   const [fx, fy] = s.fireSpot(p);
   commit(s, p, { g: Goal.Rest, v: 0.1, plan: () => [step(St.Go, fx, fy), step(St.Sit, fx, fy, 0, 6)], why: () => restWhy(s, p) });
 }
+const TRIPS = new Set<Goal>([Goal.Gather, Goal.Fish, Goal.Snare, Goal.Hunt, Goal.Haul, Goal.Wood, Goal.Explore, Goal.Visit]);
 function commit(s: Society, p: Person, o: Option): boolean {
   const plan = o.plan(); if (!plan || !plan.length) return false;
-  /* anything carried goes into the store first, unless the plan is to eat it or haul more */
-  if (p.carryAmt > 0 && o.g !== Goal.Eat && o.g !== Goal.Flee && o.g !== Goal.Migrate && !plan.some(k => k.k === St.Drop)) {
-    const b = s.band(p);
-    if (Math.hypot(p.x - b.x, p.y - b.y) < 40) { const [fx, fy] = s.fireSpot(p); plan.unshift(step(St.Go, fx, fy), step(St.Drop, fx, fy)); }
+  const b = s.band(p), dc = Math.hypot(p.x - b.x, p.y - b.y);
+  /* before a trip out, a drink and a full water skin from the camp's water */
+  const [wx, wy] = b.water;
+  if (TRIPS.has(o.g) && dc < 8 && s.age(p) >= 12 && (p.skin < 0.5 || p.water < 0.75) && s.walker.reach(p.x, p.y, wx, wy)) plan.unshift(step(St.Go, wx, wy), step(St.Drink, wx, wy, 0, 1.5));
+  /* anything carried goes into the store first, unless the plan is to eat it, haul more, or drink */
+  if (p.carryAmt > 0 && o.g !== Goal.Eat && o.g !== Goal.Flee && o.g !== Goal.Migrate && o.g !== Goal.Drink && !plan.some(k => k.k === St.Drop || k.k === St.Eat)) {
+    if (dc < 40 && s.walker.reach(p.x, p.y, b.x, b.y)) { const [fx, fy] = s.fireSpot(p); plan.unshift(step(St.Go, fx, fy), step(St.Drop, fx, fy)); }
   }
   p.plan = plan; p.si = 0; p.goal = o.g; p.why = o.why(); p.whyAt = s.time;
   /* a picture over their head only for the moments that matter, not every drink of water */
@@ -286,14 +335,23 @@ function canHunt(s: Society, p: Person, age: number): boolean {
   if (p.baby) { const b = s.byId.get(p.baby); if (b && b.carrier === p.id) return false; }
   return true;
 }
+/**
+  Where to drink: water close by that they can see, or the nearest water they know of,
+  favoring water on the way home over water that takes them further off. Everyone knows
+  where their own camp draws its water.
+*/
 function nearestWater(s: Society, p: Person): [number, number] | null {
-  let best: [number, number] | null = null, bd = 1e9;
-  for (const pl of p.places) if (pl.k === Place.Water) { const d = Math.hypot(pl.x - p.x, pl.y - p.y); if (d < bd) { bd = d; best = [pl.x, pl.y]; } }
-  if (bd < 6) return best;
-  const w = s.waterNear(p.x, p.y, 12);
-  if (w) { s.learnPlace(p, Place.Water, w[0], w[1], 1, 0, 0); return w; }
-  /* everyone knows where their own camp draws its water */
-  return best ?? s.band(p).water;
+  const b = s.band(p), [hx, hy] = b.moving ? [b.moving.x, b.moving.y] : [b.x, b.y], dHome = Math.hypot(hx - p.x, hy - p.y);
+  const cost = (x: number, y: number) => Math.hypot(x - p.x, y - p.y) + 0.6 * Math.max(0, Math.hypot(hx - x, hy - y) - dHome);
+  let best: [number, number] | null = null, bc = 1e9;
+  const consider = (x: number, y: number) => { const c = cost(x, y); if (c < bc && s.walker.reach(p.x, p.y, x, y)) { bc = c; best = [x, y]; } };
+  for (const pl of p.places) if (pl.k === Place.Water) consider(pl.x, pl.y);
+  consider(b.water[0], b.water[1]);
+  if (bc > 4) {
+    const w = s.waterNear(p.x, p.y, 16);
+    if (w && cost(w[0], w[1]) < bc && s.walker.reach(p.x, p.y, w[0], w[1])) { s.learnPlace(p, Place.Water, w[0], w[1], 1, 0, 0); best = w; }
+  }
+  return best;
 }
 export function woodSpot(s: Society, x: number, y: number): [number, number] | null {
   const W = s.w.w;

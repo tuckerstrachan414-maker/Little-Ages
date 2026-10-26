@@ -7,7 +7,7 @@ import { settle } from "../src/sim/settle.ts";
 import { Society } from "../src/sim/people/society.ts";
 import { personDetail, bandDetail } from "../src/sim/people/inspect.ts";
 import { Goal, Place } from "../src/sim/people/person.ts";
-import { BLOCKED } from "../src/sim/people/walk.ts";
+import { BLOCKED, Walker } from "../src/sim/people/walk.ts";
 import { DAY_SECONDS, DAYS_PER_SEASON, Flag, type WorldData } from "../src/shared/types.ts";
 
 /* One medium world, shared: making it and settling its wildlife is the slow part. */
@@ -32,6 +32,28 @@ function fresh(start: "bands" | "cradle", bands: number) {
   };
   return { s, run, wild };
 }
+
+describe("getting around on foot", () => {
+  it("finds a way wherever the ground joins up, and never across open water", () => {
+    const wk = new Walker(world);
+    let asked = 0, found = 0, split = 0;
+    for (const season of [1, 3]) {
+      wk.setSeason(season);
+      for (let k = 0, n = 0; n < 500 && k < 40000; k++) {
+        const x = 20 + (k * 7919) % (world.w - 40), y = 20 + (k * 104729) % (world.h - 40);
+        const a = (k * 0.618) % 1 * Math.PI * 2, d = 12 + (k * 31) % 60, gx = x + Math.cos(a) * d, gy = y + Math.sin(a) * d;
+        if (!wk.dry(x + 0.5, y + 0.5) || !wk.dry(gx, gy)) continue;
+        if (!wk.reach(x + 0.5, y + 0.5, gx, gy)) { split++; expect(wk.route(x + 0.5, y + 0.5, gx, gy, 40000)).toBeNull(); continue; }
+        asked++; n++;
+        const r = wk.route(x + 0.5, y + 0.5, gx, gy, 40000, true);
+        if (r) { found++; for (let i = 0; i < r.length; i += 2) expect(wk.at(r[i], r[i + 1])).toBeLessThan(BLOCKED); }
+      }
+    }
+    expect(asked).toBe(1000);
+    expect(split).toBeGreaterThan(4);
+    expect(found).toBe(asked);
+  });
+});
 
 describe("people: founding", () => {
   const { s } = fresh("bands", 8);

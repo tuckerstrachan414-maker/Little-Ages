@@ -7,6 +7,8 @@ import { FREEZE_T } from "../../shared/seasonfx.ts";
   and swim rivers (slowly), but cannot cross lakes or the sea, except over ice in a hard
   winter. Routes come from a straight line when nothing is in the way, otherwise from an
   A* search in a window around the trip, so walks curve round lakes and along coasts.
+  Each season the walker also maps which ground joins up on foot, so nobody sets out for
+  a shore they can see but never reach.
 */
 
 const BIOME_COST: Partial<Record<number, number>> = {
@@ -20,8 +22,11 @@ export class Walker {
   readonly w: WorldData;
   /** cost per tile for the current season, recomputed when the season turns */
   cost: Float32Array;
+  /** which stretch of walkable ground each tile belongs to this season (0 for water nobody can cross) */
+  region: Int32Array;
   private season = -1;
-  constructor(w: WorldData) { this.w = w; this.cost = new Float32Array(w.w * w.h); this.setSeason(1); }
+  private fill = new Int32Array(0);
+  constructor(w: WorldData) { this.w = w; this.cost = new Float32Array(w.w * w.h); this.region = new Int32Array(w.w * w.h); this.setSeason(1); }
 
   setSeason(season: number): void {
     if (season === this.season) return;
@@ -35,7 +40,38 @@ export class Walker {
         else this.cost[i] = frozen && !(f & Flag.Ocean && depth[i] > 6) ? 2 : BLOCKED;
       } else this.cost[i] = BIOME_COST[biome[i]] ?? 1;
     }
+    this.mapRegions();
   }
+  /* flood-fills the walkable ground; a diagonal step needs both side tiles open, so side-by-side neighbors are enough */
+  private mapRegions(): void {
+    const W = this.w.w, H = this.w.h, region = this.region, cost = this.cost;
+    region.fill(0);
+    /* every tile is queued at most once, so the queue never needs more room than the map */
+    if (this.fill.length < W * H) this.fill = new Int32Array(W * H);
+    const stack = this.fill;
+    let label = 0;
+    for (let i = 0; i < W * H; i++) {
+      if (region[i] || cost[i] >= BLOCKED) continue;
+      const x = i % W, y = (i / W) | 0;
+      if (x < 1 || y < 1 || x >= W - 1 || y >= H - 1) continue;
+      label++; region[i] = label;
+      let top = 0; stack[top++] = i;
+      while (top > 0) {
+        const c = stack[--top], cx = c % W, cy = (c / W) | 0;
+        if (cx > 1 && !region[c - 1] && cost[c - 1] < BLOCKED) { region[c - 1] = label; stack[top++] = c - 1; }
+        if (cx < W - 2 && !region[c + 1] && cost[c + 1] < BLOCKED) { region[c + 1] = label; stack[top++] = c + 1; }
+        if (cy > 1 && !region[c - W] && cost[c - W] < BLOCKED) { region[c - W] = label; stack[top++] = c - W; }
+        if (cy < H - 2 && !region[c + W] && cost[c + W] < BLOCKED) { region[c + W] = label; stack[top++] = c + W; }
+      }
+    }
+  }
+  regionAt(x: number, y: number): number {
+    const xi = x | 0, yi = y | 0;
+    if (xi < 1 || yi < 1 || xi >= this.w.w - 1 || yi >= this.w.h - 1) return 0;
+    return this.region[yi * this.w.w + xi];
+  }
+  /** True if there is a way on foot from a to b this season. */
+  reach(ax: number, ay: number, bx: number, by: number): boolean { const r = this.regionAt(ax, ay); return r > 0 && r === this.regionAt(bx, by); }
   at(x: number, y: number): number {
     const xi = x | 0, yi = y | 0;
     if (xi < 1 || yi < 1 || xi >= this.w.w - 1 || yi >= this.w.h - 1) return BLOCKED;
@@ -53,22 +89,27 @@ export class Walker {
   }
 
   /* scratch for the windowed search, reused between calls */
-  private gS = new Float32Array(0); private from = new Int32Array(0); private stamp = new Uint32Array(0); private gen = 1;
+  private gS = new Float64Array(0); private from = new Int32Array(0); private stamp = new Uint32Array(0); private gen = 1;
   private heap = new Int32Array(0); private hf = new Float32Array(0);
 
   /**
     A route from (sx, sy) to (gx, gy) as a list of waypoints [x0, y0, x1, y1, ...] ending at
     the goal, or null if there is none within reach. `budget` caps how many tiles it may look at.
   */
-  route(sx: number, sy: number, gx: number, gy: number, budget = 9000): number[] | null {
-    if (!this.passable(gx, gy)) return null;
+  route(sx: number, sy: number, gx: number, gy: number, budget = 9000, far = false): number[] | null {
+    if (!this.passable(gx, gy) || !this.reach(sx, sy, gx, gy)) return null;
     if (this.lineClear(sx, sy, gx, gy)) return [gx, gy];
+    /* the ground joins up, but the way round may run outside a tight window: widen it, and for the long way home, search the whole map */
+    return this.search(sx, sy, gx, gy, budget, 18, 320) ?? this.search(sx, sy, gx, gy, Math.max(budget, 90000), 90, 640)
+      ?? (far ? this.search(sx, sy, gx, gy, Math.max(budget, 300000), 1 << 14, 1 << 14) : null);
+  }
+  private search(sx: number, sy: number, gx: number, gy: number, budget: number, m: number, maxSide: number): number[] | null {
     const W = this.w.w, H = this.w.h;
-    const m = 18, x0 = Math.max(1, Math.floor(Math.min(sx, gx)) - m), y0 = Math.max(1, Math.floor(Math.min(sy, gy)) - m);
+    const x0 = Math.max(1, Math.floor(Math.min(sx, gx)) - m), y0 = Math.max(1, Math.floor(Math.min(sy, gy)) - m);
     const x1 = Math.min(W - 2, Math.ceil(Math.max(sx, gx)) + m), y1 = Math.min(H - 2, Math.ceil(Math.max(sy, gy)) + m);
     const bw = x1 - x0 + 1, bh = y1 - y0 + 1, N = bw * bh;
-    if (bw > 320 || bh > 320) return null;
-    if (this.gS.length < N) { this.gS = new Float32Array(N); this.from = new Int32Array(N); this.stamp = new Uint32Array(N); }
+    if (bw > maxSide || bh > maxSide) return null;
+    if (this.gS.length < N) { this.gS = new Float64Array(N); this.from = new Int32Array(N); this.stamp = new Uint32Array(N); }
     /* tiles can be queued more than once (when a shorter way to them turns up), so the queue needs room to spare */
     const cap = Math.min(budget * 8 + 64, N * 8);
     if (this.heap.length < cap) { this.heap = new Int32Array(cap); this.hf = new Float32Array(cap); }

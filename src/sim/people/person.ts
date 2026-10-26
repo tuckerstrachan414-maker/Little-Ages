@@ -139,6 +139,8 @@ export interface Person {
   mem: Memory[];
   places: KnownPlace[];
   moveWish: number; leaveWish: number;
+  /** until when they have given up finding a way back to camp and fend for themselves */
+  lost: number;
   /** food per trip lately, smoothed */
   tripYield: number;
   nextLook: number; nextDanger: number;
