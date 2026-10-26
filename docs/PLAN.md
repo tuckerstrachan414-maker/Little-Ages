@@ -18,37 +18,13 @@ You want a cute pixel-art civilization sim where nothing in history is scripted.
 
 ---
 
-## Right now: repo + style board round 2
+## Where we are
 
-**1. Set up the repo.** Attach `tuckerstrachan414-maker/Little-Ages` with `add_repo` (push access), clone it to `/home/user/Little-Ages`, call `register_repo_root`, and look at what's already in it. Move the style board into `style-board/index.html` in the repo, commit on a working branch, push, and open a draft PR. From now on, every piece of work gets pushed.
+- **Done:** the repo, style board rounds 1 and 2 (your picks: Field Notes palette, dark outlines, balanced proportions, a closer WorldBox feel, tiny tiles, huge continents, and both UI ideas), and Milestone 1 checkpoint A, the living world.
+- **Done on this branch:** Milestone 1 checkpoint B, the people. Genes, minds, a utility AI that can always say why, bands, and the whole life cycle from birth to death, drawn in the picked style with the pinned tag and a news feed. The README lists what's in it.
+- **Next:** checkpoint C, the interface: the history ribbon you can scrub and click to fly to an event, the journal, search, Spotlight, and relationship threads drawn on the map. That finishes Milestone 1. Then Milestone 2 (first villages) starts.
 
-**2. Study first, then redraw.** The round 1 art came from rectangles and math. Round 2 is drawn the way pixel artists actually work, using these research rules:
-- **Hand-drawn sprite templates.** Body bases are authored pixel by pixel for each age and sex, in both the tiny and 8×16 sizes, with color regions that genetics, culture and clothing can recolor. Every sprite has to pass the "silhouette at 1×" and grayscale value checks.
-- **Real color ramps.** Each material gets a 3–4 shade ramp that shifts hue: shadows lean cool, highlights lean warm, saturation peaks in the middle tones, and bright colors are never also highly saturated (Slynyrd's method). Light always comes from the top-left.
-- **Outlines.** A dark outer outline (your pick), selective darker lines on the shadow side, and lighter inner lines (Lospec's rules).
-- **Animation that feels alive** (sprite-animation timing guides):
-  - **Walk:** 4 frames at about 100–150ms, with a 1px body bob.
-  - **Idle:** 2–4 frames at 300–500ms, with breathing and blinks.
-  - **Work actions:** a 1-frame anticipation, an impact frame held about 150–200ms, then recovery.
-  - **Throughout:** frame timing varies instead of ticking at a steady rate, motions overshoot by about 30%, swings follow arcs, and hair lags 1px behind.
-  - **Effects on top:** dust puffs, wood chips, splashes and sparks.
-- **WorldBox-style terrain.** Clean biome color fields with tidy edge transitions instead of noisy speckles. Water gets a separate shallow band where the ground shows through, depth shading, and shoreline foam whose animation starts on different frames so it doesn't pulse in unison. Mountains get shading and snow caps, and every tree and unit casts a small ground shadow.
-- **Videos.** I'll try the `watch-video` skill on a couple of pixel-art animation tutorials and WorldBox gameplay to study motion. If the network blocks video sites, I'll rely on the written guides instead.
-
-**3. Rebuild the style board (same link)** with:
-- **A zoomed-out living map:** a continent with biomes, rivers, several villages growing, kingdom borders and tiny units moving around. A zoom slider shows the switch from tiny people to detailed 8×16 people.
-- **The camp close-up**, redrawn with the new art and animation rules.
-- **People, actions, homes, seasons and underground**, all redrawn.
-- **Both palettes side by side:** richer Field Notes vs. bright WorldBox-like.
-- **Two new UI concepts mocked over the world:**
-  - **Pinned field tags:** info cards pinned to the map and tied to the person by a thread. Relationship threads (family, feuds, alliances) appear when you inspect someone.
-  - **History ribbon:** a scrubbable timeline with little event banners. Clicking one flies the camera to that event.
-  - Both use crisp 9-slice pixel panels, a 1px bevel for button states, segmented need bars, and icons designed as silhouettes first. Era-shifting stays as the material layer.
-- **New pick rows** so you can choose again. I read your picks back from the page.
-
-**4. Then milestone 1** (a living valley) starts, using whatever you pick.
-
----
+How to check checkpoint B for yourself: start a world, zoom into a camp, click anyone. Their tag says what they're doing and why, how they feel, what they're like, who their family is, and what they remember. Watch a band through a winter, or let it run at 100x and read the news.
 
 ## The short version (for you)
 
@@ -98,7 +74,7 @@ You want a cute pixel-art civilization sim where nothing in history is scripted.
 - This is a huge game, so it gets built in playable milestones. Each one is complete before the next starts, and nothing from your vision gets cut. It's just the order things are built in.
 
 ### What you'll see, in order
-0. **Style board (pictures!)**: round 1 is done (https://claude.ai/artifact/KG9SiiJeevsMhSLLLBW86N). Round 2 adds the redrawn, WorldBox-feel art, the living map, both palettes and the two new UI concepts at the same link. Nothing gets built until you've picked.
+0. **Style board (pictures!)**: rounds 1 and 2 are done and picked (https://claude.ai/artifact/KG9SiiJeevsMhSLLLBW86N).
 1. **A living valley**: world generation, people with needs/personality/memory, gathering, hunting, fishing, families, births and deaths, genetics, animations, the inspect card with "why?".
 2. **First villages**: sharing, friendships and feuds, groups forming, leaders emerging, the first discoveries (fire, tools, farming), huts in each culture's style, the news feed.
 3. **Chiefs & quarrels**: rules and norms, factions, leaving, revolts, secession, raids, war, religion, crime, the History Book and Spotlight.
@@ -110,13 +86,13 @@ You want a cute pixel-art civilization sim where nothing in history is scripted.
 Every milestone gets a playable link and is saved to GitHub.
 
 ### What I need from you
-- Create an **empty GitHub repo** (suggested name `little-ages`, no README) under your account at github.com/new, then tell me its name. I'll attach it and save everything there.
+- Nothing is blocking. Play each playable link and tell me anything you'd change: how people look, what they do, what's hard to read.
 
 ---
 
 ## Build notes (for me; you can skip this)
 
-**Stack:** TypeScript + Vite; PixiJS v8 (WebGL2) for rendering; simulation in Web Worker(s); DOM/CSS overlay for the UI (crisp text, era skins as CSS theme tokens and pixel border images); WebAudio for procedural music and ambience; IndexedDB + fflate for saves; Vitest; Playwright (Chromium is preinstalled) for screenshots. Seeded deterministic RNG throughout. Ship as a single-file build so it can be published as a playable artifact.
+**Stack:** TypeScript + Vite; Canvas 2D with cached chunk and sprite canvases for rendering (it holds 60 fps at every zoom with hundreds of people; WebGL comes in when the counts need it); simulation in Web Worker(s); DOM/CSS overlay for the UI (crisp text, era skins as CSS theme tokens and pixel border images); WebAudio for procedural music and ambience; IndexedDB + fflate for saves; Vitest; Playwright (Chromium is preinstalled) for screenshots. Seeded deterministic RNG throughout. Ship as a single-file build so it can be published as a playable artifact.
 
 **Project:** `/home/user/little-ages/` (the attached repo clone).
 - `src/sim/`: `world/` (worldgen: continents via noise + domain warp, elevation, temperature by latitude/altitude, moisture via winds and rain shadow, rivers via flow accumulation, Whittaker biomes, geology/ore strata, underground layers, vegetation, fauna populations, weather/seasons), `mind/` (needs, personality: Big Five + values, emotions, episodic memory with decay, beliefs, relationships, knowledge; utility-AI goal selection → HTN planner → actions; social actions: talk/gossip, share, trade, court, teach, threaten, fight, steal, protest, conspire), `society/` (emergent groups: household/band/village/polity/faction/religion/guild; norms as memes proposed and adopted through influence; leadership = prestige + dominance + legitimacy; grievance → tolerate/leave/secede/riot/revolt/coup; polity labels derived from structure; war as individual soldiers), `economy/` (inventories, recipes, spoilage, barter → emergent commodity money, local prices from supply/demand, merchants, transport capacity), `tech/` (data-driven discovery graph: prerequisites, activity/need triggers, effects; per-agent discovery; diffusion; loss; unbounded refinement levels), `genetics/` (diploid polygenic loci for pigmentation, hair, eyes, height, build, face, partly heritable temperament; founder allele frequencies; mutation; optional climate selection in cradle mode), `culture/` + `language/` (culture vectors with drift and diffusion; phoneme inventory + phonotactics → names; sound-change drift on separation; loanwords), `health/` (pathogens with transmission routes, immunity, injuries, aging), `chronicle/` (event bus → significance scoring → storyline arcs → varied prose → History Book + Spotlight queue).
@@ -125,6 +101,18 @@ Every milestone gets a playable link and is saved to GitHub.
 - `src/ui/`: corner cards, inspector with "why?", search, History Book, family tree, map modes, nudges and sandbox menu, world-creation screen, era skins.
 - `src/audio/`: era instrument sets, mood → tempo/mode, biome/zoom ambience, babble synthesized from culture phonemes.
 - `data/`: techs, items, recipes, buildings, biomes, animals.
+
+**Art rules** (from the round 2 research; every sprite follows them):
+- **Hand-drawn sprite templates.** Body bases are authored pixel by pixel for each age and sex, in both the tiny and 8×16 sizes, with color regions that genetics, culture and clothing can recolor. Every sprite has to pass the "silhouette at 1×" and grayscale value checks.
+- **Real color ramps.** Each material gets a 3–4 shade ramp that shifts hue: shadows lean cool, highlights lean warm, saturation peaks in the middle tones, and bright colors are never also highly saturated (Slynyrd's method). Light always comes from the top-left.
+- **Outlines.** A dark outer outline (your pick), selective darker lines on the shadow side, and lighter inner lines (Lospec's rules).
+- **Animation that feels alive** (sprite-animation timing guides):
+  - **Walk:** 4 frames at about 100–150ms, with a 1px body bob.
+  - **Idle:** 2–4 frames at 300–500ms, with breathing and blinks.
+  - **Work actions:** a 1-frame anticipation, an impact frame held about 150–200ms, then recovery.
+  - **Throughout:** frame timing varies instead of ticking at a steady rate, motions overshoot by about 30%, swings follow arcs, and hair lags 1px behind.
+  - **Effects on top:** dust puffs, wood chips, splashes and sparks.
+- **WorldBox-style terrain.** Clean biome color fields with tidy edge transitions instead of noisy speckles. Water gets a separate shallow band where the ground shows through, depth shading, and shoreline foam whose animation starts on different frames so it doesn't pulse in unison. Mountains get shading and snow caps, and every tree and unit casts a small ground shadow.
 
 **No-hard-coding rule:** no event is ever triggered by date, script or quota. Everything has to come from agent decisions, physics, ecology or player nudges.
 
