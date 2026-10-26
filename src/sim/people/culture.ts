@@ -12,8 +12,10 @@ import { makeLanguage, type Language } from "./language.ts";
 export interface Culture {
   id: number;
   lang: Language;
-  /** base color of worked hide, and the dyes used for trim and beads */
-  hide: string; dyes: string[];
+  /** colors of worked hide (light and dark), and the dyes used for clothes, trim and beads */
+  hide: string; hideD: string; dyes: string[];
+  /** body paint worn on bare skin: 0 none, 1 ochre stripes, 2 white clay dots */
+  paint: number;
   /** what people wear when it is hot, and when it is mild (by sex) */
   hotWear: Wear; mildF: Wear; mildM: Wear;
   /** how strongly each hairstyle is favored, by sex */
@@ -30,18 +32,20 @@ export interface Culture {
   cousins: boolean;
 }
 
-const HIDES = ["#a47b52", "#9a7048", "#b08860", "#8f6a46", "#b59a6e"];
-const DYES = ["#a5503c", "#c49e40", "#5f7a3c", "#3d3631", "#e2dccb", "#7d4a36", "#b06a3a"];
+/* buckskin, tan, bleached and smoked hides; dyes from ochre, clay, charcoal, plants and bark */
+const HIDES: [string, string][] = [["#d4b68c", "#9c7a52"], ["#c29a68", "#7e5d3c"], ["#e2d6ba", "#a8946e"], ["#b48a5e", "#6e5442"]];
+const DYES = ["#b4553e", "#d1a646", "#6f8a44", "#3f3733", "#ece4d0", "#8c4a32", "#c97a3a", "#4f6a8a"];
 const STYLES_F: HairStyle[] = ["long", "braids", "bun", "topknot", "wavy", "coils", "puffs", "crop", "shaggy"];
 const STYLES_M: HairStyle[] = ["short", "long", "topknot", "shaggy", "crop", "braids", "coils", "bun"];
 
 export function makeCulture(id: number, seed: number): Culture {
   const rng = new Rng(seed * 4241 + id * 977 + 5);
   const weights = (list: HairStyle[]) => { const o: Partial<Record<HairStyle, number>> = {}; for (const s of list) o[s] = Math.pow(rng.next(), 2.2) * 3 + 0.08; return o; };
-  const dyes: string[] = []; while (dyes.length < 2) { const d = rng.pick(DYES); if (!dyes.includes(d)) dyes.push(d); }
+  const dyes: string[] = []; while (dyes.length < 3) { const d = rng.pick(DYES); if (!dyes.includes(d)) dyes.push(d); }
+  const [hide, hideD] = rng.pick(HIDES);
   return {
     id, lang: makeLanguage(id, seed),
-    hide: rng.pick(HIDES), dyes,
+    hide, hideD, dyes, paint: rng.pick([0, 0, 1, 2]),
     hotWear: rng.chance(0.55) ? "loin" : "wrap",
     mildF: rng.pick(["tunic", "dress", "wrap"] as Wear[]), mildM: rng.chance(0.7) ? "tunic" : "wrap",
     hairF: weights(STYLES_F), hairM: weights(STYLES_M),

@@ -3,7 +3,7 @@ import { Rng } from "../../shared/rng.ts";
 import { Anim, Bubble, PERSON_STRIDE, PFlag, type CampSnap, type ChronicleEvent, type Look, type Stage, type Wear } from "../../shared/people.ts";
 import { PLANT_UNITS, type Ecology } from "../ecology.ts";
 import type { Wildlife, Herd } from "../wildlife.ts";
-import { ancestryFor, founderGenome, inherit, looksOf, temperament, hairAt, idealMel, skinWord, hairWord, curlWord, heightCm, heightWord, buildWord, type Ancestry, type Genome } from "./genetics.ts";
+import { ancestryFor, founderGenome, inherit, looksOf, temperament, hairAt, idealMel, skinWord, hairWord, curlWord, heightCm, heightWord, buildWord, skinHex, type Ancestry, type Genome } from "./genetics.ts";
 import { makeCulture, pickStyle, type Culture } from "./culture.ts";
 import { personName, placeName } from "./language.ts";
 import { Walker } from "./walk.ts";
@@ -360,10 +360,10 @@ export class Society {
     }
     return [x, y];
   }
+  /** Where someone sits at the fire: a ring around it, each in their own place. */
   fireSpot(p: Person): [number, number] {
-    const b = this.band(p), a = (p.id * 2.399) % (Math.PI * 2), r = 1.1 + ((p.id * 0.13) % 1) * 0.6;
-    const x = b.x + Math.cos(a) * r, y = b.y + Math.sin(a) * r * 0.75;
-    return this.walker.dry(x, y) ? [x, y] : [b.x, b.y + 1];
+    const b = this.band(p), a = (p.id * 2.399) % (Math.PI * 2), r = 1.5 + ((p.id * 0.618) % 1) * 1.6;
+    return this.dryNear(b.x + Math.cos(a) * r, b.y + Math.sin(a) * r * 0.75);
   }
   siteValueFor(p: Person, x: number, y: number): number { return siteValue(p, x, y, this.time); }
   atCamp(p: Person, r = 6): boolean { const b = this.band(p); return Math.hypot(p.x - b.x, p.y - b.y) < r; }
@@ -452,7 +452,7 @@ export class Society {
       /* never left standing in a lake: step out to the nearest dry ground */
       if (!this.walker.passable(p.x, p.y)) { [p.x, p.y] = this.dryNear(p.x, p.y, 6); p.path = null; }
       if (time >= p.nextDanger) { p.nextDanger = time + 0.8 + (p.id % 7) * 0.05; this.danger(p); }
-      if (time >= p.nextLook) { p.nextLook = time + 2.5 + (p.id % 11) * 0.1; this.look(p); }
+      if (time >= p.nextLook) { p.nextLook = time + 2.5 + (p.id % 11) * 0.1; this.look(p); this.feel(p); }
       if (p.si >= p.plan.length || (isInterruptible(p.goal) && time - p.whyAt > 7) || this.urgent(p)) decide(this, p);
       doStep(this, p, dt);
     }
@@ -621,6 +621,26 @@ export class Society {
     if (p.health <= 0) { this.die(p, h.sp === Species.Bear ? "a bear" : "wolves"); return; }
     this.event("attack", h.sp === Species.Bear ? Bubble.Fear : Bubble.Wolf, `${what} attacked ${p.name} of the ${this.band(p).name}. ${p.sex === "f" ? "She" : "He"} got away hurt.`, p.x, p.y, [p.id], p.band);
     abandon(this, p); decide(this, p, Goal.Flee);
+  }
+
+  /**
+    Mood: how well each need is met, weighted by what this person cares about (the
+    sociable miss company more, the ambitious care about standing), plus how the things
+    they remember feel: a new baby or a good hunt lifts it, a death or a quarrel weighs on it.
+  */
+  private feel(p: Person): void {
+    const t = p.traits;
+    const parts: [number, number][] = [
+      [Math.min(1, p.food / 1.2), 1.2], [p.water, 0.8], [p.rest, 0.6], [p.warmth, 1], [p.company, 0.4 + t[5] * 0.8],
+      [1 - p.fear, 0.6 + (1 - t[0]) * 0.5], [p.health, 1.2], [Math.min(1, 0.3 + p.prestige), t[3] * 0.6],
+    ];
+    let sw = 0, sv = 0; for (const [v, w] of parts) { sv += (v - 0.55) * w; sw += w; }
+    let mem = 0;
+    for (const m of p.mem) mem += m.v * Math.exp(-(this.time - m.t) / (DAY_SECONDS * 8));
+    if (p.partner) mem += 0.08;
+    const kids = p.children.length ? p.children.filter(id => this.byId.has(id)).length : 0;
+    if (kids) mem += 0.05;
+    p.mood = Math.max(-1, Math.min(1, sv / sw * 2 + Math.max(-0.6, Math.min(0.6, mem * 0.5))));
   }
 
   /* ---------------- seeing ---------------- */
@@ -1050,11 +1070,16 @@ export class Society {
     const bald = p.sex === "m" && p.looks.bald > 0.6 && age > 34 + (1 - p.looks.bald) * 30;
     const young = st === "baby" || st === "toddler" || st === "child";
     const style = young ? (p.looks.curl > 0.62 ? (p.sex === "f" ? "puffs" : "crop") : p.sex === "f" && (p.style === "braids" || p.style === "long") && st === "child" ? p.style : "short") : bald ? "bald" : p.style;
-    const dye = c.dyes[p.id % c.dyes.length];
+    /* clothes in the band's colors, chosen to stand out against the wearer's skin */
+    const pick = (opts: string[]) => { const sl = lum(skinHex(p.looks.mel)); let best = opts[0], bd = -1; for (const o of opts) { const d = Math.abs(lum(o) - sl); if (d > bd) { bd = d; best = o; } } return best; };
+    const v = (p.id * 2654435761 >>> 0) % 7;
+    const top = v < 3 ? pick([c.hide, c.hideD]) : pick([c.dyes[v % 3], c.hide, c.hideD]);
+    const bottom = pick([c.hideD, c.hide, c.dyes[(v + 1) % 3]]);
+    const trim = c.dyes.find(d => d !== top) ?? c.dyes[0];
     return {
       id: p.id, name: p.name, sex: p.sex, stage: st, band: p.band,
       skin: p.looks.mel, hair: h.hex, gray: h.gray, style, beard: p.sex === "m" && age >= 19 && p.looks.beard > 0.42, eye: p.looks.eye,
-      wear: this.wearOf(p, st), top: (p.id % 3 === 0) ? dye : c.hide, bottom: c.hide, beads: (p.id * 7919 % 100) / 100 < c.beads,
+      wear: this.wearOf(p, st), top, bottom, beads: (p.id * 7919 % 100) / 100 < c.beads, trim, paint: st === "adult" || st === "teen" ? c.paint : 0,
       tall: st === "adult" || st === "elder" ? (cm - (p.sex === "m" ? 166 : 155) > 6 ? 1 : cm - (p.sex === "m" ? 166 : 155) < -6 ? -1 : 0) : 0,
     };
   }
@@ -1110,4 +1135,6 @@ export function compass(dx: number, dy: number): string {
   return d[Math.round(((a + 360) % 360) / 45) % 8];
 }
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+/** Perceived lightness of a color, 0..1. */
+function lum(hex: string): number { const r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16); return (0.299 * r + 0.587 * g + 0.114 * b) / 255; }
 export { SPECIES_NAMES };

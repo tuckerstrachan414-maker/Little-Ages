@@ -8,13 +8,15 @@ import { hash2 } from "../shared/rng.ts";
 import { isSnowy } from "../shared/seasonfx.ts";
 import { fineGround } from "./ground.ts";
 import { drawBirds, drawFish, drawRabbits, type Fields, type FlockSnap } from "./life.ts";
+import { PeopleLayer } from "./people.ts";
 
 /*
   Draw order each frame:
     1. the whole map, one pixel per tile, scaled to the zoom (cross-fading between seasons)
     2. up close: cached chunks of ground texture, then live water (foam, glints)
     3. up close: cached chunks of trees and rocks, back to front by row
-    4. wildlife, clouds and their shadows, day and night
+    4. wildlife and people with their camps, clouds and their shadows, day and night,
+       then campfire light through the dark and band names over their camps
   Chunks are rebuilt lazily a few per frame, so zooming never stalls.
 */
 
@@ -47,6 +49,8 @@ export class Renderer {
   speed = 1;
   hover: [number, number] | null = null;
   dayNight = true;
+  dpr = 1;
+  readonly people: PeopleLayer;
   private clouds: { x: number; y: number; s: number; v: number; sprite: HTMLCanvasElement; shadow: HTMLCanvasElement }[] = [];
 
   readonly canvas: HTMLCanvasElement;
@@ -55,6 +59,7 @@ export class Renderer {
     this.canvas = canvas; this.world = world;
     this.ctx = canvas.getContext("2d", { alpha: false })!;
     this.cam = new Camera(world.w, world.h);
+    this.people = new PeopleLayer(world);
     this.terrain = document.createElement("canvas");
     this.terrain.width = world.w; this.terrain.height = world.h;
     this.makeClouds();
@@ -78,6 +83,7 @@ export class Renderer {
   private mipFor(z: number): HTMLCanvasElement { let best = this.terrain; for (const m of this.mips) { if (m.width / this.world.w >= z) best = m; } return best; }
 
   resize(cssW: number, cssH: number, dpr: number): void {
+    this.dpr = dpr;
     this.canvas.width = Math.round(cssW * dpr); this.canvas.height = Math.round(cssH * dpr);
     this.cam.resize(this.canvas.width, this.canvas.height);
   }
@@ -105,12 +111,14 @@ export class Renderer {
     if (detail) this.drawChunks(now, z, true);
     /* 4. life and weather */
     this.drawHerds(now, z);
+    if (this.mode === "terrain") this.people.draw(ctx, cam, now, this.season);
     const ba = Math.min(1, (now - this.herdT) / 100);
     drawBirds(ctx, cam, this.flocks, this.flocksPrev, ba, now, false);
     drawBirds(ctx, cam, this.flocks, this.flocksPrev, ba, now, true);
     if (this.hover && z >= 4) { const [hx, hy] = cam.toScreen(this.hover[0], this.hover[1]); ctx.strokeStyle = "rgba(255,240,200,.8)"; ctx.lineWidth = Math.max(1, z / 16); ctx.strokeRect(Math.round(hx) + 0.5, Math.round(hy) + 0.5, Math.round(z) - 1, Math.round(z) - 1); }
     this.drawClouds(z);
-    if (this.dayNight && this.mode === "terrain") this.drawDayNight(z);
+    if (this.dayNight && this.mode === "terrain") { this.drawDayNight(z); this.people.drawGlow(ctx, cam, now, this.sun()); }
+    this.people.drawLabels(ctx, cam, this.dpr);
     this.evictChunks();
   }
 
@@ -303,6 +311,8 @@ export class Renderer {
     }
     ctx.globalAlpha = 1;
   }
+  /** Daylight 0..1 (the same curve the simulation uses). */
+  sun(): number { const d = (this.gameTime / DAY_SECONDS) % 1; return d < 0.22 || d > 0.85 ? 0 : d < 0.32 ? (d - 0.22) / 0.1 : d > 0.72 ? 1 - (d - 0.72) / 0.13 : 1; }
   private drawDayNight(z: number): void {
     const day = (this.gameTime / DAY_SECONDS) % 1;
     /* 0 = midnight. Light rises from 0.22, full by 0.32, fades from 0.72, dark by 0.85 */

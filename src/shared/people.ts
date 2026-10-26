@@ -29,6 +29,10 @@ export interface Look {
   id: number; name: string; sex: "f" | "m"; stage: Stage; band: number;
   skin: number; hair: string; gray: number; style: HairStyle; beard: boolean; eye: string;
   wear: Wear; top: string; bottom: string; beads: boolean;
+  /** dyed trim and belt */
+  trim: string;
+  /** body paint on bare skin: 0 none, 1 ochre stripes, 2 white clay dots */
+  paint: number;
   /** -1 short, 0 middling, 1 tall */
   tall: number;
 }

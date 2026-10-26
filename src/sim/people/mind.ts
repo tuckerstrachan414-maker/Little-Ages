@@ -214,7 +214,8 @@ function commit(s: Society, p: Person, o: Option): boolean {
     if (Math.hypot(p.x - b.x, p.y - b.y) < 40) { const [fx, fy] = s.fireSpot(p); plan.unshift(step(St.Go, fx, fy), step(St.Drop, fx, fy)); }
   }
   p.plan = plan; p.si = 0; p.goal = o.g; p.why = o.why(); p.whyAt = s.time;
-  if (o.icon && (o.g === Goal.Drink || o.g === Goal.Eat || o.g === Goal.Warm || o.g === Goal.Flee || o.g === Goal.Migrate || o.g === Goal.Sick)) s.bubble(p, o.icon, 2.5);
+  /* a picture over their head only for the moments that matter, not every drink of water */
+  if (o.icon && (o.g === Goal.Flee || o.g === Goal.Sick || (o.g === Goal.Warm && p.warmth < 0.35) || (o.g === Goal.Eat && p.food < 0.3) || (o.g === Goal.Migrate && s.rng.chance(0.15)))) s.bubble(p, o.icon, 2.5);
   return true;
 }
 

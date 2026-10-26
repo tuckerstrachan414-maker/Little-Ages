@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Little Ages sprite sheet</title>
+<style>body{margin:0;background:#7c9a4c;font:12px system-ui} canvas{image-rendering:pixelated;display:block}</style></head>
+<body><canvas id="c"></canvas>
+<script type="module">
+import { personSprite, tinySprite, drawBubble } from "/src/render/sprites/people.ts";
+import { fireSprite, shelterSprite, storeSprite, woodpileSprite } from "/src/render/sprites/camp.ts";
+import { Anim, PFlag } from "/src/shared/people.ts";
+import { hairAt, looksOf, ancestryFor, founderGenome } from "/src/sim/people/genetics.ts";
+import { makeCulture, pickStyle } from "/src/sim/people/culture.ts";
+import { Rng } from "/src/shared/rng.ts";
+const K = 4, c = document.getElementById("c"), x = c.getContext("2d");
+c.width = 1500; c.height = 1300; x.imageSmoothingEnabled = false;
+x.fillStyle = "#7c9a4c"; x.fillRect(0, 0, c.width, c.height);
+x.fillStyle = "#d6c393"; x.fillRect(0, 640, c.width, 400);
+const rng = new Rng(5);
+const people = [];
+const lat = [1, 0.75, 0.5, 0.25, 0.1];
+let id = 1;
+for (const uv of lat) {
+  const anc = ancestryFor(uv, 1 - uv, uv, rng), cult = makeCulture(id, 3);
+  for (const [sex, age, stage] of [["f", 30, "adult"], ["m", 34, "adult"], ["f", 8, "child"], ["m", 70, "elder"], ["f", 3, "toddler"], ["m", 14, "teen"]]) {
+    const g = founderGenome(anc, rng), l = looksOf(g, [0, 0, 0, 0, 0]), h = hairAt(l, age);
+    const style = stage === "child" || stage === "toddler" ? (l.curl > 0.62 ? "puffs" : "short") : pickStyle(cult, sex, l.curl, rng);
+    people.push({ id: id++, name: "x", sex, stage, band: 1, skin: l.mel, hair: h.hex, gray: h.gray, style, beard: sex === "m" && age > 18 && l.beard > 0.42, eye: l.eye,
+      wear: uv > 0.8 ? cult.hotWear : uv < 0.3 ? "furs" : sex === "f" ? cult.mildF : cult.mildM, top: id % 3 ? cult.hide : cult.dyes[0], bottom: cult.hideD, beads: rng.chance(0.5), trim: cult.dyes[1], paint: cult.paint, tall: 0 });
+  }
+}
+const draw = (cv, px, py, flip) => { x.save(); x.translate(px, py); if (flip) x.scale(-1, 1); x.drawImage(cv, -cv.width * K / 2, -cv.height * K, cv.width * K, cv.height * K); x.restore(); };
+/* row per ancestry: front, side, back idle for six people */
+people.forEach((p, i) => {
+  const col = i % 6, row = Math.floor(i / 6);
+  const bx = 40 + col * 240, by = 130 + row * 120;
+  ["front", "side", "back"].forEach((v, j) => draw(personSprite(p, Anim.Idle, 0, v, 0, 0).c, bx + j * 70, by, false));
+});
+/* poses for one adult */
+const adult = people[6], anims = [Anim.Walk, Anim.Run, Anim.Carry, Anim.Gather, Anim.Dig, Anim.Fish, Anim.Throw, Anim.Butcher, Anim.Chop, Anim.Knap, Anim.Sew, Anim.Talk, Anim.Sit, Anim.HoldBaby, Anim.Cook, Anim.Eat, Anim.Drink, Anim.Play, Anim.Cane];
+anims.forEach((a, i) => { for (let f = 0; f < 2; f++) draw(personSprite(adult, a, f * 2, a === Anim.Talk || a === Anim.Sit || a === Anim.HoldBaby || a === Anim.Sew || a === Anim.Knap || a === Anim.Eat || a === Anim.Cook ? "front" : "side", a === Anim.Carry ? PFlag.Carrying : 0, 1).c, 40 + i * 75, 760 + f * 120, false); });
+draw(personSprite(adult, Anim.Sleep, 0, "side", 0, 0).c, 90, 1010, false);
+draw(personSprite(people[1], Anim.Sleep, 0, "side", 0, 0).c, 230, 1010, false);
+draw(personSprite(adult, Anim.Sick, 0, "side", 0, 0).c, 370, 1010, false);
+draw(personSprite(adult, Anim.Walk, 0, "side", PFlag.Sling, 0).c, 470, 1010, false);
+draw(personSprite(adult, Anim.Walk, 0, "front", PFlag.Pregnant, 0).c, 540, 1010, false);
+draw(personSprite(people[7], Anim.Walk, 0, "side", PFlag.Spear, 0).c, 610, 1010, false);
+draw(personSprite(people[7], Anim.Walk, 0, "side", PFlag.Wood, 0).c, 680, 1010, false);
+draw(personSprite(people[7], Anim.Walk, 0, "side", PFlag.Meat | PFlag.Carrying, 2).c, 750, 1010, false);
+draw(personSprite(people[6], Anim.Idle, 0, "front", PFlag.Sad, 0).c, 820, 1010, false);
+for (const [j, k] of ["tent", "leanto", "dome"].entries()) { draw(shelterSprite(k, 1, false), 900 + j * 120, 1010, false); draw(shelterSprite(k, 2, true), 900 + j * 120, 1150, false); }
+draw(fireSprite(0, 1), 1300, 1010, false); draw(storeSprite(40, 30), 1380, 1010, false); draw(woodpileSprite(5), 1300, 1080, false);
+people.slice(0, 12).forEach((p, i) => { draw(tinySprite(p, "m", 0), 60 + i * 30, 1200, false); draw(tinySprite(p, "s", 0), 60 + i * 30, 1260, false); });
+[1, 2, 3, 4, 5, 9, 10, 12, 13, 15, 18, 19, 20].forEach((b, i) => drawBubble(x, 500 + i * 60, 1250, b, 3));
+window.done = true;
+</script></body></html>

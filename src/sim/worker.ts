@@ -5,6 +5,8 @@ import { Wildlife } from "./wildlife.ts";
 import { Ecology, CELL } from "./ecology.ts";
 import { Birds } from "./birds.ts";
 import { settle } from "./settle.ts";
+import { Society } from "./people/society.ts";
+import { personDetail, bandDetail } from "./people/inspect.ts";
 import { DAY_SECONDS, DAYS_PER_SEASON, type MapMode, type Season, type WorldData } from "../shared/types.ts";
 import type { ToWorker, FromWorker } from "../shared/protocol.ts";
 
@@ -19,6 +21,8 @@ let world: WorldData | null = null;
 let wildlife: Wildlife | null = null;
 let eco: Ecology | null = null;
 let birds: Birds | null = null;
+let people: Society | null = null;
+let inspect = { person: 0, band: 0 }, inspectAt = 0, firstLooks = true;
 let lastDay = -1;
 let time = (DAYS_PER_SEASON + 0.32) * DAY_SECONDS;   /* the first morning of summer */
 let speed = 1;
@@ -38,8 +42,12 @@ self.onmessage = (e: MessageEvent<ToWorker>) => {
     eco = new Ecology(world, m.seed);
     wildlife = new Wildlife(world, m.seed, eco);
     birds = new Birds(world, m.seed);
-    settle(wildlife, eco, SETTLE_YEARS, p => post({ type: "progress", stage: 5, pct: p * 0.9 }));
+    settle(wildlife, eco, SETTLE_YEARS, p => post({ type: "progress", stage: 5, pct: p }));
     time = (DAYS_PER_SEASON + 0.32) * DAY_SECONDS; lastSeason = seasonAt(time);
+    post({ type: "progress", stage: 6, pct: 0.2 });
+    people = new Society(world, eco, wildlife, m.seed, { start: m.start, bands: m.bands }, time);
+    firstLooks = true; inspect = { person: 0, band: 0 };
+    post({ type: "progress", stage: 6, pct: 0.9 });
     const w = world;
     const out: WorldData = { ...w, elev: copy(w.elev), biome: copy(w.biome), flags: copy(w.flags), tree: copy(w.tree), temp: copy(w.temp), rain: copy(w.rain), depth: copy(w.depth) };
     post({ type: "world", world: out }, [out.elev.buffer, out.biome.buffer, out.flags.buffer, out.tree.buffer, out.temp.buffer, out.rain.buffer, out.depth.buffer]);
@@ -47,6 +55,7 @@ self.onmessage = (e: MessageEvent<ToWorker>) => {
   } else if (m.type === "speed") speed = m.speed;
   else if (m.type === "mode") { mode = m.mode; sendBake(); }
   else if (m.type === "settime") { time = m.time; const s = seasonAt(time); if (s !== lastSeason) { lastSeason = s; sendBake(); } }
+  else if (m.type === "inspect") { inspect = { person: m.person, band: m.band }; if (people) people.selected = m.person; inspectAt = 0; }
 };
 
 function sendFields() {
@@ -56,7 +65,7 @@ function sendFields() {
 }
 
 setInterval(() => {
-  if (!world || !wildlife || !eco || !birds) return;
+  if (!world || !wildlife || !eco || !birds || !people) return;
   const dt = 0.1 * speed;
   if (dt > 0) {
     /* big steps at high speed are split so herds still turn and avoid water */
@@ -66,6 +75,7 @@ setInterval(() => {
       const s = seasonAt(time), day = Math.floor(time / DAY_SECONDS);
       wildlife.update(dt / steps, s, day); birds.update(dt / steps, s);
       if (day !== lastDay) { lastDay = day; eco.daily(s); }
+      people.update(dt / steps, time, s);
     }
     if (Math.floor(time / DAY_SECONDS) !== sentDay) { sentDay = Math.floor(time / DAY_SECONDS); sendFields(); }
     const s = seasonAt(time); if (s !== lastSeason) { lastSeason = s; sendBake(); }
@@ -73,5 +83,16 @@ setInterval(() => {
   const herds = wildlife.snapshot();
   let animals = 0; for (const h of wildlife.herds) animals += h.n;
   const flocks = birds.snapshot();
-  post({ type: "tick", time, speed, herds, herdCount: wildlife.herds.length, animals, birds: flocks, flockCount: birds.flocks.length, birdCount: birds.count() }, [herds.buffer, flocks.buffer]);
+  const folk = people.snapshot();
+  const looks = firstLooks ? people.allLooks() : people.takeLooks(); firstLooks = false;
+  const events = people.fresh; people.fresh = [];
+  post({ type: "tick", time, speed, herds, herdCount: wildlife.herds.length, animals, birds: flocks, flockCount: birds.flocks.length, birdCount: birds.count(),
+    people: folk, peopleCount: people.people.length, camps: people.campSnaps(), looks, events, pop: people.people.length }, [herds.buffer, flocks.buffer, folk.buffer]);
+  /* the pinned tag refreshes twice a second */
+  const now = performance.now();
+  if (now - inspectAt > 450) {
+    inspectAt = now;
+    if (inspect.person) post({ type: "person", id: inspect.person, detail: personDetail(people, inspect.person) });
+    if (inspect.band) post({ type: "band", id: inspect.band, detail: bandDetail(people, inspect.band) });
+  }
 }, 100);
