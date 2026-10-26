@@ -340,7 +340,7 @@ function kill(s: Society, lead: Person, h: { id: number; sp: number; x: number; 
   if (h.sp === Species.Mammoth || h.sp === Species.Aurochs || h.sp === Species.Bear) {
     const names = crew.map(q => q.name);
     const who = names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : names[0];
-    s.event("kill", h.sp === Species.Mammoth ? Bubble.Mammoth : Bubble.Deer, `${who} of the ${s.band(lead).name} brought down ${h.sp === Species.Mammoth ? "a mammoth" : h.sp === Species.Aurochs ? "an aurochs" : "a bear"}. There will be meat for days.`, c.x, c.y, crew.map(q => q.id), lead.band);
+    s.event("kill", h.sp === Species.Mammoth ? Bubble.Mammoth : Bubble.Deer, `${who} of the ${s.band(lead).name} brought down ${h.sp === Species.Mammoth ? "a mammoth" : h.sp === Species.Aurochs ? "an aurochs" : "a bear"}. There will be meat for days.`, c.x, c.y, crew.map(q => q.id), lead.band, h.sp);
   }
 }
 

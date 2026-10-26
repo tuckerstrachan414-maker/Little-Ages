@@ -152,7 +152,7 @@ export interface Person {
   learning: number;
 }
 
-export interface Archived { id: number; name: string; sex: "f" | "m"; born: number; died: number; cause: string; mother: number; father: number; partner: number; children: number[]; band: number; mel: number; }
+export interface Archived { id: number; name: string; sex: "f" | "m"; born: number; died: number; x: number; y: number; cause: string; mother: number; father: number; partner: number; children: number[]; band: number; mel: number; }
 
 export const ageOf = (p: { born: number }, now: number) => (now - p.born) / YEAR;
 export function stageOf(age: number): Stage {

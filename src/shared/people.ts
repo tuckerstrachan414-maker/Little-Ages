@@ -40,4 +40,8 @@ export interface Look {
 /** A band's camp, sent every tick. */
 export interface CampSnap { id: number; name: string; x: number; y: number; color: string; pop: number; fire: number; shelters: number[]; shelter: "tent" | "leanto" | "dome"; food: number; }
 
-export interface ChronicleEvent { id: number; t: number; kind: string; icon: Bubble; text: string; x: number; y: number; who: number[]; band: number; }
+/**
+  Something that happened. `sig` (0..1) is how much it matters, weighed from what it was and how rare it is
+  in this world's history; `title` is its short headline. Both feed the ribbon, the journal and the Spotlight.
+*/
+export interface ChronicleEvent { id: number; t: number; kind: string; icon: Bubble; text: string; x: number; y: number; who: number[]; band: number; sig: number; title: string; }

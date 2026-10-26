@@ -7,6 +7,7 @@ import { Birds } from "./birds.ts";
 import { settle } from "./settle.ts";
 import { Society } from "./people/society.ts";
 import { personDetail, bandDetail } from "./people/inspect.ts";
+import { searchWorld, bondEdges } from "./people/search.ts";
 import { DAY_SECONDS, DAYS_PER_SEASON, type MapMode, type Season, type WorldData } from "../shared/types.ts";
 import type { ToWorker, FromWorker } from "../shared/protocol.ts";
 
@@ -23,6 +24,7 @@ let eco: Ecology | null = null;
 let birds: Birds | null = null;
 let people: Society | null = null;
 let inspect = { person: 0, band: 0 }, inspectAt = 0, firstLooks = true;
+let bonds: { on: boolean; view: { x0: number; y0: number; x1: number; y1: number } } = { on: false, view: { x0: 0, y0: 0, x1: 0, y1: 0 } }, bondsAt = 0;
 let lastDay = -1;
 let time = (DAYS_PER_SEASON + 0.32) * DAY_SECONDS;   /* the first morning of summer */
 let speed = 1;
@@ -46,7 +48,7 @@ self.onmessage = (e: MessageEvent<ToWorker>) => {
     time = (DAYS_PER_SEASON + 0.32) * DAY_SECONDS; lastSeason = seasonAt(time);
     post({ type: "progress", stage: 6, pct: 0.2 });
     people = new Society(world, eco, wildlife, m.seed, { start: m.start, bands: m.bands }, time);
-    firstLooks = true; inspect = { person: 0, band: 0 };
+    firstLooks = true; inspect = { person: 0, band: 0 }; bonds.on = false;
     post({ type: "progress", stage: 6, pct: 0.9 });
     const w = world;
     const out: WorldData = { ...w, elev: copy(w.elev), biome: copy(w.biome), flags: copy(w.flags), tree: copy(w.tree), temp: copy(w.temp), rain: copy(w.rain), depth: copy(w.depth) };
@@ -55,6 +57,8 @@ self.onmessage = (e: MessageEvent<ToWorker>) => {
   } else if (m.type === "speed") speed = m.speed;
   else if (m.type === "mode") { mode = m.mode; sendBake(); }
   else if (m.type === "settime") { time = m.time; const s = seasonAt(time); if (s !== lastSeason) { lastSeason = s; sendBake(); } }
+  else if (m.type === "search") post({ type: "results", seq: m.seq, items: people ? searchWorld(people, m.q) : [] });
+  else if (m.type === "bonds") { bonds = { on: m.on, view: m.view }; if (m.on) bondsAt = 0; }
   else if (m.type === "inspect") { inspect = { person: m.person, band: m.band }; if (people) people.selected = m.person; inspectAt = 0; }
 };
 
@@ -90,6 +94,7 @@ setInterval(() => {
     people: folk, peopleCount: people.people.length, camps: people.campSnaps(), looks, events, pop: people.people.length }, [herds.buffer, flocks.buffer, folk.buffer]);
   /* the pinned tag refreshes twice a second */
   const now = performance.now();
+  if (bonds.on && now - bondsAt > 700) { bondsAt = now; const edges = bondEdges(people, bonds.view); post({ type: "bonds", edges }, [edges.buffer]); }
   if (now - inspectAt > 450) {
     inspectAt = now;
     if (inspect.person) post({ type: "person", id: inspect.person, detail: personDetail(people, inspect.person) });

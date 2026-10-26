@@ -21,10 +21,11 @@ You want a cute pixel-art civilization sim where nothing in history is scripted.
 ## Where we are
 
 - **Done:** the repo, style board rounds 1 and 2 (your picks: Field Notes palette, dark outlines, balanced proportions, a closer WorldBox feel, tiny tiles, huge continents, and both UI ideas), and Milestone 1 checkpoint A, the living world.
-- **Done on this branch:** Milestone 1 checkpoint B, the people. Genes, minds, a utility AI that can always say why, bands, and the whole life cycle from birth to death, drawn in the picked style with the pinned tag and a news feed. The README lists what's in it.
-- **Next:** checkpoint C, the interface: the history ribbon you can scrub and click to fly to an event, the journal, search, Spotlight, and relationship threads drawn on the map. That finishes Milestone 1. Then Milestone 2 (first villages) starts.
+- **Done:** Milestone 1 checkpoint B, the people. Genes, minds, a utility AI that can always say why, bands, and the whole life cycle from birth to death, drawn in the picked style with the pinned tag and a news feed.
+- **Done on this branch:** Milestone 1 checkpoint C, the interface: the history ribbon you can scrub and click to fly to an event, the journal, search, the Story Spotlight, and relationship threads drawn on the map. That finishes Milestone 1. The README lists what's in it.
+- **Next:** Milestone 2, first villages: sharing, friendships and feuds, groups forming, leaders emerging, the first discoveries (fire, tools, farming), huts in each culture's style.
 
-How to check checkpoint B for yourself: start a world, zoom into a camp, click anyone. Their tag says what they're doing and why, how they feel, what they're like, who their family is, and what they remember. Watch a band through a winter, or let it run at 100x and read the news.
+How to check checkpoint C for yourself: start a world and let it run at 100x for a minute, then drag along the ribbon at the bottom and watch the camera hop to where each thing happened. Press `/` and type part of a name, open the Journal, switch on Bonds and zoom into a camp, then switch on the Spotlight and let it tell you what's going on. How to check checkpoint B: zoom into a camp and click anyone. Their tag says what they're doing and why, how they feel, what they're like, who their family is, and what they remember.
 
 ## The short version (for you)
 

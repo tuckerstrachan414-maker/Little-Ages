@@ -2,11 +2,13 @@ import type { BandDetail, Kin, PersonDetail } from "../shared/protocol.ts";
 import type { CampSnap, ChronicleEvent, Look } from "../shared/people.ts";
 import { Anim, Bubble } from "../shared/people.ts";
 import { DAY_SECONDS, DAYS_PER_SEASON, DAYS_PER_YEAR, SEASON_NAMES } from "../shared/types.ts";
-import { personSprite, drawBubble } from "../render/sprites/people.ts";
+import { personSprite } from "../render/sprites/people.ts";
 import { CREATURE_SCALE } from "../render/scale.ts";
 import { frameURL } from "./hud.ts";
 import type { Camera } from "../render/camera.ts";
 import type { Dock } from "./dock.ts";
+import { el, esc, eventIcon } from "./dom.ts";
+import type { JournalFocus } from "./journal.ts";
 
 /*
   The people interface. Click anyone to pin a paper tag to them: a thread follows them as
@@ -17,8 +19,6 @@ import type { Dock } from "./dock.ts";
   corner tells of births, deaths, couples, hunts and bands on the move; click a line to go there.
 */
 
-const esc = (s: string) => s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]!));
-const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls = "", html = ""): HTMLElementTagNameMap[K] => { const e = document.createElement(tag); if (cls) e.className = cls; if (html) e.innerHTML = html; return e; };
 
 /** A little portrait of someone, standing, facing us. */
 export function portrait(look: Look, size = 30, dead = false): HTMLCanvasElement {
@@ -32,11 +32,6 @@ export function portrait(look: Look, size = 30, dead = false): HTMLCanvasElement
   const w = d.c.width * k, h = d.c.height * k;
   x.drawImage(d.c, Math.round(size / 2 - w / 2), Math.round(size * 0.12 - head * k), w, h);
   if (dead) { x.fillStyle = "rgba(60,50,40,.25)"; x.fillRect(0, 0, size, size); }
-  return c;
-}
-function icon(b: number): HTMLCanvasElement {
-  const c = el("canvas"); c.width = 15; c.height = 12; c.className = "ev-icon";
-  drawBubble(c.getContext("2d")!, 7, 11, b, 1);
   return c;
 }
 function when(t: number, now: number): string {
@@ -55,6 +50,10 @@ export interface PeopleUICallbacks {
   pin: (person: number, band: number) => void;
   fly: (x: number, y: number, z?: number) => void;
   follow: (on: boolean) => void;
+  /** open the journal on this person's or band's story */
+  journal: (focus: JournalFocus) => void;
+  /** a news line was chosen */
+  news: (e: ChronicleEvent) => void;
 }
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
@@ -77,6 +76,10 @@ export class PeopleUI {
   private events: ChronicleEvent[] = [];
   private camps: CampSnap[] = [];
   private time = 0;
+  /** a ring on the map where an event happened, until the given moment (performance.now) */
+  private ping: { x: number; y: number; until: number } | null = null;
+  /** pixels at the bottom of the screen the history ribbon covers */
+  inset = 0;
   private renderedKey = "";
   private readonly cb: PeopleUICallbacks;
   private readonly root: HTMLElement;
@@ -94,7 +97,15 @@ export class PeopleUI {
     this.chip.title = "Show the card";
     this.chip.onclick = () => this.showTag();
     root.append(this.svg, this.chip);
-    dock.add("news", this.news, { slot: "bottom-start", slide: "left", label: "NEWS", order: 3 });
+    /* an arrow at the screen's edge for kin out of view: a press flies there */
+    this.svg.addEventListener("pointerdown", e => {
+      const g = (e.target as Element).closest<SVGElement>("[data-fly]");
+      if (!g) return;
+      e.preventDefault(); e.stopPropagation();
+      this.cb.fly(+g.dataset.x!, +g.dataset.y!, 12); this.cb.pin(+g.dataset.fly!, 0);
+    });
+    /* on a phone the news would cover half the map, so it starts folded away */
+    dock.add("news", this.news, { slot: "bottom-start", slide: "left", label: "NEWS", order: 4, open: window.innerWidth > 520 });
     dock.add("bands", this.list, { slot: "float", slide: "drop", label: "PEOPLE", group: "drop", open: false, order: 1, onChange: on => { if (on) this.renderList(this.camps); } });
   }
 
@@ -111,9 +122,9 @@ export class PeopleUI {
     ol.innerHTML = "";
     for (const e of this.events.slice(-7).reverse()) {
       const li = el("li"); const b = el("button", "ev"); b.type = "button";
-      b.append(icon(e.icon || Bubble.Sun));
+      b.append(eventIcon(e.icon || Bubble.Sun));
       const span = el("span", "", `${esc(e.text)} <em>${when(e.t, this.time)}</em>`); b.append(span);
-      b.onclick = () => { this.cb.fly(e.x, e.y, 12); if (e.who[0]) this.cb.pin(e.who[0], 0); };
+      b.onclick = () => this.cb.news(e);
       li.append(b); ol.append(li);
     }
   }
@@ -188,7 +199,7 @@ export class PeopleUI {
         <div class="row head"><span class="pic"></span><div><div class="nm"></div><div class="sub"></div></div></div>
         <div class="tabs" role="tablist">${(["now", "family", "mind"] as const).map(k => `<button type="button" role="tab" data-tab="${k}" aria-selected="${this.tab === k}">${k === "now" ? "NOW" : k === "family" ? "FAMILY" : "MIND"}</button>`).join("")}</div>
         <div class="body"></div>
-        <div class="chips"><button type="button" data-chip="follow" aria-pressed="${this.following}">Follow</button><button type="button" data-chip="threads" aria-pressed="${this.threads}">Kin threads</button></div>`;
+        <div class="chips"><button type="button" data-chip="follow" aria-pressed="${this.following}">Follow</button><button type="button" data-chip="threads" aria-pressed="${this.threads}">Kin threads</button><button type="button" data-act="journal">Journal</button></div>`;
       t.querySelector(".pic")!.append(portrait(d.look, 40));
       this.bindChrome(t);
       t.querySelectorAll<HTMLButtonElement>("[data-tab]").forEach(b => b.onclick = () => { this.tab = b.dataset.tab as "now"; this.renderedKey = ""; this.render(); });
@@ -197,6 +208,7 @@ export class PeopleUI {
         else { this.threads = !this.threads; if (!this.threads) this.svg.innerHTML = ""; }
         b.setAttribute("aria-pressed", String(b.dataset.chip === "follow" ? this.following : this.threads));
       });
+      t.querySelector<HTMLButtonElement>("[data-act=journal]")!.onclick = () => this.cb.journal({ who: d.id, name: d.name, note: "their story" });
       const body = t.querySelector(".body")!;
       if (this.tab === "family") body.append(this.familyView(d));
       else if (this.tab === "mind") body.append(this.mindView(d));
@@ -253,8 +265,9 @@ export class PeopleUI {
       this.renderedKey = key;
       t.innerHTML = `${this.chrome()}
         <div class="nm">The ${esc(d.name)}</div><div class="sub">A band of the ${esc(d.people)} people, camped at ${esc(d.camp)}</div>
-        <p class="stats"></p><div class="needs"></div><h4>People</h4><div class="members"></div>${d.events.length ? `<h4>Lately</h4><ul class="mem">${d.events.map(e => `<li>${esc(e.text)} <em>${when(e.t, this.time)}</em></li>`).join("")}</ul>` : ""}`;
+        <p class="stats"></p><div class="needs"></div><h4>People</h4><div class="members"></div><div class="chips"><button type="button" data-act="journal">Journal</button></div>${d.events.length ? `<h4>Lately</h4><ul class="mem">${d.events.map(e => `<li>${esc(e.text)} <em>${when(e.t, this.time)}</em></li>`).join("")}</ul>` : ""}`;
       this.bindChrome(t);
+      t.querySelector<HTMLButtonElement>("[data-act=journal]")!.onclick = () => this.cb.journal({ band: d.id, name: `The ${d.name}`, note: "their story" });
       const m = t.querySelector(".members")!;
       for (const p of d.members) { const b = el("button", "mb"); b.type = "button"; b.title = `${p.name}, ${p.age}`; b.append(portrait(p.look, 24)); b.onclick = () => this.cb.pin(p.id, 0); m.append(b); }
     }
@@ -262,42 +275,46 @@ export class PeopleUI {
     t.querySelector(".needs")!.innerHTML = bars([["FOOD STORE", Math.min(1, d.days / 4), "#c97a3a"], ["FIRE", d.fire, "#d0653a"]]);
   }
 
+  /** Put a ring on the map where something happened, for a few seconds. */
+  setPing(x: number, y: number): void { this.ping = { x, y, until: performance.now() + 7000 }; }
+
   /** Every frame: keep the tag beside its person or camp, or the chip when the card is hidden, and draw the threads. */
   frame(cam: Camera, pos: Map<number, [number, number]>, camps: CampSnap[], dpr: number): void {
     let wx = 0, wy = 0, have = false;
     if (this.pinnedId) { const p = pos.get(this.pinnedId); if (p) { [wx, wy] = p; have = true; } }
     else if (this.pinnedBand) { const c = camps.find(k => k.id === this.pinnedBand); if (c) { wx = c.x; wy = c.y; have = true; } }
-    const W = window.innerWidth, H = window.innerHeight, mobile = W < 640;
+    const W = window.innerWidth, H = window.innerHeight, mobile = W < 640, floor = H - this.inset;
     const t = this.tag;
     this.chip.classList.toggle("off", !have || this.tagOpen);
-    if (!have || !t) { this.svg.innerHTML = ""; return; }
+    let s = this.pingMarkup(cam, dpr);
+    if (!have || !t) { this.svg.innerHTML = s; return; }
     t.classList.toggle("docked", mobile);
     const [sx0, sy0] = cam.toScreen(wx, wy), px = sx0 / dpr, py = sy0 / dpr;
     const headY = py - (cam.z >= 8 ? 17 * CREATURE_SCALE * cam.z / 8 : 6) / dpr;
-    let s = "";
     if (this.tagOpen) {
       if (!mobile) {
         const tw = t.offsetWidth, th = t.offsetHeight;
         let tx = px + 46, ty = headY - th - 34;
         if (tx + tw > W - 12) tx = px - tw - 46;
-        tx = clamp(tx, 12, W - tw - 12); ty = clamp(ty, 64, H - th - 12);
+        tx = clamp(tx, 12, W - tw - 12); ty = clamp(ty, 64, Math.max(64, floor - th - 12));
         t.style.left = `${Math.round(tx)}px`; t.style.top = `${Math.round(ty)}px`;
         const ax = tx + tw / 2, ay = ty + th - 2, mx = (ax + px) / 2, my = Math.max(ay, headY) + 24;
         if (px > -20 && px < W + 20 && py > -20 && py < H + 20) s += `<path d="M${ax},${ay} Q${mx},${my} ${px},${headY}" fill="none" stroke="#2b2418" stroke-width="4" stroke-linecap="round"/><path d="M${ax},${ay} Q${mx},${my} ${px},${headY}" fill="none" stroke="#f2e6c8" stroke-width="2" stroke-linecap="round"/>`;
       }
     } else {
-      this.placeChip(px, headY, W, H);
+      this.placeChip(px, headY, W, floor);
     }
     /* threads to family (green), partner (rose), friends (blue) and rivals (red, dashed) */
     const d = this.person;
     if (this.threads && d && px > -40 && px < W + 40) {
       const rel: [Kin | null, string, string][] = [[d.partner, "#e07a8a", ""], [d.mother, "#7fbf5a", ""], [d.father, "#7fbf5a", ""], ...d.children.map(k => [k, "#7fbf5a", ""] as [Kin, string, string]), ...d.siblings.map(k => [k, "#a4cf6a", ""] as [Kin, string, string]), ...d.friends.map(k => [k, "#7fb3e6", ""] as [Kin, string, string]), ...d.rivals.map(k => [k, "#e0584a", ' stroke-dasharray="5 4"'] as [Kin, string, string])];
       const labels: { x: number; y: number; w: number; text: string }[] = [];
+      const away: { k: Kin; col: string; qx: number; qy: number; tiles: number; wx: number; wy: number }[] = [];
       for (const [k, col, dash] of rel) {
         if (!k || !k.alive) continue;
         const q = pos.get(k.id); if (!q) continue;
         const [qx0, qy0] = cam.toScreen(q[0], q[1]), qx = qx0 / dpr, qy = qy0 / dpr - (cam.z >= 8 ? 8 * CREATURE_SCALE * cam.z / 8 : 3) / dpr;
-        if (qx < -40 || qx > W + 40 || qy < -40 || qy > H + 40) continue;
+        if (qx < -40 || qx > W + 40 || qy < -40 || qy > floor - 6) { away.push({ k, col, qx, qy, tiles: Math.round(Math.hypot(q[0] - wx, q[1] - wy)), wx: q[0], wy: q[1] }); continue; }
         s += `<line x1="${px}" y1="${headY}" x2="${qx}" y2="${qy}" stroke="#14110c" stroke-width="4" stroke-opacity=".5"${dash}/><line x1="${px}" y1="${headY}" x2="${qx}" y2="${qy}" stroke="${col}" stroke-width="2"${dash}/>`;
         s += `<rect x="${qx - 3}" y="${qy - 3}" width="6" height="6" fill="${col}" stroke="#14110c" stroke-width="1.5"/>`;
         /* a name by each end, for anyone not standing right beside the pinned person */
@@ -309,11 +326,49 @@ export class PeopleUI {
       for (const l of labels) {
         for (let k = 0; k < 10; k++) { const hit = placed.find(o => Math.abs(o.x - l.x) < (o.w + l.w) / 2 && Math.abs(o.y - l.y) < 12); if (!hit) break; l.y = hit.y - 12; }
         placed.push(l);
-        const x = Math.max(l.w / 2 + 4, Math.min(W - l.w / 2 - 4, l.x));
-        s += `<text class="rel-label" x="${x}" y="${l.y}" text-anchor="middle">${esc(l.text)}</text>`;
+        /* a name that would land under the toolbar or the ribbon is left out; the arrow at the edge covers anyone out of sight */
+        if (l.y < 74 || l.y > floor - 8) continue;
+        const x = Math.max(l.w / 2 + 4, Math.min(W - l.w / 2 - 4, l.x)), y = l.y;
+        s += `<text class="rel-label" x="${x}" y="${y}" text-anchor="middle">${esc(l.text)}</text>`;
       }
+      s += this.awayMarkup(away, W, floor);
     }
     this.svg.innerHTML = s;
+  }
+
+  /** The expanding ring over the spot an event happened. */
+  private pingMarkup(cam: Camera, dpr: number): string {
+    const p = this.ping; if (!p) return "";
+    const now = performance.now();
+    if (now > p.until) { this.ping = null; return ""; }
+    const [sx, sy] = cam.toScreen(p.x, p.y), x = sx / dpr, y = sy / dpr;
+    const k = ((now % 1400) / 1400), fade = Math.min(1, (p.until - now) / 1500);
+    let s = "";
+    for (const o of [0, 0.5]) { const f = (k + o) % 1; s += `<circle cx="${x}" cy="${y}" r="${10 + f * 34}" fill="none" stroke="#14110c" stroke-width="5" stroke-opacity="${(1 - f) * 0.35 * fade}"/><circle cx="${x}" cy="${y}" r="${10 + f * 34}" fill="none" stroke="#f6d77a" stroke-width="2.5" stroke-opacity="${(1 - f) * 0.95 * fade}"/>`; }
+    return s;
+  }
+
+  /** Arrows on the screen's edge toward kin who are out of view, each saying who and how far. A press flies there. */
+  private awayMarkup(away: { k: Kin; col: string; qx: number; qy: number; tiles: number; wx: number; wy: number }[], W: number, floor: number): string {
+    const L = 16, R = W - 16, T = 74, B = Math.max(T + 40, floor - 16), cx = (L + R) / 2, cy = (T + B) / 2;
+    const taken: [number, number][] = [];
+    let s = "", n = 0;
+    for (const a of away.sort((p, q) => p.tiles - q.tiles)) {
+      if (n >= 6) break;
+      const dx = a.qx - cx, dy = a.qy - cy;
+      const sc = Math.min(dx ? (dx > 0 ? (R - cx) / dx : (L - cx) / dx) : Infinity, dy ? (dy > 0 ? (B - cy) / dy : (T - cy) / dy) : Infinity);
+      if (!isFinite(sc)) continue;
+      const ax = cx + dx * sc, ay = cy + dy * sc, deg = Math.atan2(dy, dx) * 180 / Math.PI;
+      /* two arrows pointing the same way would sit on each other; the nearer person gets it */
+      if (taken.some(([x, y]) => Math.hypot(x - ax, y - ay) < 22)) continue;
+      taken.push([ax, ay]); n++;
+      const text = `${a.k.name} \u00b7 ${a.tiles}`, onRight = ax > cx, w = text.length * 6.4 + 10;
+      s += `<g class="away" data-fly="${a.k.id}" data-x="${a.wx}" data-y="${a.wy}"><title>${esc(a.k.rel)}: ${esc(a.k.name)}, ${a.tiles} tiles away. Click to go there.</title>`
+        + `<rect x="${onRight ? ax - w - 12 : ax + 12}" y="${ay - 9}" width="${w}" height="18" rx="2" fill="#f2e6c8" stroke="#2b2418" stroke-width="2"/>`
+        + `<text class="away-label" x="${onRight ? ax - 12 - w / 2 : ax + 12 + w / 2}" y="${ay + 4}" text-anchor="middle">${esc(text)}</text>`
+        + `<polygon points="9,0 -6,-7 -6,7" transform="translate(${ax},${ay}) rotate(${deg})" fill="${a.col}" stroke="#14110c" stroke-width="2" stroke-linejoin="round"/></g>`;
+    }
+    return s;
   }
 
   /** The name chip beside the pinned person, kept on screen. */

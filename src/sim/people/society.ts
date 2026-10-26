@@ -11,6 +11,7 @@ import { type Band, homeOf, storeDays, storeFood, siteValue, estimate } from "./
 import { Goal, Know, Mem, Place, St, YEAR, ageOf, stageOf, type Archived, type KnownPlace, type Person, type Rel } from "./person.ts";
 import { decide, isInterruptible } from "./mind.ts";
 import { doStep, abandon } from "./doing.ts";
+import { weigh } from "./chronicle.ts";
 
 /*
   Everyone alive, and the bands they live in. Each step every person's body changes (they
@@ -43,6 +44,8 @@ export class Society {
   nextId = 1; nextEvent = 1; private lastDay = -1;
   events: ChronicleEvent[] = [];
   fresh: ChronicleEvent[] = [];
+  /** how many events of each kind there have been, so rare ones weigh more */
+  seen = new Map<string, number>();
   /** looks that changed since the renderer last asked */
   dirty = new Set<number>();
   stats = { births: 0, deaths: 0, causes: new Map<string, number>(), couples: 0, partings: 0, moves: 0, splits: 0, merges: 0, kills: new Array(6).fill(0) as number[], food: { plant: 0, meat: 0, fish: 0, small: 0 }, contacts: 0, attacks: 0, learned: 0, maxPop: 0 };
@@ -304,9 +307,9 @@ export class Society {
     if (f.band !== m.band) {
       const cult = this.cultures[this.band(m).culture], toMan = this.rng.chance(cult.locality);
       const mover = toMan ? f : m, stay = toMan ? m : f;
-      this.event("couple", Bubble.Heart, `${f.name} and ${m.name} became a couple. ${mover.name} left the ${this.band(mover).name} to live with the ${this.band(stay).name}.`, stay.x, stay.y, [f.id, m.id], stay.band);
+      this.event("couple", Bubble.Heart, `${f.name} and ${m.name} became a couple. ${mover.name} left the ${this.band(mover).name} to live with the ${this.band(stay).name}.`, stay.x, stay.y, [f.id, m.id], stay.band, this.band(f).culture !== this.band(m).culture ? 1 : 0);
       this.moveTo(mover, this.band(stay));
-    } else this.event("couple", Bubble.Heart, `${f.name} and ${m.name} of the ${this.band(f).name} became a couple.`, f.x, f.y, [f.id, m.id], f.band);
+    } else this.event("couple", Bubble.Heart, `${f.name} and ${m.name} of the ${this.band(f).name} became a couple.`, f.x, f.y, [f.id, m.id], f.band, this.band(f).culture !== this.band(m).culture ? 1 : 0);
   }
   /** Moves a person (and any baby or young children they look after) to another band. */
   moveTo(p: Person, to: Band): void {
@@ -438,8 +441,9 @@ export class Society {
     p.mem.push({ t: this.time, k, who, v, x: p.x, y: p.y, n });
     if (p.mem.length > 24) { let wi = 0, wv = 1e9; p.mem.forEach((m, i) => { const s = Math.abs(m.v) * Math.exp(-(this.time - m.t) / (YEAR * 0.6)); if (s < wv) { wv = s; wi = i; } }); p.mem.splice(wi, 1); }
   }
-  event(kind: string, icon: number, text: string, x: number, y: number, who: number[], band: number): void {
-    const e: ChronicleEvent = { id: this.nextEvent++, t: this.time, kind, icon: icon as ChronicleEvent["icon"], text, x, y, who, band };
+  event(kind: string, icon: number, text: string, x: number, y: number, who: number[], band: number, hint = 0): void {
+    const { sig, title } = weigh(this, kind, who, band, hint);
+    const e: ChronicleEvent = { id: this.nextEvent++, t: this.time, kind, icon: icon as ChronicleEvent["icon"], text, x, y, who, band, sig, title };
     this.events.push(e); this.fresh.push(e);
     if (this.events.length > 600) this.events.splice(0, this.events.length - 600);
   }
@@ -693,7 +697,7 @@ export class Society {
       if (!mine.met.has(b.id)) {
         mine.met.add(b.id); b.met.add(mine.id); this.stats.contacts++;
         const same = mine.culture === b.culture;
-        this.event("contact", Bubble.Question, same ? `${p.name} of the ${mine.name} came upon the camp of the ${b.name}, kin from the same people.` : `${p.name} of the ${mine.name} came upon strangers: the ${b.name}, who speak ${this.cultures[b.culture].lang.name}.`, b.x, b.y, [p.id], mine.id);
+        this.event("contact", Bubble.Question, same ? `${p.name} of the ${mine.name} came upon the camp of the ${b.name}, kin from the same people.` : `${p.name} of the ${mine.name} came upon strangers: the ${b.name}, who speak ${this.cultures[b.culture].lang.name}.`, b.x, b.y, [p.id], mine.id, same ? 0 : 1);
       }
     }
     /* someone met for the first time is a stranger; how warm the first impression is depends on both */
@@ -831,7 +835,7 @@ export class Society {
     this.remember(mom, Mem.Birth, born[0].id, 0.9);
     if (dad && this.byId.has(dad.id)) this.remember(this.byId.get(dad.id)!, Mem.Birth, born[0].id, 0.8);
     const names = born.map(k => k.name).join(" and ");
-    this.event("birth", Bubble.Baby, `${mom.name}${dad ? ` and ${dad.name}` : ""} of the ${b.name} had ${born.length > 1 ? "twins" : born[0].sex === "f" ? "a daughter" : "a son"}, ${names}.`, mom.x, mom.y, [...born.map(k => k.id), mom.id], b.id);
+    this.event("birth", Bubble.Baby, `${mom.name}${dad ? ` and ${dad.name}` : ""} of the ${b.name} had ${born.length > 1 ? "twins" : born[0].sex === "f" ? "a daughter" : "a son"}, ${names}.`, mom.x, mom.y, [...born.map(k => k.id), mom.id], b.id, born.length > 1 ? 2 : 0);
     relayout(this, b);
     /* childbirth is dangerous */
     if (this.rng.chance(0.008 + (this.age(mom) > 38 ? 0.01 : 0) + (mom.health < 0.5 ? 0.02 : 0))) this.die(mom, "childbirth");
@@ -843,7 +847,7 @@ export class Society {
     this.byId.delete(p.id);
     this.people = this.people.filter(q => q !== p);
     if (b) b.members = b.members.filter(id => id !== p.id);
-    this.archive.set(p.id, { id: p.id, name: p.name, sex: p.sex, born: p.born, died: this.time, cause, mother: p.mother, father: p.father, partner: p.partner, children: p.children.slice(), band: p.band, mel: p.looks.mel });
+    this.archive.set(p.id, { id: p.id, name: p.name, sex: p.sex, born: p.born, died: this.time, x: p.x, y: p.y, cause, mother: p.mother, father: p.father, partner: p.partner, children: p.children.slice(), band: p.band, mel: p.looks.mel });
     this.stats.deaths++; this.stats.causes.set(cause, (this.stats.causes.get(cause) ?? 0) + 1);
     /* the family grieves */
     for (const id of [p.partner, p.mother, p.father, ...p.children]) { const q = this.byId.get(id); if (q) this.remember(q, Mem.Death, p.id, id === p.partner ? -0.9 : -0.8); }
@@ -880,10 +884,11 @@ export class Society {
     ms.sort((a, d) => (this.kin(c, d, 2) ? 1 : 0) - (this.kin(c, a, 2) ? 1 : 0) || d.traits[1] - a.traits[1]);
     return ms[0] ?? null;
   }
-  endBand(b: Band, how: string): void {
+  /** `announce` is false when something else (a merge) has already told the story. */
+  endBand(b: Band, how: string, announce = true): void {
     this.bands = this.bands.filter(o => o !== b); this.bandById.delete(b.id);
     for (const o of this.bands) o.met.delete(b.id);
-    this.event("band-end", Bubble.Sad, `The ${b.name} ${how}.`, b.x, b.y, [], b.id);
+    if (announce) this.event("band-end", Bubble.Sad, `The ${b.name} ${how}.`, b.x, b.y, [], b.id);
   }
 
   private couplesCheck(): void {
@@ -1002,7 +1007,7 @@ export class Society {
     for (const q of ms) { abandon(this, q); this.remember(q, Mem.Moved, lead.id, 0.1); }
     const dir = compass(spot[0] - b.x, spot[1] - b.y), why = storeDays(b) < 1 ? "the food around camp had run out" : "the hunting and gathering had grown poor";
     const known = lead.places.some(pl => Math.hypot(pl.x - spot[0], pl.y - spot[1]) < 20);
-    this.event("move", Bubble.Move, known ? `The ${b.name} packed up and set off ${dir}, because ${why}. ${lead.name} knew a better place, ${name}.` : `The ${b.name} were going hungry and set off ${dir} into land they did not know, led by ${lead.name}.`, b.x, b.y, [lead.id], b.id);
+    this.event("move", Bubble.Move, known ? `The ${b.name} packed up and set off ${dir}, because ${why}. ${lead.name} knew a better place, ${name}.` : `The ${b.name} were going hungry and set off ${dir} into land they did not know, led by ${lead.name}.`, b.x, b.y, [lead.id], b.id, known ? 0 : 1);
   }
 
   /** Called by the walkers when the last of a moving band has arrived, or long enough has passed. */
@@ -1119,7 +1124,7 @@ export class Society {
     for (const q of ms) { this.moveTo(q, pick); }
     this.stats.merges++;
     this.event("merge", Bubble.Home, `The last ${ms.length} of the ${b.name} went to live with the ${pick.name}.`, b.x, b.y, ms.map(q => q.id), pick.id);
-    if (this.bandById.has(b.id)) this.endBand(b, "joined another band");
+    if (this.bandById.has(b.id)) this.endBand(b, "joined another band", false);
     this.layoutHomes(pick);
   }
 

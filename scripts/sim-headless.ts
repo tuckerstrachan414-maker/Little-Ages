@@ -70,5 +70,7 @@ if (people) {
   }
   const ev = people.events.slice(-8);
   console.log("Lately:"); for (const e of ev) console.log(`  - ${e.text}`);
+  const big = people.events.slice().sort((a, b) => b.sig - a.sig || a.t - b.t).slice(0, 6);
+  console.log("Biggest moments (of the last " + people.events.length + " events):"); for (const e of big) console.log(`  - [${e.sig.toFixed(2)}] ${e.title}: ${e.text}`);
 }
 console.log(`simulated ${years} years in ${((performance.now() - tr) / 1000).toFixed(1)}s (${((performance.now() - t0) / 1000).toFixed(1)}s in all)`);

@@ -3,6 +3,7 @@ import type { BandDetail, Kin, PersonDetail } from "../../shared/protocol.ts";
 import { TRAITS } from "./genetics.ts";
 import { Goal, KNOW_NAMES, Mem, SKILL_NAMES, kinWord, type Person } from "./person.ts";
 import { storeFood } from "./band.ts";
+import { RIVAL_OP } from "./search.ts";
 import type { Society } from "./society.ts";
 
 /*
@@ -77,7 +78,7 @@ export function personDetail(s: Society, id: number): PersonDetail | null {
   const siblings = s.people.filter(q => q !== p && ((p.mother && q.mother === p.mother) || (p.father && q.father === p.father))).map(q => kin(s, p, q.id)!).filter(Boolean);
   const rels = [...p.rel].filter(([oid]) => oid !== p.partner && oid !== p.mother && oid !== p.father && !p.children.includes(oid) && s.byId.has(oid));
   const friends = rels.filter(([, r]) => r.op > 0.45).sort((a, c) => c[1].op - a[1].op).slice(0, 4).map(([oid]) => kin(s, p, oid, "friend")!).filter(Boolean);
-  const rivals = rels.filter(([, r]) => r.op < -0.2).sort((a, c) => a[1].op - c[1].op).slice(0, 3).map(([oid]) => kin(s, p, oid, "rival")!).filter(Boolean);
+  const rivals = rels.filter(([, r]) => r.op < RIVAL_OP).sort((a, c) => a[1].op - c[1].op).slice(0, 3).map(([oid]) => kin(s, p, oid, "rival")!).filter(Boolean);
   const memories = p.mem.slice().sort((a, c) => c.t - a.t).slice(0, 8).map(m => ({ text: memoryText(s, p, m), ago: (s.time - m.t) / DAY_SECONDS, v: m.v })).filter(m => m.text);
   const carrying = p.carryAmt > 0.2 ? `${p.carryAmt.toFixed(0)} ${["", "plant food", "meat", "fish", "firewood"][p.carryKind] ?? "things"}` : "";
   return {

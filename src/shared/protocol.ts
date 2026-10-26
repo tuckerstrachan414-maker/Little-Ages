@@ -1,5 +1,6 @@
 import type { MapMode, Season, SizeKey, WorldData } from "./types.ts";
 import type { CampSnap, ChronicleEvent, Look, Stage } from "./people.ts";
+import type { SearchItem } from "../sim/people/search.ts";
 
 /* Messages between the page and the simulation worker. */
 
@@ -9,7 +10,11 @@ export type ToWorker =
   | { type: "mode"; mode: MapMode }
   | { type: "settime"; time: number }
   /* the person or band the player has pinned a tag to (0 for none) */
-  | { type: "inspect"; person: number; band: number };
+  | { type: "inspect"; person: number; band: number }
+  /** look people up by name; answered with `results` carrying the same `seq` */
+  | { type: "search"; q: string; seq: number }
+  /** relationship threads for everyone in this stretch of map (off turns them off) */
+  | { type: "bonds"; on: boolean; view: { x0: number; y0: number; x1: number; y1: number } };
 
 export type FromWorker =
   | { type: "progress"; stage: number; pct: number }
@@ -19,6 +24,9 @@ export type FromWorker =
       people: Float32Array; peopleCount: number; camps: CampSnap[]; looks: Look[]; events: ChronicleEvent[]; pop: number }
   /* small game and fish per 16x16-tile patch, 0..255, sent once a game day */
   | { type: "fields"; gw: number; gh: number; cell: number; rabbits: Uint8Array; fish: Uint8Array; rabbitTotal: number; fishTotal: number }
+  | { type: "results"; seq: number; items: SearchItem[] }
+  /** triples of [person a, person b, bond] (see Bond) */
+  | { type: "bonds"; edges: Int32Array }
   | { type: "person"; detail: PersonDetail | null; id: number }
   | { type: "band"; detail: BandDetail | null; id: number };
 

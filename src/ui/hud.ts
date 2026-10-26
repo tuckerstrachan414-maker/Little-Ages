@@ -86,8 +86,8 @@ export function hud(world: WorldData, dock: Dock, cb: { onSpeed: (s: number) => 
   hint.textContent = touch ? "TAP SOMEONE TO PIN A TAG  /  PINCH TO ZOOM  /  H HIDES THE UI" : "CLICK SOMEONE TO PIN A TAG  /  SCROLL TO ZOOM  /  DRAG TO PAN  /  SPACE TO PAUSE  /  H HIDES THE UI";
   [time, modes, map].forEach(p => (p.style.borderImageSource = `url(${frame})`));
   dock.add("clock", time, { slot: "top-start", slide: "up" });
-  dock.add("modes", modes, { slot: "float", slide: "drop", label: "MODES", group: "drop", open: false, order: 2 });
-  dock.add("map", map, { slot: "bottom-end", slide: "right", label: "MAP", order: 4 });
+  dock.add("modes", modes, { slot: "float", slide: "drop", label: "MODES", group: "drop", open: false, order: 3 });
+  dock.add("map", map, { slot: "bottom-end", slide: "right", label: "MAP", order: 5 });
   dock.add("hint", hint, { slot: "float", slide: "down" });
   /* the hint has said its piece after a while; H or the toolbar still bring the panels back */
   setTimeout(() => dock.set("hint", false), 14000);
