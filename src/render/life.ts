@@ -2,6 +2,8 @@ import type { Camera } from "./camera.ts";
 import { birdSprite, rabbitSprite } from "./sprites/animals.ts";
 import { Flag, type WorldData } from "../shared/types.ts";
 import { hash2 } from "../shared/rng.ts";
+import type { DepthItem } from "./depth.ts";
+import { CREATURE_SCALE } from "./scale.ts";
 
 /*
   Small life drawn from the simulation's numbers. The worker keeps how many rabbits and
@@ -38,10 +40,10 @@ function* visibleCandidates(cam: Camera, wd: WorldData): Generator<[number, numb
   }
 }
 
-/** Rabbits on the visible land, from z >= 10. Uses game time, so they freeze when paused. */
-export function drawRabbits(ctx: CanvasRenderingContext2D, cam: Camera, wd: WorldData, f: Fields, t: number, season: number): void {
+/** Rabbits on the visible land, from z >= 10, queued for the depth-sorted pass. Uses game time, so they freeze when paused. */
+export function drawRabbits(ctx: CanvasRenderingContext2D, cam: Camera, wd: WorldData, f: Fields, t: number, season: number, out: DepthItem[]): void {
   const z = cam.z; if (z < 10) return;
-  const k = z / 8, seed = wd.seed + 501;
+  const k = z / 8 * CREATURE_SCALE, seed = wd.seed + 501;
   for (const [x, y] of visibleCandidates(cam, wd)) {
     const i = y * wd.w + x; if (wd.flags[i] & Flag.Water) continue;
     if (hash2(x, y, seed) > fieldAt(f, f.rabbits, x, y) * RABBIT_MAX) continue;
@@ -56,8 +58,7 @@ export function drawRabbits(ctx: CanvasRenderingContext2D, cam: Camera, wd: Worl
     const spr = rabbitSprite(hopping ? 1 : 0, white);
     const [sx, sy] = cam.toScreen(px, py - lift);
     const w = spr.width * k, hh = spr.height * k;
-    ctx.save(); ctx.translate(Math.round(sx), Math.round(sy)); if (facing < 0) ctx.scale(-1, 1);
-    ctx.drawImage(spr, Math.round(-w / 2), Math.round(-hh), Math.round(w), Math.round(hh)); ctx.restore();
+    out.push({ x: px, y: py, f: () => { ctx.save(); ctx.translate(Math.round(sx), Math.round(sy)); if (facing < 0) ctx.scale(-1, 1); ctx.drawImage(spr, Math.round(-w / 2), Math.round(-hh), Math.round(w), Math.round(hh)); ctx.restore(); } });
   }
 }
 
@@ -91,8 +92,8 @@ export function drawFish(ctx: CanvasRenderingContext2D, cam: Camera, wd: WorldDa
   }
 }
 
-/** Bird flocks: resting ones on the ground up close, flying ones with their shadows below. */
-export function drawBirds(ctx: CanvasRenderingContext2D, cam: Camera, cur: FlockSnap | null, prev: FlockSnap | null, a: number, now: number, flying: boolean): void {
+/** Bird flocks: resting ones on the ground up close (queued for the depth-sorted pass), flying ones drawn over everything with their shadows below. */
+export function drawBirds(ctx: CanvasRenderingContext2D, cam: Camera, cur: FlockSnap | null, prev: FlockSnap | null, a: number, now: number, flying: boolean, out?: DepthItem[]): void {
   const z = cam.z; if (!cur || z < 1.5) return;
   const v = cam.visible(), k = z >= 8 ? z / 8 : 1;   /* below true scale, birds stay a few pixels big so they read */
   const prevAt = new Map<number, number>(); if (prev) for (let j = 0; j < prev.n; j++) prevAt.set(prev.data[j * BIRD_STRIDE], j);
@@ -112,15 +113,18 @@ export function drawBirds(ctx: CanvasRenderingContext2D, cam: Camera, cur: Flock
       const frame = flying ? Math.floor(now / (kind === 1 ? 90 : kind === 0 ? 220 : 300) + m * 0.7) % 2 : Math.floor(now / 1400 + m * 0.37) % 5 === 0 ? 1 : 0;
       if (z < 4 && flying) { const [sx, sy] = cam.toScreen(mx, my - alt); ctx.fillStyle = kind === 2 ? "#f4f2ec" : "#2c2824"; ctx.fillRect(Math.round(sx), Math.round(sy), 1, 1); continue; }
       const spr = birdSprite(kind, frame, !flying), w = spr.width * k, hh = spr.height * k;
-      if (flying) {
-        /* shadow on the ground, offset away from the northwest sun */
-        const [gx, gy] = cam.toScreen(mx + 0.6, my + 0.4);
-        ctx.fillStyle = "rgba(12,14,24,0.22)"; ctx.fillRect(Math.round(gx - w * 0.3), Math.round(gy), Math.round(w * 0.6), Math.max(1, Math.round(k)));
-      }
-      const [sx, sy] = cam.toScreen(mx, my - (flying ? alt : 0));
       const facing = hx >= 0 ? 1 : -1;
-      ctx.save(); ctx.translate(Math.round(sx), Math.round(sy)); if (facing < 0 || (!flying && (m & 1))) ctx.scale(-1, 1);
-      ctx.drawImage(spr, Math.round(-w / 2), Math.round(-hh), Math.round(w), Math.round(hh)); ctx.restore();
+      const paint = () => {
+        if (flying) {
+          /* shadow on the ground, offset away from the northwest sun */
+          const [gx, gy] = cam.toScreen(mx + 0.6, my + 0.4);
+          ctx.fillStyle = "rgba(12,14,24,0.22)"; ctx.fillRect(Math.round(gx - w * 0.3), Math.round(gy), Math.round(w * 0.6), Math.max(1, Math.round(k)));
+        }
+        const [sx, sy] = cam.toScreen(mx, my - (flying ? alt : 0));
+        ctx.save(); ctx.translate(Math.round(sx), Math.round(sy)); if (facing < 0 || (!flying && (m & 1))) ctx.scale(-1, 1);
+        ctx.drawImage(spr, Math.round(-w / 2), Math.round(-hh), Math.round(w), Math.round(hh)); ctx.restore();
+      };
+      if (!flying && out) out.push({ x: mx, y: my, f: paint }); else paint();
     }
   }
 }

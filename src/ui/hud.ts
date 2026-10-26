@@ -1,5 +1,6 @@
 import { SIZES, SEASON_NAMES, BIOME_NAMES, TREE_NAMES, Flag, DAY_SECONDS, DAYS_PER_SEASON, DAYS_PER_YEAR, type SizeKey, type MapMode, type WorldData } from "../shared/types.ts";
 import { STAGES } from "../sim/world/gen.ts";
+import type { Dock } from "./dock.ts";
 
 /* The paper interface over the map: world creation, the clock, map modes, the tile card, the minimap. */
 
@@ -66,29 +67,34 @@ export function createScreen(root: HTMLElement, onCreate: (c: CreateChoice) => v
   };
 }
 
-export function hud(root: HTMLElement, world: WorldData, cb: { onSpeed: (s: number) => void; onMode: (m: MapMode) => void; onNew: () => void; onMinimap: (u: number, v: number) => void; onPeople: () => void }) {
+export function hud(world: WorldData, dock: Dock, cb: { onSpeed: (s: number) => void; onMode: (m: MapMode) => void; onNew: () => void; onMinimap: (u: number, v: number) => void }) {
   const frame = frameURL();
-  const time = el("div", "ui paper pill"); time.id = "hud-time";
+  const time = el("div", "paper pill clock"); time.id = "hud-time";
   const SPEEDS = [0, 1, 3, 10, 30, 100];
   time.innerHTML = `<span id="hud-date">...</span><div class="seg" role="group" aria-label="Speed">${SPEEDS.map(s => `<button type="button" data-speed="${s}" aria-pressed="${s === 1}" aria-label="${s ? s + " times speed" : "Pause"}">${s ? s + "X" : "II"}</button>`).join("")}</div>`;
-  const modes = el("div", "ui paper pill"); modes.id = "hud-modes";
+  const modes = el("div", "paper"); modes.id = "hud-modes";
   const MODES: [MapMode, string][] = [["terrain", "TERRAIN"], ["elevation", "HEIGHT"], ["temperature", "HEAT"], ["rainfall", "RAIN"], ["biomes", "BIOMES"]];
-  modes.innerHTML = `<button type="button" class="pbtn" id="people-btn">PEOPLE</button><div class="seg" role="group" aria-label="Map mode">${MODES.map(([m, l]) => `<button type="button" data-mode="${m}" aria-pressed="${m === "terrain"}">${l}</button>`).join("")}</div><button type="button" class="pbtn" id="new-world">NEW WORLD</button>`;
-  const map = el("div", "ui paper"); map.id = "hud-map";
+  modes.innerHTML = `<h3>Map mode</h3><div class="seg modes" role="group" aria-label="Map mode">${MODES.map(([m, l]) => `<button type="button" data-mode="${m}" aria-pressed="${m === "terrain"}">${l}</button>`).join("")}</div><div class="foot"><button type="button" class="pbtn" id="new-world">NEW WORLD</button></div>`;
+  const map = el("div", "paper"); map.id = "hud-map";
   const touch = window.matchMedia("(hover: none)").matches;
   const info = el("div", "land", touch ? "Tap the land to read it." : "Point at the land to read it.");
   const mw = Math.min(260, Math.round(260 * (world.w / world.h) / 2)), mh = Math.round(mw * world.h / world.w);
   const mini = el("canvas"); mini.width = mw; mini.height = mh; mini.setAttribute("aria-label", "Minimap. Click to jump there.");
   const cap = el("div", "cap", `<span>${world.size.toUpperCase()}</span><span id="hud-life"></span>`);
   map.append(info, mini, cap);
-  const hint = el("div", "ui"); hint.id = "hud-hint"; hint.textContent = "CLICK SOMEONE TO PIN A TAG  /  SCROLL TO ZOOM  /  DRAG TO PAN  /  SPACE TO PAUSE";
+  const hint = el("div", "hint"); hint.id = "hud-hint";
+  hint.textContent = touch ? "TAP SOMEONE TO PIN A TAG  /  PINCH TO ZOOM  /  H HIDES THE UI" : "CLICK SOMEONE TO PIN A TAG  /  SCROLL TO ZOOM  /  DRAG TO PAN  /  SPACE TO PAUSE  /  H HIDES THE UI";
   [time, modes, map].forEach(p => (p.style.borderImageSource = `url(${frame})`));
-  root.append(time, modes, map, hint);
-  modes.querySelector<HTMLButtonElement>("#people-btn")!.onclick = cb.onPeople;
+  dock.add("clock", time, { slot: "top-start", slide: "up" });
+  dock.add("modes", modes, { slot: "float", slide: "drop", label: "MODES", group: "drop", open: false, order: 2 });
+  dock.add("map", map, { slot: "bottom-end", slide: "right", label: "MAP", order: 4 });
+  dock.add("hint", hint, { slot: "float", slide: "down" });
+  /* the hint has said its piece after a while; H or the toolbar still bring the panels back */
+  setTimeout(() => dock.set("hint", false), 14000);
+  modes.querySelector<HTMLButtonElement>("#new-world")!.onclick = cb.onNew;
   time.querySelectorAll<HTMLButtonElement>("[data-speed]").forEach(b => b.onclick = () => setSpeed(+b.dataset.speed!));
   const setSpeed = (s: number) => { time.querySelectorAll("[data-speed]").forEach(o => o.setAttribute("aria-pressed", String(+(o as HTMLElement).dataset.speed! === s))); cb.onSpeed(s); };
   modes.querySelectorAll<HTMLButtonElement>("[data-mode]").forEach(b => b.onclick = () => { modes.querySelectorAll("[data-mode]").forEach(o => o.setAttribute("aria-pressed", String(o === b))); cb.onMode(b.dataset.mode as MapMode); });
-  modes.querySelector<HTMLButtonElement>("#new-world")!.onclick = cb.onNew;
   let dragging = false;
   const jump = (e: PointerEvent) => { const r = mini.getBoundingClientRect(); cb.onMinimap((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height); };
   mini.addEventListener("pointerdown", e => { dragging = true; mini.setPointerCapture(e.pointerId); jump(e); });

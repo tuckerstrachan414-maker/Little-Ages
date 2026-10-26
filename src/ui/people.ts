@@ -3,15 +3,18 @@ import type { CampSnap, ChronicleEvent, Look } from "../shared/people.ts";
 import { Anim, Bubble } from "../shared/people.ts";
 import { DAY_SECONDS, DAYS_PER_SEASON, DAYS_PER_YEAR, SEASON_NAMES } from "../shared/types.ts";
 import { personSprite, drawBubble } from "../render/sprites/people.ts";
+import { CREATURE_SCALE } from "../render/scale.ts";
 import { frameURL } from "./hud.ts";
 import type { Camera } from "../render/camera.ts";
+import type { Dock } from "./dock.ts";
 
 /*
   The people interface. Click anyone to pin a paper tag to them: a thread follows them as
   they walk, and the tag says who they are, what they are doing and why, how they feel,
-  who their family is and what is on their mind. Kin threads run to their family, friends
-  and rivals on the map. Click a camp for its band. The news feed in the corner tells of
-  births, deaths, couples, hunts and bands on the move; click a line to go there.
+  who their family is and what is on their mind. Hide the tag and a small chip keeps their
+  name by them, so you can keep following without the card. Kin threads run to their
+  family, friends and rivals on the map. Click a camp for its band. The news feed in the
+  corner tells of births, deaths, couples, hunts and bands on the move; click a line to go there.
 */
 
 const esc = (s: string) => s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]!));
@@ -54,10 +57,13 @@ export interface PeopleUICallbacks {
   follow: (on: boolean) => void;
 }
 
+const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
+
 export class PeopleUI {
   private news: HTMLElement;
   private list: HTMLElement;
   private tag: HTMLElement | null = null;
+  private chip: HTMLButtonElement;
   private svg: SVGSVGElement;
   private tab: "now" | "family" | "mind" = "now";
   private person: PersonDetail | null = null;
@@ -66,21 +72,30 @@ export class PeopleUI {
   private pinnedBand = 0;
   private threads = true;
   following = false;
+  /** whether the pinned card is showing; hidden, it leaves a chip with the name instead */
+  private tagOpen = true;
   private events: ChronicleEvent[] = [];
+  private camps: CampSnap[] = [];
   private time = 0;
   private renderedKey = "";
   private readonly cb: PeopleUICallbacks;
   private readonly root: HTMLElement;
+  private readonly dock: Dock;
 
-  constructor(root: HTMLElement, cb: PeopleUICallbacks) {
-    this.root = root; this.cb = cb;
-    this.news = el("div", "ui paper"); this.news.id = "hud-news";
+  constructor(root: HTMLElement, dock: Dock, cb: PeopleUICallbacks) {
+    this.root = root; this.dock = dock; this.cb = cb;
+    this.news = el("div", "paper"); this.news.id = "hud-news";
     this.news.style.borderImageSource = `url(${frameURL()})`;
     this.news.innerHTML = `<h3>News <small>from all the bands</small></h3><ol aria-live="polite"></ol>`;
-    this.list = el("div", "ui paper"); this.list.id = "hud-bands"; this.list.hidden = true;
+    this.list = el("div", "paper"); this.list.id = "hud-bands";
     this.list.style.borderImageSource = `url(${frameURL()})`;
     this.svg = document.createElementNS("http://www.w3.org/2000/svg", "svg"); this.svg.id = "threads"; this.svg.setAttribute("aria-hidden", "true");
-    root.append(this.svg, this.news, this.list);
+    this.chip = el("button", "paper chip off"); this.chip.type = "button"; this.chip.id = "hud-chip";
+    this.chip.title = "Show the card";
+    this.chip.onclick = () => this.showTag();
+    root.append(this.svg, this.chip);
+    dock.add("news", this.news, { slot: "bottom-start", slide: "left", label: "NEWS", order: 3 });
+    dock.add("bands", this.list, { slot: "float", slide: "drop", label: "PEOPLE", group: "drop", open: false, order: 1, onChange: on => { if (on) this.renderList(this.camps); } });
   }
 
   /* ---------------- news ---------------- */
@@ -104,9 +119,9 @@ export class PeopleUI {
   }
 
   /* ---------------- band list ---------------- */
-  toggleList(camps: CampSnap[]): void { this.list.hidden = !this.list.hidden; if (!this.list.hidden) this.renderList(camps); }
   renderList(camps: CampSnap[]): void {
-    if (this.list.hidden) return;
+    this.camps = camps;
+    if (!this.dock.isOpen("bands")) return;
     const total = camps.reduce((a, c) => a + c.pop, 0);
     this.list.innerHTML = `<h3>${camps.length} bands, ${total} people</h3>`;
     const ul = el("ul");
@@ -122,9 +137,20 @@ export class PeopleUI {
   get pinned(): { person: number; band: number } { return { person: this.pinnedId, band: this.pinnedBand }; }
   pin(person: number, band: number): void {
     this.pinnedId = person; this.pinnedBand = band; this.person = null; this.band = null; this.renderedKey = "";
-    if (!person && !band) { this.tag?.remove(); this.tag = null; this.svg.innerHTML = ""; this.following = false; this.cb.follow(false); return; }
-    if (!this.tag) { this.tag = el("div", "tag paper"); this.tag.style.borderImageSource = `url(${frameURL()})`; this.root.append(this.tag); }
+    if (!person && !band) { this.tag?.remove(); this.tag = null; this.svg.innerHTML = ""; this.following = false; this.cb.follow(false); this.tagOpen = true; this.chip.classList.add("off"); return; }
+    /* pinning someone always opens their card again, even if it was hidden */
+    this.tagOpen = true;
+    if (!this.tag) { this.tag = el("div", "paper tag"); this.tag.style.borderImageSource = `url(${frameURL()})`; this.root.append(this.tag); }
+    this.tag.classList.remove("collapsed");
     this.tag.innerHTML = `<p class="muted">Looking...</p>`;
+  }
+  /** Slide the card away, keeping the pin, the marker and any following. A chip with the name stays by them. */
+  hideTag(): void {
+    if (!this.tag) return;
+    this.tagOpen = false; this.tag.classList.add("collapsed");
+  }
+  showTag(): void {
+    this.tagOpen = true; this.tag?.classList.remove("collapsed");
   }
   setPerson(d: PersonDetail | null, id: number): void {
     if (id !== this.pinnedId) return;
@@ -135,6 +161,15 @@ export class PeopleUI {
     if (id !== this.pinnedBand) return;
     if (!d) { this.pin(0, 0); return; }
     this.band = d; this.render();
+  }
+
+  /** The buttons every card carries: hide it to a chip, or unpin it. */
+  private chrome(): string {
+    return `<div class="tools"><button class="hide" type="button" aria-label="Hide the card and keep following">HIDE</button><button class="x" type="button" aria-label="Unpin">×</button></div>`;
+  }
+  private bindChrome(t: HTMLElement): void {
+    t.querySelector<HTMLButtonElement>(".x")!.onclick = () => this.cb.pin(0, 0);
+    t.querySelector<HTMLButtonElement>(".hide")!.onclick = () => this.hideTag();
   }
 
   private render(): void {
@@ -149,13 +184,13 @@ export class PeopleUI {
     const role = d.respected ? `the one the ${d.band.name} listen to` : d.pregnant ? "expecting a child" : "";
     if (key !== this.renderedKey) {
       this.renderedKey = key;
-      t.innerHTML = `<button class="x" type="button" aria-label="Unpin">×</button>
+      t.innerHTML = `${this.chrome()}
         <div class="row head"><span class="pic"></span><div><div class="nm"></div><div class="sub"></div></div></div>
         <div class="tabs" role="tablist">${(["now", "family", "mind"] as const).map(k => `<button type="button" role="tab" data-tab="${k}" aria-selected="${this.tab === k}">${k === "now" ? "NOW" : k === "family" ? "FAMILY" : "MIND"}</button>`).join("")}</div>
         <div class="body"></div>
         <div class="chips"><button type="button" data-chip="follow" aria-pressed="${this.following}">Follow</button><button type="button" data-chip="threads" aria-pressed="${this.threads}">Kin threads</button></div>`;
       t.querySelector(".pic")!.append(portrait(d.look, 40));
-      t.querySelector<HTMLButtonElement>(".x")!.onclick = () => this.cb.pin(0, 0);
+      this.bindChrome(t);
       t.querySelectorAll<HTMLButtonElement>("[data-tab]").forEach(b => b.onclick = () => { this.tab = b.dataset.tab as "now"; this.renderedKey = ""; this.render(); });
       t.querySelectorAll<HTMLButtonElement>("[data-chip]").forEach(b => b.onclick = () => {
         if (b.dataset.chip === "follow") { this.following = !this.following; this.cb.follow(this.following); }
@@ -216,10 +251,10 @@ export class PeopleUI {
     const key = `b${d.id}|${d.pop}|${d.events.length}|${d.respected?.id}`;
     if (key !== this.renderedKey) {
       this.renderedKey = key;
-      t.innerHTML = `<button class="x" type="button" aria-label="Unpin">×</button>
+      t.innerHTML = `${this.chrome()}
         <div class="nm">The ${esc(d.name)}</div><div class="sub">A band of the ${esc(d.people)} people, camped at ${esc(d.camp)}</div>
         <p class="stats"></p><div class="needs"></div><h4>People</h4><div class="members"></div>${d.events.length ? `<h4>Lately</h4><ul class="mem">${d.events.map(e => `<li>${esc(e.text)} <em>${when(e.t, this.time)}</em></li>`).join("")}</ul>` : ""}`;
-      t.querySelector<HTMLButtonElement>(".x")!.onclick = () => this.cb.pin(0, 0);
+      this.bindChrome(t);
       const m = t.querySelector(".members")!;
       for (const p of d.members) { const b = el("button", "mb"); b.type = "button"; b.title = `${p.name}, ${p.age}`; b.append(portrait(p.look, 24)); b.onclick = () => this.cb.pin(p.id, 0); m.append(b); }
     }
@@ -227,26 +262,31 @@ export class PeopleUI {
     t.querySelector(".needs")!.innerHTML = bars([["FOOD STORE", Math.min(1, d.days / 4), "#c97a3a"], ["FIRE", d.fire, "#d0653a"]]);
   }
 
-  /** Every frame: keep the tag beside its person or camp, and draw the threads. */
+  /** Every frame: keep the tag beside its person or camp, or the chip when the card is hidden, and draw the threads. */
   frame(cam: Camera, pos: Map<number, [number, number]>, camps: CampSnap[], dpr: number): void {
-    const t = this.tag; if (!t) return;
     let wx = 0, wy = 0, have = false;
     if (this.pinnedId) { const p = pos.get(this.pinnedId); if (p) { [wx, wy] = p; have = true; } }
     else if (this.pinnedBand) { const c = camps.find(k => k.id === this.pinnedBand); if (c) { wx = c.x; wy = c.y; have = true; } }
     const W = window.innerWidth, H = window.innerHeight, mobile = W < 640;
+    const t = this.tag;
+    this.chip.classList.toggle("off", !have || this.tagOpen);
+    if (!have || !t) { this.svg.innerHTML = ""; return; }
     t.classList.toggle("docked", mobile);
-    if (!have) { this.svg.innerHTML = ""; return; }
     const [sx0, sy0] = cam.toScreen(wx, wy), px = sx0 / dpr, py = sy0 / dpr;
-    const headY = py - (cam.z >= 8 ? 17 * cam.z / 8 : 6) / dpr;
+    const headY = py - (cam.z >= 8 ? 17 * CREATURE_SCALE * cam.z / 8 : 6) / dpr;
     let s = "";
-    if (!mobile) {
-      const tw = t.offsetWidth, th = t.offsetHeight;
-      let tx = px + 46, ty = headY - th - 34;
-      if (tx + tw > W - 12) tx = px - tw - 46;
-      tx = Math.max(12, Math.min(W - tw - 12, tx)); ty = Math.max(64, Math.min(H - th - 12, ty));
-      t.style.left = `${Math.round(tx)}px`; t.style.top = `${Math.round(ty)}px`;
-      const ax = tx + tw / 2, ay = ty + th - 2, mx = (ax + px) / 2, my = Math.max(ay, headY) + 24;
-      if (px > -20 && px < W + 20 && py > -20 && py < H + 20) s += `<path d="M${ax},${ay} Q${mx},${my} ${px},${headY}" fill="none" stroke="#2b2418" stroke-width="4" stroke-linecap="round"/><path d="M${ax},${ay} Q${mx},${my} ${px},${headY}" fill="none" stroke="#f2e6c8" stroke-width="2" stroke-linecap="round"/>`;
+    if (this.tagOpen) {
+      if (!mobile) {
+        const tw = t.offsetWidth, th = t.offsetHeight;
+        let tx = px + 46, ty = headY - th - 34;
+        if (tx + tw > W - 12) tx = px - tw - 46;
+        tx = clamp(tx, 12, W - tw - 12); ty = clamp(ty, 64, H - th - 12);
+        t.style.left = `${Math.round(tx)}px`; t.style.top = `${Math.round(ty)}px`;
+        const ax = tx + tw / 2, ay = ty + th - 2, mx = (ax + px) / 2, my = Math.max(ay, headY) + 24;
+        if (px > -20 && px < W + 20 && py > -20 && py < H + 20) s += `<path d="M${ax},${ay} Q${mx},${my} ${px},${headY}" fill="none" stroke="#2b2418" stroke-width="4" stroke-linecap="round"/><path d="M${ax},${ay} Q${mx},${my} ${px},${headY}" fill="none" stroke="#f2e6c8" stroke-width="2" stroke-linecap="round"/>`;
+      }
+    } else {
+      this.placeChip(px, headY, W, H);
     }
     /* threads to family (green), partner (rose), friends (blue) and rivals (red, dashed) */
     const d = this.person;
@@ -256,7 +296,7 @@ export class PeopleUI {
       for (const [k, col, dash] of rel) {
         if (!k || !k.alive) continue;
         const q = pos.get(k.id); if (!q) continue;
-        const [qx0, qy0] = cam.toScreen(q[0], q[1]), qx = qx0 / dpr, qy = qy0 / dpr - (cam.z >= 8 ? 8 * cam.z / 8 : 3) / dpr;
+        const [qx0, qy0] = cam.toScreen(q[0], q[1]), qx = qx0 / dpr, qy = qy0 / dpr - (cam.z >= 8 ? 8 * CREATURE_SCALE * cam.z / 8 : 3) / dpr;
         if (qx < -40 || qx > W + 40 || qy < -40 || qy > H + 40) continue;
         s += `<line x1="${px}" y1="${headY}" x2="${qx}" y2="${qy}" stroke="#14110c" stroke-width="4" stroke-opacity=".5"${dash}/><line x1="${px}" y1="${headY}" x2="${qx}" y2="${qy}" stroke="${col}" stroke-width="2"${dash}/>`;
         s += `<rect x="${qx - 3}" y="${qy - 3}" width="6" height="6" fill="${col}" stroke="#14110c" stroke-width="1.5"/>`;
@@ -275,5 +315,16 @@ export class PeopleUI {
     }
     this.svg.innerHTML = s;
   }
+
+  /** The name chip beside the pinned person, kept on screen. */
+  private placeChip(px: number, headY: number, W: number, H: number): void {
+    const name = this.person ? this.person.name : this.band ? `The ${this.band.name}` : "";
+    if (this.chip.dataset.name !== name) { this.chip.dataset.name = name; this.chip.innerHTML = `<b></b><span>SHOW</span>`; this.chip.querySelector("b")!.textContent = name; }
+    const cw = this.chip.offsetWidth, ch = this.chip.offsetHeight;
+    this.chip.style.left = `${Math.round(clamp(px + 16, 8, W - cw - 8))}px`;
+    this.chip.style.top = `${Math.round(clamp(headY - ch - 12, 64, H - ch - 12))}px`;
+    this.chip.classList.toggle("following", this.following);
+  }
+
   setTime(t: number): void { this.time = t; }
 }
