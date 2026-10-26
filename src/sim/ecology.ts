@@ -40,7 +40,7 @@ const PLANT_K: Partial<Record<number, number>> = {
 /* trees and bushes that feed people: berries, acorns, beechnuts, dates and coconuts, baobab fruit, cattail roots */
 const FOOD_TREE: Partial<Record<number, number>> = { [Tree.BerryBush]: 3, [Tree.Oak]: 1.2, [Tree.Beech]: 1, [Tree.Palm]: 1.6, [Tree.Baobab]: 2, [Tree.Jungle]: 0.6, [Tree.Reeds]: 1.2, [Tree.Willow]: 0.2 };
 /** Food units (one person's food for one day) a patch holds when fully stocked. */
-export const PLANT_UNITS = 36, FISH_UNITS = 150, RABBIT_UNITS = 20;
+export const PLANT_UNITS = 120, FISH_UNITS = 150, RABBIT_UNITS = 20;
 
 export class Ecology {
   readonly gw: number; readonly gh: number;
@@ -85,7 +85,7 @@ export class Ecology {
 
   /* ---- people's food, in food units (a day's food for one person) ---- */
   /** What a gatherer could pick in the patch at (x, y), and picks `want` of it. Takes at most a share of what stands, so a patch is never stripped in one visit. */
-  gather(x: number, y: number, want: number): number { const c = this.cellOf(x, y), got = Math.min(want, this.plants[c] * PLANT_UNITS * 0.14); this.plants[c] -= got / PLANT_UNITS; return got; }
+  gather(x: number, y: number, want: number): number { const c = this.cellOf(x, y), got = Math.min(want, this.plants[c] * PLANT_UNITS * 0.06); this.plants[c] -= got / PLANT_UNITS; return got; }
   plantsAt(x: number, y: number): number { return this.plants[this.cellOf(x, y)] * PLANT_UNITS; }
   /** Fishing from the shore: the catch depends on how many fish the water holds and the fisher's skill. */
   catchFish(x: number, y: number, want: number): number { const c = this.cellOf(x, y), got = Math.min(want, this.fish[c] * FISH_UNITS * 0.03); this.fish[c] -= got / FISH_UNITS; return got; }
@@ -104,13 +104,13 @@ export class Ecology {
     }
     /* plant food grows through spring and summer and ripens in autumn; in the cold, winter
        buries what is left. The tropics have no winter to speak of. */
-    const growP = [0.1, 0.085, 0.07, 0.012][season];
+    const growP = [0.13, 0.11, 0.09, 0.014][season];
     for (let c = 0; c < this.plants.length; c++) {
       const K = this.plantK[c]; if (K <= 0) continue;
       const cold = this.coldness[c], tropic = cold < 0.32 ? 1 : 0;
       const g = season === 3 ? (tropic ? 0.06 : growP * Math.max(0, 1 - cold * 1.6)) : growP;
       let p = this.plants[c] + g * (K - this.plants[c]);
-      if (season === 3 && !tropic) p *= 1 - 0.035 * Math.min(1, cold * 1.5);
+      if (season === 3 && !tropic) p *= 1 - 0.015 * Math.min(1, cold * 1.5);
       this.plants[c] = Math.max(0.02 * K, p);
     }
     const growR = [0.09, 0.05, 0.01, 0][season], growF = [0.05, 0.04, 0.015, 0.004][season];

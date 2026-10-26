@@ -68,13 +68,16 @@ export class Walker {
     const x1 = Math.min(W - 2, Math.ceil(Math.max(sx, gx)) + m), y1 = Math.min(H - 2, Math.ceil(Math.max(sy, gy)) + m);
     const bw = x1 - x0 + 1, bh = y1 - y0 + 1, N = bw * bh;
     if (bw > 320 || bh > 320) return null;
-    if (this.gS.length < N) { this.gS = new Float32Array(N); this.from = new Int32Array(N); this.stamp = new Uint32Array(N); this.heap = new Int32Array(N); this.hf = new Float32Array(N); }
+    if (this.gS.length < N) { this.gS = new Float32Array(N); this.from = new Int32Array(N); this.stamp = new Uint32Array(N); }
+    /* tiles can be queued more than once (when a shorter way to them turns up), so the queue needs room to spare */
+    const cap = Math.min(budget * 8 + 64, N * 8);
+    if (this.heap.length < cap) { this.heap = new Int32Array(cap); this.hf = new Float32Array(cap); }
     const gen = ++this.gen;
     const loc = (x: number, y: number) => (y - y0) * bw + (x - x0);
     const sxi = Math.floor(sx), syi = Math.floor(sy), gxi = Math.floor(gx), gyi = Math.floor(gy), goal = loc(gxi, gyi);
     const hOf = (x: number, y: number) => { const ax = Math.abs(x - gxi), ay = Math.abs(y - gyi); return Math.max(ax, ay) + 0.414 * Math.min(ax, ay); };
     let hn = 0;
-    const push = (n: number, f: number) => { let i = hn++; while (i > 0) { const p = (i - 1) >> 1; if (this.hf[p] <= f) break; this.heap[i] = this.heap[p]; this.hf[i] = this.hf[p]; i = p; } this.heap[i] = n; this.hf[i] = f; };
+    const push = (n: number, f: number) => { if (hn >= this.heap.length) return; let i = hn++; while (i > 0) { const p = (i - 1) >> 1; if (this.hf[p] <= f) break; this.heap[i] = this.heap[p]; this.hf[i] = this.hf[p]; i = p; } this.heap[i] = n; this.hf[i] = f; };
     const pop = () => { const top = this.heap[0]; const ln = this.heap[--hn], lf = this.hf[hn]; let i = 0; for (;;) { let c = 2 * i + 1; if (c >= hn) break; if (c + 1 < hn && this.hf[c + 1] < this.hf[c]) c++; if (this.hf[c] >= lf) break; this.heap[i] = this.heap[c]; this.hf[i] = this.hf[c]; i = c; } this.heap[i] = ln; this.hf[i] = lf; return top; };
     const s0 = loc(sxi, syi); this.stamp[s0] = gen; this.gS[s0] = 0; this.from[s0] = -1; push(s0, hOf(sxi, syi));
     let found = false, seen = 0;
@@ -95,9 +98,10 @@ export class Walker {
     }
     if (!found) return null;
     /* walk back, then pull the string tight so routes are straight where they can be */
+    const chain: number[] = [];
+    for (let n = goal; n >= 0; n = this.from[n]) chain.push(n);
     const tiles: number[] = [];
-    for (let n = goal; n >= 0; n = this.from[n]) tiles.push((n % bw) + x0 + 0.5, ((n / bw) | 0) + y0 + 0.5);
-    tiles.reverse();
+    for (let k = chain.length - 1; k >= 0; k--) tiles.push((chain[k] % bw) + x0 + 0.5, ((chain[k] / bw) | 0) + y0 + 0.5);
     const pts: number[] = [];
     let ax = sx, ay = sy, k = 0;
     const last = tiles.length / 2 - 1;

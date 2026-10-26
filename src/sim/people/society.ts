@@ -1,14 +1,14 @@
 import { Biome, Flag, Species, DAY_SECONDS, DAYS_PER_YEAR, SPECIES_NAMES, type WorldData } from "../../shared/types.ts";
 import { Rng } from "../../shared/rng.ts";
 import { Anim, Bubble, PERSON_STRIDE, PFlag, type CampSnap, type ChronicleEvent, type Look, type Stage, type Wear } from "../../shared/people.ts";
-import type { Ecology } from "../ecology.ts";
+import { PLANT_UNITS, type Ecology } from "../ecology.ts";
 import type { Wildlife, Herd } from "../wildlife.ts";
 import { ancestryFor, founderGenome, inherit, looksOf, temperament, hairAt, idealMel, skinWord, hairWord, curlWord, heightCm, heightWord, buildWord, type Ancestry, type Genome } from "./genetics.ts";
 import { makeCulture, pickStyle, type Culture } from "./culture.ts";
 import { personName, placeName } from "./language.ts";
 import { Walker } from "./walk.ts";
 import { type Band, homeOf, storeDays, storeFood, siteValue, estimate } from "./band.ts";
-import { Goal, Know, Mem, Place, YEAR, ageOf, stageOf, type Archived, type KnownPlace, type Person, type Rel } from "./person.ts";
+import { Goal, Know, Mem, Place, St, YEAR, ageOf, stageOf, type Archived, type KnownPlace, type Person, type Rel } from "./person.ts";
 import { decide, isInterruptible } from "./mind.ts";
 import { doStep, abandon } from "./doing.ts";
 
@@ -23,6 +23,8 @@ import { doStep, abandon } from "./doing.ts";
 export interface StartOptions { start: "bands" | "cradle"; bands: number; }
 export interface Carcass { id: number; x: number; y: number; sp: number; meat: number; hides: number; t: number; by: number; }
 
+/** What a good place of each kind is worth, to compare a berry patch with a herd. */
+const PLACE_TYPICAL = [1, 4, 4, 10, 2, 8, 6, 1, 3];
 export const FOOD_DAY: Record<Stage, number> = { baby: 0, toddler: 0.45, child: 0.65, teen: 0.95, adult: 1, elder: 0.8 };
 /** Meat on one animal, in days of food for one person. */
 export const MEAT = [25, 100, 400, 60, 0, 60];
@@ -148,35 +150,46 @@ export class Society {
       cands.push({ x, y, s: hab * (0.4 + this.foodAround(x, y)) * mild });
     }
     cands.sort((a, b) => b.s - a.s);
-    const chosen: { x: number; y: number }[] = [];
+    /* a people is a few bands of the same tongue living near enough to visit and marry */
+    const homes: { x: number; y: number; bands: number }[] = [];
     if (this.start.start === "cradle") {
-      /* one homeland: the best warm, well-watered spot, with every band settled around it */
+      /* one homeland: the best warm, well-watered spot, with every band of the one people around it */
       const home = cands.find(c => this.climateAt(c.x, c.y).annual > 12) ?? cands[0];
-      chosen.push(home);
-      for (const c of cands) {
-        if (chosen.length >= n) break;
-        const d = Math.hypot(c.x - home.x, c.y - home.y);
-        if (d > 110 || chosen.some(o => Math.hypot(o.x - c.x, o.y - c.y) < 18)) continue;
-        if (this.walker.route(home.x, home.y, c.x, c.y, 20000) === null) continue;
-        chosen.push(c);
-      }
+      homes.push({ ...home, bands: n });
     } else {
-      /* scattered: as far apart as good land allows, so bands start on different shores and continents */
+      /* scattered: peoples as far apart as good land allows, on different shores and continents */
+      const peoples = Math.max(1, Math.ceil(n / 2));
       const top = cands.slice(0, Math.max(60, Math.floor(cands.length * 0.6)));
-      chosen.push(top[0]);
-      while (chosen.length < n && chosen.length < top.length) {
+      homes.push({ ...top[0], bands: 0 });
+      while (homes.length < peoples && homes.length < top.length) {
         let best = top[0], bv = -1;
-        for (const c of top) { let md = 1e9; for (const o of chosen) md = Math.min(md, Math.hypot(c.x - o.x, (c.y - o.y) * 1.3)); const v = Math.pow(c.s, 0.6) * Math.min(md, w.w / 3); if (v > bv) { bv = v; best = c; } }
-        if (bv <= 0) break; chosen.push(best);
+        for (const c of top) { let md = 1e9; for (const o of homes) md = Math.min(md, Math.hypot(c.x - o.x, (c.y - o.y) * 1.3)); const v = Math.pow(c.s, 0.6) * Math.min(md, w.w / 3); if (v > bv) { bv = v; best = c; } }
+        if (bv <= 0) break; homes.push({ ...best, bands: 0 });
       }
+      for (let k = 0; k < n; k++) homes[k % homes.length].bands++;
     }
-    const cradleAnc = this.start.start === "cradle" && chosen.length ? this.ancestryAt(chosen[0].x, chosen[0].y) : null;
-    for (let b = 0; b < chosen.length; b++) {
-      const spot = this.campSpot(chosen[b].x, chosen[b].y, 6) ?? [chosen[b].x + 0.5, chosen[b].y + 0.5];
-      const cult = this.start.start === "cradle" ? 0 : b;
-      if (!this.cultures[cult]) this.cultures[cult] = makeCulture(cult, seed);
-      this.foundBand(spot[0], spot[1], cult, cradleAnc ?? this.ancestryAt(spot[0], spot[1]), rng.int(18, 28));
-    }
+    homes.forEach((home, h) => {
+      const cult = h;
+      this.cultures[cult] = makeCulture(cult, seed);
+      const anc = this.ancestryAt(home.x, home.y);
+      const sites: { x: number; y: number }[] = [home];
+      for (const c of cands) {
+        if (sites.length >= home.bands) break;
+        const d = Math.hypot(c.x - home.x, c.y - home.y);
+        if (d > (home.bands > 3 ? 110 : 60) || this.bands.some(b => Math.hypot(b.x - c.x, b.y - c.y) < 18) || sites.some(o => Math.hypot(o.x - c.x, o.y - c.y) < 18)) continue;
+        if (this.walker.route(home.x, home.y, c.x, c.y, 20000) === null) continue;
+        sites.push(c);
+      }
+      for (const site of sites) {
+        const spot = this.campSpot(site.x, site.y, 6) ?? [site.x + 0.5, site.y + 0.5];
+        /* richer land feeds a bigger band */
+        const size = Math.round(14 + Math.min(1, this.foodAround(spot[0], spot[1])) * 14 + rng.range(-3, 3));
+        this.foundBand(spot[0], spot[1], cult, anc, size);
+      }
+      /* the bands of a people know each other and where they camp */
+      const mine = this.bands.filter(b => b.culture === cult);
+      for (const a of mine) for (const b of mine) if (a !== b) { a.met.add(b.id); for (const id of a.members) { const p = this.byId.get(id)!; if (this.age(p) >= 10) this.learnPlace(p, Place.Camp, b.x, b.y, 1, b.id, 0); } }
+    });
   }
   private ancestryAt(x: number, y: number): Ancestry {
     const c = this.climateAt(x, y);
@@ -187,7 +200,7 @@ export class Society {
     const id = this.bands.length ? Math.max(...this.bands.map(b => b.id)) + 1 : 1;
     const name = placeName(this.cultures[culture].lang, this.rng);
     const b: Band = { id, name, culture, color: BAND_COLORS[(id - 1) % BAND_COLORS.length], x, y, fire: 0.8, store: { plant: 0, meat: 0, fish: 0, wood: 2, hides: 0 },
-      members: [], founded: this.time, movedAt: this.time, moves: 0, homes: new Map(), busy: new Map(), respected: 0, parent, met: new Set(), appetite: 1, moving: null, siteName: placeName(this.cultures[culture].lang, this.rng) };
+      members: [], founded: this.time, movedAt: this.time, moves: 0, homes: new Map(), busy: new Map(), respected: 0, parent, met: new Set(), appetite: 1, moving: null, siteName: placeName(this.cultures[culture].lang, this.rng), water: [x, y], past: [], today: { plant: 0, meat: 0, fish: 0, eaten: 0 }, yesterday: { plant: 0, meat: 0, fish: 0, eaten: 0 } };
     this.bands.push(b); this.bandById.set(id, b);
     return b;
   }
@@ -196,7 +209,7 @@ export class Society {
     const rng = this.rng, b = this.newBand(x, y, culture, 0), now = this.time;
     const clim = this.climateAt(x, y);
     const add = (sex: "f" | "m", age: number, g: Genome, mother = 0, father = 0) => this.makePerson(b, sex, now - age * YEAR - rng.next() * YEAR * 0.5, g, mother, father, clim.winter);
-    /* elders, their grown children with partners from other families, and their grandchildren */
+    /* several families: some led by an old couple with grown children and grandchildren, some young couples with their children */
     const couple = (ageF: number) => {
       const f = add("f", ageF, founderGenome(anc, rng)), m = add("m", ageF + rng.int(-3, 6), founderGenome(anc, rng));
       this.pair(f, m, false); return [f, m] as const;
@@ -209,23 +222,26 @@ export class Society {
       }
       return out;
     };
-    const [gma, gpa] = couple(rng.int(54, 64));
-    const grown = kidsOf(gma, gpa, this.age(gma)).filter(k => this.age(k) >= 18);
-    for (const k of grown) {
-      const spouse = add(k.sex === "f" ? "m" : "f", Math.max(17, this.age(k) + rng.int(-4, 4)), founderGenome(anc, rng));
-      const [f, m] = k.sex === "f" ? [k, spouse] : [spouse, k];
-      this.pair(f, m, false); kidsOf(f, m, this.age(f));
-    }
-    while (b.members.length < size) {
-      const ageF = rng.int(19, 44), [f, m] = couple(ageF); kidsOf(f, m, ageF);
-      if (rng.chance(0.25)) add(rng.chance(0.5) ? "f" : "m", rng.int(16, 24), founderGenome(anc, rng));
+    while (b.members.length < size - 1) {
+      if (size - b.members.length >= 9 && rng.chance(0.4)) {
+        const [gma, gpa] = couple(rng.int(52, 64));
+        for (const k of kidsOf(gma, gpa, this.age(gma))) {
+          if (this.age(k) < 18 || rng.chance(0.25) || b.members.length >= size) continue;
+          const spouse = add(k.sex === "f" ? "m" : "f", Math.max(17, this.age(k) + rng.int(-4, 4)), founderGenome(anc, rng));
+          const [f, m] = k.sex === "f" ? [k, spouse] : [spouse, k];
+          this.pair(f, m, false); kidsOf(f, m, this.age(f));
+        }
+      } else {
+        const ageF = rng.int(19, 44), [f, m] = couple(ageF); kidsOf(f, m, ageF);
+      }
+      if (rng.chance(0.3)) add(rng.chance(0.5) ? "f" : "m", rng.int(16, 24), founderGenome(anc, rng));
     }
     /* everyone in a band knows everyone, families best */
     const ms = b.members.map(id => this.byId.get(id)!);
     for (const p of ms) for (const q of ms) if (p !== q) { const r = this.rel(p, q.id); r.fam = 0.8; r.op = 0.12 + rng.next() * 0.25 + (this.kin(p, q, 1) ? 0.45 : 0); }
     this.settleCamp(b, x, y, true);
     b.store.plant = b.members.length * 1.5;
-    for (const p of ms) this.learnSurroundings(p, 40);
+    for (const p of ms) this.learnSurroundings(p, 30);
     b.appetite = ms.reduce((a, q) => a + FOOD_DAY[this.stage(q)], 0);
   }
 
@@ -247,12 +263,12 @@ export class Society {
       skills: [0, 0, 0, 0].map(() => adult * rng.range(0.15, 0.75)), knows: age >= 12 ? Know.Fire | Know.Spear | Know.Fishing | Know.Hides | Know.Snares : age >= 8 ? Know.Fire | Know.Snares : 0,
       mother, father, partner: 0, children: [], guardian: 0, band: b.id,
       x: b.x, y: b.y, dir: 0,
-      food: 1.3 + rng.next() * 0.4, water: 0.7 + rng.next() * 0.3, rest: 0.7 + rng.next() * 0.3, warmth: 0.9, company: 0.7, fear: 0, health: 1, mood: 0.3,
-      childHunger: 0, injury: 0, sick: 0, pregnantBy: 0, due: 0, fatherGenome: null, baby: 0, carrier: 0,
+      food: 1.3 + rng.next() * 0.4, condition: 1.2, dayFood: 0, water: 0.7 + rng.next() * 0.3, rest: 0.7 + rng.next() * 0.3, warmth: 0.9, company: 0.7, fear: 0, health: 1, mood: 0.3, skin: age >= 12 ? 1 : 0,
+      childHunger: 0, injury: 0, sick: 0, harm: [0, 0, 0, 0, 0], pregnantBy: 0, due: 0, fatherGenome: null, baby: 0, carrier: 0,
       carryKind: 0, carryAmt: 0, hides: 0,
       spear: age >= 15 ? rng.range(0.5, 1) : 0,
       clothes: winterC < -2 ? 2 : winterC < 12 ? 1 : 0, clothesWear: rng.range(0.6, 1),
-      prestige: adult * rng.range(0, 0.6), gave: 0.5, took: 0.5, longing: 0,
+      prestige: adult * rng.range(0, 0.6), gave: 0.5, took: 0.5, gaveToday: 0, longing: 0,
       goal: Goal.None, plan: [], si: 0, why: "", whyAt: 0, path: null, pi: 0, anim: Anim.Idle, bubble: Bubble.None, bubbleUntil: 0,
       rel: new Map(), mem: [], places: [], moveWish: 0, leaveWish: 0, tripYield: 2.5, nextLook: 0, nextDanger: 0, party: 0,
       style: "short", lookKey: "", learning: -1,
@@ -307,6 +323,8 @@ export class Society {
   /** Sets a band's camp and lays out a shelter for each household around the fire. */
   settleCamp(b: Band, x: number, y: number, first = false): void {
     b.x = x; b.y = y;
+    b.past.push([x, y]); if (b.past.length > 8) b.past.shift();
+    b.water = this.waterNear(x, y, 8) ?? [x, y];
     if (!first) { b.fire = Math.min(b.fire, 0.3); b.movedAt = this.time; b.moves++; }
     this.layoutHomes(b);
     for (const id of b.members) { const p = this.byId.get(id); if (p) this.learnPlace(p, Place.Camp, x, y, 1, b.id, 0); }
@@ -330,8 +348,17 @@ export class Society {
   homeSpot(p: Person): [number, number] {
     const b = this.band(p), h = b.homes.get(homeOf(p, this.byId, this.time));
     const j = (p.id * 0.618) % 1;
-    if (h) return [h[0] + (j - 0.5) * 1.2, h[1] + 0.6 + ((p.id * 0.37) % 1) * 0.5];
-    return [b.x + Math.cos(p.id) * 2.2, b.y + Math.sin(p.id) * 1.8];
+    if (h) return this.dryNear(h[0] + (j - 0.5) * 1.2, h[1] + 0.6 + ((p.id * 0.37) % 1) * 0.5);
+    return this.dryNear(b.x + Math.cos(p.id) * 2.2, b.y + Math.sin(p.id) * 1.8);
+  }
+  /** The spot itself if it is dry ground, else the nearest dry ground around it. */
+  dryNear(x: number, y: number, r = 4): [number, number] {
+    if (this.walker.dry(x, y)) return [x, y];
+    for (let d = 1; d <= r; d++) for (let k = 0; k < 8 * d; k++) {
+      const a = k / (8 * d) * Math.PI * 2, tx = x + Math.cos(a) * d, ty = y + Math.sin(a) * d;
+      if (this.walker.dry(tx, ty)) return [Math.floor(tx) + 0.5, Math.floor(ty) + 0.5];
+    }
+    return [x, y];
   }
   fireSpot(p: Person): [number, number] {
     const b = this.band(p), a = (p.id * 2.399) % (Math.PI * 2), r = 1.1 + ((p.id * 0.13) % 1) * 0.6;
@@ -348,10 +375,17 @@ export class Society {
     const old = p.places.find(same);
     if (old) { if (t >= old.t) { old.x = x; old.y = y; old.q = q; old.t = t; old.src = src; if (sp !== undefined) old.sp = sp; } return; }
     p.places.push({ k, x, y, q, t, src, ref, sp });
-    if (p.places.length > 30) {
-      /* forget the least useful: stale game first, then whatever is poorest and oldest */
+    if (p.places.length > 40) {
+      /* forget the least useful: far from where they live, poor for its kind, and long ago */
+      const camp = this.bandById.get(p.band), now = this.time;
       let worst = -1, wv = 1e9;
-      p.places.forEach((pl, i) => { if (pl.k === Place.Camp && pl.ref === p.band) return; const v = (pl.k === Place.Water ? 6 : estimate(pl, this.time) + 1) - (this.time - pl.t) / 600; if (v < wv) { wv = v; worst = i; } });
+      p.places.forEach((pl, i) => {
+        if (pl.k === Place.Camp && pl.ref === p.band) return;
+        const d = camp ? Math.hypot(pl.x - camp.x, pl.y - camp.y) : 0, near = 1 / (1 + d / 25);
+        const worth = pl.k === Place.Water || pl.k === Place.Camp ? 1.5 : Math.min(2, estimate(pl, now) / PLACE_TYPICAL[pl.k]);
+        const v = worth * near - (now - pl.t) / (DAY_SECONDS * 40);
+        if (v < wv) { wv = v; worst = i; }
+      });
       if (worst >= 0) p.places.splice(worst, 1);
     }
   }
@@ -364,7 +398,7 @@ export class Society {
       const x = cx + dx * 16, y = cy + dy * 16; if (x < 2 || y < 2 || x >= this.w.w - 2 || y >= this.w.h - 2) continue;
       if (Math.hypot(dx, dy) * 16 > radius + 8) continue;
       const c = e.cell(x, y), gx = (Math.floor(x / 16) + 0.5) * 16, gy = (Math.floor(y / 16) + 0.5) * 16;
-      if (e.plants[c] * 36 > 6) { const spot = this.foodSpot(gx, gy, "plant"); if (spot) this.learnPlace(p, Place.Plants, spot[0], spot[1], e.plants[c] * 36 * 0.5, 0, 0); }
+      if (e.plants[c] * PLANT_UNITS > 10) { const spot = this.foodSpot(gx, gy, "plant"); if (spot) this.learnPlace(p, Place.Plants, spot[0], spot[1], e.plants[c] * PLANT_UNITS * 0.06, 0, 0); }
       if (e.fish[c] * 150 > 8) { const spot = this.foodSpot(gx, gy, "fish"); if (spot) this.learnPlace(p, Place.Fish, spot[0], spot[1], Math.min(20, e.fish[c] * 150 * 0.1), 0, 0); }
       if (e.rabbits[c] * 20 > 4) { const spot = this.foodSpot(gx, gy, "rabbit"); if (spot) this.learnPlace(p, Place.Rabbits, spot[0], spot[1], e.rabbits[c] * 20 * 0.3, 0, 0); }
     }
@@ -415,6 +449,8 @@ export class Society {
       this.body(p, dt);
       if (!this.byId.has(p.id)) continue;
       if (p.carrier) { this.carried(p); continue; }
+      /* never left standing in a lake: step out to the nearest dry ground */
+      if (!this.walker.passable(p.x, p.y)) { [p.x, p.y] = this.dryNear(p.x, p.y, 6); p.path = null; }
       if (time >= p.nextDanger) { p.nextDanger = time + 0.8 + (p.id % 7) * 0.05; this.danger(p); }
       if (time >= p.nextLook) { p.nextLook = time + 2.5 + (p.id % 11) * 0.1; this.look(p); }
       if (p.si >= p.plan.length || (isInterruptible(p.goal) && time - p.whyAt > 7) || this.urgent(p)) decide(this, p);
@@ -425,7 +461,8 @@ export class Society {
       /* the band has arrived when most of it is there, or after three days whatever the stragglers do */
       const m = b.moving; let there = 0;
       for (const id of b.members) { const q = this.byId.get(id); if (q && Math.hypot(q.x - m.x, q.y - m.y) < 5) there++; }
-      if (there >= b.members.length * 0.6 || time - m.since > DAY_SECONDS * 3) this.arrive(b);
+      const lead = this.byId.get(m.by), leadThere = !!lead && lead.band === b.id && Math.hypot(lead.x - m.x, lead.y - m.y) < 5;
+      if (there >= b.members.length * 0.5 || leadThere || time - m.since > DAY_SECONDS * 2) this.arrive(b);
     }
     if (day !== this.lastDay) { this.lastDay = day; this.day = day; this.daily(); }
   }
@@ -454,11 +491,17 @@ export class Society {
 
   /** Needs that cannot wait for the current task to finish. */
   private urgent(p: Person): boolean {
+    if (p.goal === Goal.Drink) return false;
+    if (p.water < (p.goal === Goal.Sick || p.goal === Goal.Migrate ? 0.1 : 0.2)) return true;
     if (p.goal === Goal.Flee || p.goal === Goal.Migrate || p.goal === Goal.Sick) return false;
-    if (p.water < 0.12 && p.goal !== Goal.Drink) return true;
     if (p.warmth < 0.22 && p.goal !== Goal.Warm && p.goal !== Goal.Sleep && this.band(p).fire > 0.05) return true;
     if (p.food < 0.12 && p.carryAmt > 0 && p.carryKind !== 4 && p.goal !== Goal.Eat) return true;
     if (p.sick > 0.5) return true;
+    /* night falls: whoever is still out working heads home */
+    if (this.sun < 0.08 && (p.goal === Goal.Gather || p.goal === Goal.Fish || p.goal === Goal.Snare || p.goal === Goal.Wood || p.goal === Goal.Explore || p.goal === Goal.Haul || p.goal === Goal.Talk || p.goal === Goal.Play || p.goal === Goal.Follow)) {
+      const st = p.plan[p.si]; return !(st && st.k === St.Drop) && !(st && st.k === St.Go && p.si === p.plan.length - 2);
+    }
+    if (this.sun < 0.08 && p.goal === Goal.Hunt && this.time - p.whyAt > 30) return true;
     return false;
   }
 
@@ -480,8 +523,18 @@ export class Society {
       if (p.warmth < 0.5) burn += 0.25;
       p.food = Math.max(0, p.food - burn * days);
     }
-    p.water = Math.max(0, p.water - (asleep ? 1.1 : 2.2) * (T > 28 ? 1.6 : T < 0 ? 0.75 : 1) * (working || running ? 1.3 : 1) * (st === "baby" ? 0 : 1) * days);
-    p.rest = Math.max(0, Math.min(1, p.rest + (asleep ? 0.045 : p.anim === Anim.Sit || p.anim === Anim.HoldBaby || p.anim === Anim.Sick ? 0.006 : -0.026 * (running ? 1.6 : 1)) * dt));
+    p.dayFood += Math.min(1.5, p.food) * days;
+    /* the sick are brought food where they lie */
+    if (p.goal === Goal.Sick && p.food < 0.9 && this.atCamp(p, 6)) this.eatFromStore(p, b, 1.2 * days);
+    p.water = Math.max(0, p.water - (asleep ? 0.3 : 1.25) * (T > 28 ? 1.35 : T < 0 ? 0.75 : 1) * (working || running ? 1.15 : 1) * days);
+    /* a sip from the water skin when thirsty and away from water */
+    if (p.water < 0.62 && p.skin > 0) { const t = Math.min(p.skin, (0.9 - p.water) / 0.7); p.skin -= t; p.water += t * 0.7; }
+    /* little ones drink from the skins and gourds kept at camp, or from whoever carries them */
+    if ((st === "baby" || st === "toddler") && p.water < 0.8) {
+      if (this.atCamp(p, 5) || p.carrier) p.water = 0.8;
+      else for (const id of [p.mother, p.guardian, p.father]) { const m = this.byId.get(id); if (m && m.skin > 0.05 && Math.hypot(m.x - p.x, m.y - p.y) < 3) { m.skin -= 0.05; p.water = 0.8; break; } }
+    }
+    p.rest = Math.max(0, Math.min(1, p.rest + (asleep ? 0.06 : p.anim === Anim.Sit || p.anim === Anim.HoldBaby || p.anim === Anim.Sick ? 0.006 : -0.021 * (running ? 1.5 : 1)) * dt));
     /* warmth: clothes set how cold it can be before you feel it; a fire and a shelter help */
     const fireNear = b.fire > 0.04 && Math.hypot(p.x - b.x, p.y - b.y) < 3, home = asleep && this.atCamp(p, 7);
     const comfort = 16 - 8 * this.clothesNow(p) - (moving || working || running ? 5 : 0) - (st === "baby" ? 8 : 0);
@@ -489,18 +542,27 @@ export class Society {
     const target = Math.max(0, Math.min(1, 0.96 - Math.max(0, comfort - felt) / 16));
     p.warmth += (target - p.warmth) * Math.min(1, dt * (target > p.warmth ? 0.12 : 0.05));
     /* company: being around people you like fills it, being alone drains it */
-    if (!asleep && st !== "baby") p.company = Math.max(0, p.company - 0.7 * days);
+    if (!asleep && st !== "baby") {
+      let friends = 0;
+      if (((this.time * 2) | 0) % 4 === p.id % 4) for (const q of this.near(p.x, p.y, 4)) if (q !== p && this.op(p, q.id) > 0.1) { friends++; if (friends > 1) break; }
+      p.company = Math.max(0, Math.min(1, p.company - 0.5 * days + (friends ? 0.5 * days * 4 : 0)));
+    }
     p.fear = Math.max(0, p.fear - 0.12 * dt);
     /* health: hunger, thirst and cold wear it down; food and rest restore it */
     let dh = 0;
-    if (p.food < 0.1) dh -= 0.14 * days;
-    if (p.water < 0.04) dh -= 0.5 * days;
-    if (p.warmth < 0.25) dh -= (0.25 - p.warmth) * (st === "baby" || st === "toddler" || st === "elder" ? 2.4 : 1.6) * days;
-    if (p.sick > 0) dh -= (p.sick > 1 ? 0.22 : 0.02) * days;
+    const hurt = (k: number, v: number) => { dh -= v; p.harm[k] += v; };
+    if (p.food < 0.1) hurt(0, 0.14 * days);
+    if (p.water < 0.04) hurt(1, 0.5 * days);
+    if (p.warmth < 0.25) hurt(2, (0.25 - p.warmth) * (st === "baby" || st === "toddler" || st === "elder" ? 2.4 : 1.6) * days);
+    if (p.sick > 0) hurt(3, (p.sick > 1 ? 0.22 : 0.02) * days);
     if (dh === 0 && p.food > 0.5 && p.water > 0.3) dh = (0.06 + (asleep ? 0.06 : 0)) * days;
     p.health = Math.max(0, Math.min(1 - p.injury * 0.5, p.health + dh));
     p.injury = Math.max(0, p.injury - 0.03 * days * (p.food > 0.4 ? 1 : 0.3));
-    if (p.health <= 0) this.die(p, p.water < 0.04 ? "thirst" : p.food < 0.1 ? "hunger" : p.warmth < 0.25 ? "the cold" : p.sick > 1 ? "illness" : p.injury > 0.2 ? "injuries" : "illness");
+    if (p.health <= 0) {
+      /* the cause is whatever wore them down most, not just the last straw */
+      let k = 0; for (let j = 1; j < 5; j++) if (p.harm[j] > p.harm[k]) k = j;
+      this.die(p, p.injury > 0.3 && p.harm[k] < 0.3 ? "injuries" : ["hunger", "thirst", "the cold", "illness", "injuries"][k]);
+    }
   }
   /** How warmly someone is dressed right now (people only put on furs when it is cold). */
   clothesNow(p: Person): number {
@@ -523,6 +585,7 @@ export class Society {
     for (const k of ["meat", "fish", "plant"] as const) { const t = Math.min(left, s[k]); s[k] -= t; left -= t; if (left <= 0) break; }
     p.food = Math.min(2.5, p.food + got);
     p.took = p.took * 0.98 + got * 0.02 * 40;
+    b.today.eaten += got;
     return got;
   }
 
@@ -596,7 +659,7 @@ export class Society {
 
   private camps(dt: number): void {
     for (const b of this.bands) {
-      if (b.fire > 0) b.fire = Math.max(0, b.fire - dt / DAY_SECONDS * (this.sun < 0.2 ? 0.75 : 0.5));
+      if (b.fire > 0) b.fire = Math.max(0, b.fire - dt / DAY_SECONDS * (this.sun < 0.2 ? 0.55 : 0.4));
       /* whoever is at camp feeds the fire from the woodpile, and someone who knows how relights it */
       if (b.fire < 0.55 && b.store.wood >= 1) {
         let tender: Person | null = null;
@@ -612,9 +675,13 @@ export class Society {
     for (const p of this.people.slice()) {
       if (!this.byId.has(p.id)) continue;
       const age = this.age(p), st = stageOf(age);
+      /* a two-year-old walks on their own feet */
+      if (age >= 2 && p.carrier) { const c = this.byId.get(p.carrier); if (c && c.baby === p.id) c.baby = this.youngestBaby(c); p.carrier = 0; abandon(this, p); }
+      p.condition = p.condition * 0.8 + p.dayFood * 0.2; p.dayFood = 0;
       /* childhood hunger is remembered in the body */
       if (age < 16) p.childHunger = p.childHunger * 0.97 + (p.food < 0.4 ? 0.03 : 0);
-      p.prestige *= 0.99; p.gave *= 0.97; p.took *= 0.97;
+      p.prestige *= 0.99; p.gave *= 0.97; p.took *= 0.97; p.gaveToday = 0;
+      for (let j = 0; j < 5; j++) p.harm[j] *= 0.85;
       if (st === "adult" && !p.partner && age < 55) p.longing = Math.min(1, p.longing + 0.035 * (0.6 + p.traits[5] * 0.6));
       p.clothesWear = Math.max(0, p.clothesWear - (this.tempC(p.x, p.y) < 0 ? 0.012 : 0.005));
       if (p.clothesWear <= 0 && p.clothes > 0) { p.clothes--; p.clothesWear = 0.6; this.dirty.add(p.id); }
@@ -670,8 +737,8 @@ export class Society {
     const peak = age < 20 ? (age - 16) / 4 : age < 31 ? 1 : age < 40 ? 1 - (age - 31) * 0.06 : 0.45 - (age - 40) * 0.07;
     const youngest = p.children.map(id => this.byId.get(id)).filter((c): c is Person => !!c).reduce((m, c) => Math.min(m, this.age(c)), 99);
     const nursing = youngest < 1.6 ? 0.12 : youngest < 2.6 ? 0.45 : 1;
-    const fed = Math.max(0, Math.min(1, (p.food - 0.4) / 0.9)) * Math.max(0, Math.min(1, p.health * 1.2 - 0.1));
-    if (this.rng.chance(0.016 * Math.max(0, peak) * nursing * fed)) { p.pregnantBy = dad.id; p.fatherGenome = dad.genome; p.due = this.time + YEAR * 0.75; this.dirty.add(p.id); }
+    const fed = Math.max(0, Math.min(1, (p.condition - 0.35) / 0.65)) * Math.max(0, Math.min(1, p.health * 1.2 - 0.1));
+    if (this.rng.chance(0.02 * Math.max(0, peak) * nursing * fed)) { p.pregnantBy = dad.id; p.fatherGenome = dad.genome; p.due = this.time + YEAR * 0.75; this.dirty.add(p.id); }
   }
 
   private birth(mom: Person): void {
@@ -710,6 +777,7 @@ export class Society {
     for (const id of [p.partner, p.mother, p.father, ...p.children]) { const q = this.byId.get(id); if (q) this.remember(q, Mem.Death, p.id, id === p.partner ? -0.9 : -0.8); }
     for (const [id, r] of p.rel) { const q = this.byId.get(id); if (q && r.op > 0.4 && !q.mem.some(m => m.k === Mem.Death && m.who === p.id)) this.remember(q, Mem.Death, p.id, -0.4 * r.op); }
     const partner = this.byId.get(p.partner); if (partner) partner.partner = 0;
+    for (const q of this.people) if (q.baby === p.id) q.baby = 0;
     /* an infant goes to someone who can nurse it, or to close kin */
     if (p.baby) { const baby = this.byId.get(p.baby); if (baby) this.fosterBaby(baby, b); }
     for (const q of this.people) if (q.carrier === p.id) this.fosterBaby(q, b);
@@ -729,6 +797,11 @@ export class Society {
     const kin = ms.filter(q => this.age(q) >= 14 && this.kin(baby, q, 2) && !q.baby).sort((a, c) => (c.sex === "f" ? 1 : 0) - (a.sex === "f" ? 1 : 0))[0];
     const carer = nurse ?? kin ?? ms.filter(q => q.sex === "f" && this.age(q) >= 16 && !q.baby).sort((a, c) => c.traits[1] - a.traits[1])[0];
     if (carer) { baby.carrier = carer.id; baby.guardian = carer.id; if (!carer.baby) carer.baby = baby.id; }
+  }
+  /** The youngest baby someone still carries, after an older one has started walking. */
+  private youngestBaby(c: Person): number {
+    for (const q of this.people) if (q.carrier === c.id && this.age(q) < 2) return q.id;
+    return 0;
   }
   guardianFor(c: Person): Person | null {
     const b = this.band(c), ms = b.members.map(id => this.byId.get(id)).filter((q): q is Person => !!q && q !== c && this.age(q) >= 16);
@@ -760,9 +833,10 @@ export class Society {
     if (!this.bandById.has(b.id)) return;
     const ms = b.members.map(id => this.byId.get(id)).filter((q): q is Person => !!q);
     if (!ms.length) { this.endBand(b, "is no more"); return; }
+    b.yesterday = b.today; b.today = { plant: 0, meat: 0, fish: 0, eaten: 0 };
     b.appetite = ms.reduce((a, q) => a + FOOD_DAY[this.stage(q)], 0);
-    const T = this.tempC(b.x, b.y), spoil = T > 20 ? 0.35 : T > 10 ? 0.22 : T > 0 ? 0.1 : T > -8 ? 0.03 : 0.01;
-    b.store.meat *= 1 - spoil; b.store.fish *= 1 - spoil; b.store.plant *= 0.96;
+    const T = this.tempC(b.x, b.y), spoil = T > 20 ? 0.35 : T > 10 ? 0.2 : T > 5 ? 0.1 : T > 0 ? 0.04 : 0.015;
+    b.store.meat *= 1 - spoil; b.store.fish *= 1 - spoil; b.store.plant *= T < 5 ? 0.99 : 0.97;
     const adults = ms.filter(q => this.age(q) >= 16);
     /* respect: who others listen to */
     let best: Person | null = null; for (const q of adults) if (!best || q.prestige > best.prestige) best = q;
@@ -777,6 +851,8 @@ export class Society {
       if (q.gave > q.took * 1.5 && q.gave > 0.8) q.prestige += 0.03;
     }
     if (b.moving) return;
+    this.weighLeave(b, ms, adults);
+    if (!this.bandById.has(b.id)) return;
     this.weighMove(b, ms, adults);
     if (!b.moving) this.weighSplit(b, ms, adults);
     if (this.bandById.has(b.id) && b.members.length <= 4) this.weighJoin(b, ms);
@@ -790,27 +866,47 @@ export class Society {
     listened-to of them knows.
   */
   private weighMove(b: Band, ms: Person[], adults: Person[]): void {
-    if (this.time - b.movedAt < DAY_SECONDS * 3 || adults.length === 0) return;
+    if (this.time - b.movedAt < DAY_SECONDS * 2.5 || adults.length === 0) return;
+    /* everyone at camp knows when meals have been thin */
+    const deficit = Math.max(0, 1 - (b.yesterday.plant + b.yesterday.meat + b.yesterday.fish) / Math.max(1, b.appetite));
     const short = Math.max(0, 1 - storeDays(b) / 2);
     let wFor = 0, wAll = 0, lead: Person | null = null, leadW = -1, dest: [number, number] | null = null;
     for (const q of adults) {
       const here = siteValue(q, b.x, b.y, this.time);
-      let bestV = here, at: [number, number] | null = null;
+      /* somewhere better: a place they know with food, far enough to be fresh ground */
+      let bestV = 0, at: [number, number] | null = null;
       for (const pl of q.places) {
         if (pl.k !== Place.Site && pl.k !== Place.Plants && pl.k !== Place.Fish && pl.k !== Place.Game) continue;
-        const d = Math.hypot(pl.x - b.x, pl.y - b.y); if (d < 22 || d > 160) continue;
-        const v = siteValue(q, pl.x, pl.y, this.time) * (1 - d / 400) + (pl.k === Place.Site ? pl.q : 0);
+        const d = Math.hypot(pl.x - b.x, pl.y - b.y); if (d < 20 || d > 120) continue;
+        if (this.bands.some(o => o !== b && Math.hypot(o.x - pl.x, o.y - pl.y) < 16)) continue;
+        const v = (siteValue(q, pl.x, pl.y, this.time) + (pl.k === Place.Site ? 8 + pl.q : 0)) * (1 - d / 300);
         if (v > bestV) { bestV = v; at = [pl.x, pl.y]; }
       }
-      /* reasons to leave, and the pull of somewhere better */
-      const poor = Math.max(0, 1 - q.tripYield / 2.4), danger = q.mem.some(m => m.k === Mem.Attacked && this.time - m.t < DAY_SECONDS * 4) ? 0.3 : 0;
-      const push = 0.4 * poor + 0.4 * short + danger, pull = at ? Math.min(1, (bestV - here) / Math.max(6, here)) : 0;
-      q.moveWish = Math.min(1, q.moveWish * 0.4 + 0.6 * (push * 0.7 + pull * 0.6) * (0.75 + q.traits[4] * 0.35));
+      const danger = q.mem.some(m => m.k === Mem.Attacked && this.time - m.t < DAY_SECONDS * 4) ? 0.3 : 0;
+      const push = Math.min(1, 0.65 * deficit + 0.35 * short + danger), pull = at ? Math.min(1, bestV / Math.max(4, here + 4)) : 0;
+      q.moveWish = Math.min(1, q.moveWish * 0.35 + 0.65 * push * (0.55 + 0.45 * pull) * (0.8 + q.traits[4] * 0.4));
       const wt = 0.5 + q.prestige + q.traits[3] * 0.4;
       wAll += wt;
-      if (q.moveWish > 0.45 && at) { wFor += wt; if (wt > leadW) { leadW = wt; lead = q; dest = at; } }
+      if (q.moveWish > 0.4 && at && pull > 0.35) { wFor += wt; if (wt > leadW) { leadW = wt; lead = q; dest = at; } }
     }
-    if (!lead || !dest || wFor / wAll < 0.5) return;
+    /*
+      Hungry enough, a band will set out even without anyone knowing somewhere better:
+      they head for ground they have not camped on lately, where nobody has been
+      stripping the bushes, and see what they find.
+    */
+    if ((!lead || !dest) && deficit > 0.5 && storeDays(b) < 1) {
+      let best: [number, number] | null = null, bv = -1;
+      for (let k = 0; k < 24; k++) {
+        const a = this.rng.next() * Math.PI * 2, d = this.rng.range(26, 46), x = b.x + Math.cos(a) * d, y = b.y + Math.sin(a) * d;
+        if (!this.walker.dry(x, y) || !this.waterNear(x, y, 6)) continue;
+        let far = 1e9; for (const [px, py] of b.past) far = Math.min(far, Math.hypot(px - x, py - y));
+        const crowd = this.bands.some(o => o !== b && Math.hypot(o.x - x, o.y - y) < 18) ? 0.3 : 1;
+        if (far * crowd > bv) { bv = far * crowd; best = [x, y]; }
+      }
+      const sorted = adults.slice().sort((a, c) => c.prestige + c.traits[3] * 0.4 - (a.prestige + a.traits[3] * 0.4));
+      if (best && sorted.length) { lead = sorted[0]; dest = best; wFor = wAll; }
+    }
+    if (!lead || !dest || wFor / wAll < 0.45) return;
     const spot = this.campSpot(dest[0], dest[1], 10); if (!spot) return;
     const route = this.walker.route(b.x, b.y, spot[0], spot[1], 40000);
     if (!route && Math.hypot(spot[0] - b.x, spot[1] - b.y) > 60) return;
@@ -820,7 +916,8 @@ export class Society {
     lead.prestige += 0.15;
     for (const q of ms) { abandon(this, q); this.remember(q, Mem.Moved, lead.id, 0.1); }
     const dir = compass(spot[0] - b.x, spot[1] - b.y), why = storeDays(b) < 1 ? "the food around camp had run out" : "the hunting and gathering had grown poor";
-    this.event("move", Bubble.Move, `The ${b.name} packed up and set off ${dir}, because ${why}. ${lead.name} knew a better place, ${name}.`, b.x, b.y, [lead.id], b.id);
+    const known = lead.places.some(pl => Math.hypot(pl.x - spot[0], pl.y - spot[1]) < 20);
+    this.event("move", Bubble.Move, known ? `The ${b.name} packed up and set off ${dir}, because ${why}. ${lead.name} knew a better place, ${name}.` : `The ${b.name} were going hungry and set off ${dir} into land they did not know, led by ${lead.name}.`, b.x, b.y, [lead.id], b.id);
   }
 
   /** Called by the walkers when the last of a moving band has arrived, or long enough has passed. */
@@ -838,8 +935,8 @@ export class Society {
     follow them, to a place they know.
   */
   private weighSplit(b: Band, ms: Person[], adults: Person[]): void {
-    if (ms.length < 16 || this.time - b.founded < DAY_SECONDS * 20) return;
-    const crowd = Math.max(0, Math.min(1, (ms.length - 28) / 18)), short = Math.max(0, 1 - storeDays(b) / 2);
+    if (ms.length < 16 || this.time - b.founded < DAY_SECONDS * 8) return;
+    const crowd = Math.max(0, Math.min(1, (ms.length - 26) / 14)), short = Math.max(0, 1 - storeDays(b) / 2);
     let founder: Person | null = null, fw = 0;
     for (const q of adults) {
       if (this.age(q) < 20 || this.age(q) > 58) continue;
@@ -854,6 +951,16 @@ export class Society {
       const d = Math.hypot(pl.x - b.x, pl.y - b.y); if (d < 26 || d > 150 || (pl.k !== Place.Site && pl.k !== Place.Plants && pl.k !== Place.Fish)) continue;
       if (this.bands.some(o => Math.hypot(o.x - pl.x, o.y - pl.y) < 20)) continue;
       const v = siteValue(founder, pl.x, pl.y, this.time) + (pl.k === Place.Site ? pl.q : 0); if (v > bv) { bv = v; at = [pl.x, pl.y]; }
+    }
+    if (!at && fw > 0.75) {
+      /* nowhere known: the founder will lead them into fresh land, away from where this band has camped */
+      let bv2 = -1;
+      for (let k = 0; k < 24; k++) {
+        const a = this.rng.next() * Math.PI * 2, d = this.rng.range(30, 55), x = b.x + Math.cos(a) * d, y = b.y + Math.sin(a) * d;
+        if (!this.walker.dry(x, y) || !this.waterNear(x, y, 6) || this.bands.some(o => Math.hypot(o.x - x, o.y - y) < 20)) continue;
+        let far = 1e9; for (const [px, py] of b.past) far = Math.min(far, Math.hypot(px - x, py - y));
+        if (far > bv2) { bv2 = far; at = [x, y]; }
+      }
     }
     if (!at) { founder.moveWish = Math.max(founder.moveWish, 0.5); return; }
     const spot = this.campSpot(at[0], at[1], 10); if (!spot) return;
@@ -879,6 +986,37 @@ export class Society {
     this.stats.splits++;
     this.event("split", Bubble.Move, `The ${b.name} had grown too many for one fire. ${founder.name} led ${goers.size} of them away ${compass(spot[0] - b.x, spot[1] - b.y)} to start a band of their own, the ${nb.name}.`, b.x, b.y, [founder.id], nb.id);
     this.layoutHomes(b);
+  }
+
+  /**
+    Going to live with kin. When a band is going hungry, a household that knows a band of
+    its own people that is eating well may pack up and join them, as families did between
+    the bands of one people. Those with close kin there, or who are fond of people there,
+    go first.
+  */
+  private weighLeave(b: Band, ms: Person[], adults: Person[]): void {
+    const deficit = Math.max(0, 1 - (b.yesterday.plant + b.yesterday.meat + b.yesterday.fish) / Math.max(1, b.appetite));
+    if (deficit < 0.45 || storeDays(b) > 0.6 || ms.length < 6) return;
+    const seen = new Set<number>();
+    for (const q of adults) {
+      const home = homeOf(q, this.byId, this.time); if (seen.has(home)) continue; seen.add(home);
+      if (q.partner && this.byId.get(q.partner)?.band !== b.id) continue;
+      let best: Band | null = null, bv = 0;
+      for (const pl of q.places) {
+        if (pl.k !== Place.Camp || pl.ref === b.id) continue;
+        const o = this.bandById.get(pl.ref); if (!o || o.moving) continue;
+        const d = Math.hypot(o.x - q.x, o.y - q.y); if (d > 130) continue;
+        const ties = o.members.reduce((t, id) => t + Math.max(0, this.op(q, id)) + (this.kin(q, this.byId.get(id) ?? { id: 0, mother: 0, father: 0 }, 1) ? 1 : 0), 0);
+        const v = (storeDays(o) - 0.5) * (o.culture === b.culture ? 1 : 0.3) * (1 + ties * 0.4) * (1 - d / 200);
+        if (v > bv) { bv = v; best = o; }
+      }
+      if (!best || bv < 0.6 || !this.rng.chance(0.3 * deficit)) continue;
+      const fam = ms.filter(o => homeOf(o, this.byId, this.time) === home);
+      for (const o of fam) { this.moveTo(o, best); this.remember(o, Mem.Moved, best.id, -0.1); }
+      this.event("leave", Bubble.Home, `${q.name}'s family left the hungry ${b.name} to live with the ${best.name}${best.culture === b.culture ? ", their own people" : ""}.`, b.x, b.y, fam.map(o => o.id), best.id);
+      relayout(this, b); relayout(this, best);
+      if (b.members.length < 6) break;
+    }
   }
 
   /** A band whittled down to a handful seeks out kin or a band it knows, if any. */

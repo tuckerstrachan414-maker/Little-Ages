@@ -30,6 +30,13 @@ export interface Band {
   /** a move under way: where to, who proposed it, since when */
   moving: { x: number; y: number; by: number; since: number; name: string; route: number[] | null } | null;
   siteName: string;
+  /** where the camp gets its water */
+  water: [number, number];
+  /** where the band has camped lately, newest last */
+  past: [number, number][];
+  /** food brought in and eaten today, and yesterday's totals (for the band card and for tuning) */
+  today: { plant: number; meat: number; fish: number; eaten: number };
+  yesterday: { plant: number; meat: number; fish: number; eaten: number };
 }
 
 export const storeFood = (s: Store) => s.plant + s.meat + s.fish;
@@ -42,7 +49,7 @@ export function estimate(pl: { k: number; q: number; t: number }, now: number): 
   if (pl.k === Place.Game) return days > 3 ? 0 : pl.q * (1 - days / 3);
   if (pl.k === Place.Carcass) return days > 6 ? 0 : pl.q * (1 - days / 8);
   /* plant food and fish grow back, so an old report of a picked-over patch looks better with time */
-  return Math.min(pl.q + days * 1.2, Math.max(pl.q, 14));
+  return Math.min(pl.q + days * 0.4, Math.max(pl.q, 6));
 }
 
 /**
@@ -53,9 +60,9 @@ export function siteValue(p: Person, x: number, y: number, now: number): number 
   let v = 0;
   for (const pl of p.places) {
     if (pl.k !== Place.Plants && pl.k !== Place.Fish && pl.k !== Place.Game && pl.k !== Place.Rabbits) continue;
-    const d = Math.hypot(pl.x - x, pl.y - y); if (d > 34) continue;
-    const e = pl.k === Place.Game ? Math.min(30, pl.q * 4) * (1 - Math.min(1, (now - pl.t) / 600)) : estimate(pl, now);
-    v += e * (1 - d / 34);
+    const d = Math.hypot(pl.x - x, pl.y - y); if (d > 22) continue;
+    const e = pl.k === Place.Game ? Math.min(12, pl.q * 1.5) * (1 - Math.min(1, (now - pl.t) / 600)) : estimate(pl, now);
+    v += e * (1 - d / 22);
   }
   return v;
 }

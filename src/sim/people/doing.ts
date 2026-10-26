@@ -84,19 +84,27 @@ function go(s: Society, p: Person, st: Step, dt: number): void {
     st.t = 0;
     const b = s.band(p);
     if (st.a === 1 && b.moving?.route) {
-      /* the band walks one route together; anyone far from camp first heads back to it */
-      const lead = Math.hypot(p.x - b.x, p.y - b.y) > 8 ? s.walker.route(p.x, p.y, b.x, b.y) ?? [b.x, b.y] : [];
-      p.path = [...lead, ...b.moving.route, tx, ty];
+      /* the band walks one route together: join it at the nearest point ahead, then follow it */
+      const r = b.moving.route;
+      let k0 = 0, bd = Math.hypot(p.x - b.x, p.y - b.y);
+      for (let k = 0; k < r.length; k += 2) { const d = Math.hypot(r[k] - p.x, r[k + 1] - p.y); if (d < bd) { bd = d; k0 = k + 2; } }
+      const join = k0 === 0 ? [b.x, b.y] : [r[k0 - 2], r[k0 - 1]];
+      const lead = bd > 3 ? s.walker.route(p.x, p.y, join[0], join[1]) ?? [] : [];
+      p.path = [...lead, ...r.slice(k0), tx, ty];
     } else p.path = s.walker.route(p.x, p.y, tx, ty);
+    /* far from home with no easy way back: search harder, and failing that, head straight for camp */
+    if (!p.path && Math.hypot(tx - b.x, ty - b.y) < 8 && Math.hypot(p.x - b.x, p.y - b.y) > 8) p.path = s.walker.route(p.x, p.y, tx, ty, 60000) ?? [tx, ty];
     p.pi = 0;
     if (!p.path) {
       /* somewhere they cannot get to: forget it as a place to go */
-      p.places = p.places.filter(pl => pl.k === Place.Camp || Math.hypot(pl.x - tx, pl.y - ty) > 2);
+      p.places = p.places.filter(pl => pl.k === Place.Camp || Math.hypot(pl.x - tx, pl.y - ty) > 0.6);
       fail(s, p); return;
     }
   }
   st.t += dt;
   if (walkPath(s, p, speedOf(s, p, !!st.run) * dt)) next(p);
+  /* passing water: a quick drink and a full skin on the way */
+  if (p.water < 0.8 && s.isFresh(p.x + 1, p.y) || p.water < 0.8 && s.isFresh(p.x - 1, p.y) || p.water < 0.8 && s.isFresh(p.x, p.y + 1) || p.water < 0.8 && s.isFresh(p.x, p.y - 1)) { p.water = 1; if (s.age(p) >= 12) p.skin = 1; }
   p.anim = st.run ? Anim.Run : p.carryAmt > 0 && p.carryKind !== Food.Wood ? Anim.Carry : s.age(p) > 70 || p.injury > 0.4 ? Anim.CaneWalk : Anim.Walk;
   if (p.carryKind === Food.Wood && p.carryAmt > 0) p.anim = Anim.Carry;
 }
@@ -107,8 +115,16 @@ function walkPath(s: Society, p: Person, budget: number): boolean {
     const wx = path[p.pi * 2], wy = path[p.pi * 2 + 1], dx = wx - p.x, dy = wy - p.y, d = Math.hypot(dx, dy);
     const cost = Math.max(1, Math.min(8, s.walker.at(p.x, p.y)));
     const stepLen = budget / cost;
+    const nx = d <= stepLen ? wx : p.x + dx / d * stepLen, ny = d <= stepLen ? wy : p.y + dy / d * stepLen;
+    /* the way is blocked after all (ice gave way, the season turned): stop and find another */
+    if (!s.walker.passable(nx, ny)) {
+      /* blocked: try stepping around the obstacle to either side before giving up on this path */
+      const a = Math.atan2(dy, dx);
+      for (const turn of [0.8, -0.8, 1.6, -1.6]) { const sx = p.x + Math.cos(a + turn) * stepLen, sy = p.y + Math.sin(a + turn) * stepLen; if (s.walker.passable(sx, sy)) { p.x = sx; p.y = sy; return false; } }
+      p.path = null; return false;
+    }
     if (d <= stepLen) { p.x = wx; p.y = wy; budget -= d * cost; p.pi++; }
-    else { p.x += dx / d * stepLen; p.y += dy / d * stepLen; budget = 0; }
+    else { p.x = nx; p.y = ny; budget = 0; }
     if (d > 0.01) p.dir = Math.abs(dx) > Math.abs(dy) * 1.2 ? (dx > 0 ? 1 : 3) : dy > 0 ? 0 : 2;
   }
   return p.pi * 2 >= path.length;
@@ -139,12 +155,12 @@ function work(s: Society, p: Person, st: Step, dt: number, anim: number): void {
   const b = s.band(p);
   switch (st.k) {
     case St.Gather: {
-      const want = Math.max(0, (st.a ?? 4) - p.carryAmt) * (0.6 + p.skills[Skill.Gather] * 0.6);
+      const want = Math.max(0, (st.a ?? 5) - p.carryAmt) * (0.7 + p.skills[Skill.Gather] * 0.6);
       const got = s.eco.gather(p.x, p.y, want);
       load(p, Food.Plant, got);
       p.skills[Skill.Gather] = Math.min(1, p.skills[Skill.Gather] + 0.004);
       s.stats.food.plant += got;
-      s.learnPlace(p, Place.Plants, st.x, st.y, s.eco.plantsAt(p.x, p.y) * 0.5, 0, 0);
+      s.learnPlace(p, Place.Plants, st.x, st.y, s.eco.plantsAt(p.x, p.y) * 0.06, 0, 0);
       /* a bare patch is not worth a second try */
       if (got < 0.4 && p.plan[p.si + 1]?.k === St.Gather) p.si++;
       break;
@@ -181,12 +197,12 @@ function work(s: Society, p: Person, st: Step, dt: number, anim: number): void {
     case St.Eat: {
       const greedy = p.traits[2] > 0.65 ? 1.2 : 1;
       if (st.a === 1 && p.carryAmt > 0 && p.carryKind < Food.Wood) { const e = Math.min(p.carryAmt, Math.max(0.3, 1.6 - p.food)); p.carryAmt -= e; p.food = Math.min(2.5, p.food + e); if (p.carryAmt <= 0.01) { p.carryAmt = 0; p.carryKind = 0; } }
-      else s.eatFromStore(p, b, Math.min(1.5, Math.max(0.3, 1.7 - p.food)) * greedy);
+      else s.eatFromStore(p, b, Math.min(1.6, Math.max(0.3, 2 - p.food)) * greedy);
       /* feed a hungry small child at your side */
       for (const cid of p.children) { const c = s.byId.get(cid); if (c && s.age(c) >= 1 && s.age(c) < 7 && c.food < 1 && Math.hypot(c.x - p.x, c.y - p.y) < 3) s.eatFromStore(c, b, 0.8); }
       break;
     }
-    case St.Drink: p.water = 1; break;
+    case St.Drink: p.water = 1; if (s.age(p) >= 12) p.skin = 1; break;
     case St.Look: {
       s.learnSurroundings(p, 26);
       const wat = s.waterNear(p.x, p.y, 6);
@@ -224,8 +240,8 @@ function drop(s: Society, p: Person): void {
   const amt = p.carryAmt, kind = p.carryKind;
   if (kind === Food.Wood) b.store.wood += amt;
   else {
-    if (kind === Food.Plant) b.store.plant += amt; else if (kind === Food.Fish) b.store.fish += amt; else b.store.meat += amt;
-    p.gave = p.gave * 0.98 + amt * 0.02 * 40;
+    if (kind === Food.Plant) { b.store.plant += amt; b.today.plant += amt; } else if (kind === Food.Fish) { b.store.fish += amt; b.today.fish += amt; } else { b.store.meat += amt; b.today.meat += amt; }
+    p.gave = p.gave * 0.98 + amt * 0.02 * 40; p.gaveToday += amt;
     p.tripYield = p.tripYield * 0.7 + amt * 0.3;
     p.prestige += amt / (kind === Food.Meat ? 40 : 90);
     const big = s.carcasses.find(c => c.meat > 3 && (c.by === p.id || c.by === p.party) && Math.hypot(c.x - b.x, c.y - b.y) < 60);
@@ -286,7 +302,7 @@ function stalk(s: Society, p: Person, st: Step, dt: number): void {
   else {
     /* missed: the herd bolts; try once more if they can catch up */
     h.state = 2; h.timer = 10; const a = Math.atan2(h.y - p.y, h.x - p.x); h.tx = h.x + Math.cos(a) * 24; h.ty = h.y + Math.sin(a) * 24;
-    if (st.a >= 2 || p.spear <= 0) {
+    if (st.a >= 3 || p.spear <= 0) {
       p.why = `${p.name} is heading home empty-handed. The ${SPECIES_SHORT[h.sp]} got away.`; p.whyAt = s.time;
       p.tripYield *= 0.7; giveUpHunt(s, p);
       for (const q of party) if (q !== p) giveUpHunt(s, q);
@@ -313,7 +329,7 @@ function kill(s: Society, lead: Person, h: { id: number; sp: number; x: number; 
     q.prestige += MEAT[h.sp] / 120 * (q === lead ? 1.5 : 1);
     s.remember(q, Mem.Kill, lead.id, 0.5, h.sp);
     const bi = q.plan.findIndex(k => k.k === St.Butcher);
-    if (bi >= 0) { q.si = bi; q.plan[bi].id = c.id; q.plan[bi].x = c.x; q.plan[bi].y = c.y; q.path = null; q.pi = 0; q.x += (c.x - q.x) * 0.5; q.y += (c.y - q.y) * 0.5; }
+    if (bi >= 0) { q.si = bi; q.plan[bi].id = c.id; q.plan[bi].x = c.x; q.plan[bi].y = c.y; q.path = null; q.pi = 0; q.plan.splice(bi, 0, step(St.Go, c.x, c.y)); }
     q.why = `${q.name} is butchering the ${SPECIES_SHORT[h.sp]} ${q === lead ? `${she(q)} brought down` : `${lead.name} brought down`}, to carry the meat home.`; q.whyAt = s.time;
     s.bubble(q, h.sp === Species.Mammoth ? Bubble.Mammoth : Bubble.Deer, 3);
   }
@@ -458,6 +474,9 @@ function tend(s: Society, p: Person, st: Step, dt: number): void {
   if (Math.hypot(q.x - p.x, q.y - p.y) > 1.6) { moveToward(s, p, q.x + 0.9, q.y, speedOf(s, p, false) * dt, 0.6); p.anim = Anim.Walk; return; }
   p.anim = Anim.Sit; face(p, q.x, q.y);
   q.injury = Math.max(0, q.injury - 0.0008 * dt);
+  /* carers bring water and food to the sick */
+  q.water = Math.max(q.water, 0.7);
+  if (q.food < 0.8) s.eatFromStore(q, s.band(q), 0.02 * dt);
   const r = s.rel(q, p.id); r.op = Math.min(1, r.op + 0.004 * dt);
   if (st.t + dt >= st.dur) s.remember(q, Mem.Helped, p.id, 0.35);
 }

@@ -20,7 +20,7 @@ export const KNOW_NAMES: [number, string][] = [[1, "keeping fire"], [2, "spear h
 /** What someone is trying to do. Each goal has its own plan and its own "why". */
 export const Goal = {
   None: 0, Sleep: 1, Drink: 2, Eat: 3, Gather: 4, Fish: 5, Snare: 6, Hunt: 7, Haul: 8, Wood: 9, Warm: 10, Talk: 11, Court: 12,
-  Play: 13, Follow: 14, Explore: 15, Craft: 16, Spear: 17, Tend: 18, Rest: 19, Flee: 20, Migrate: 21, Carried: 22, Sick: 23, Cook: 24, Toddle: 25,
+  Play: 13, Follow: 14, Explore: 15, Craft: 16, Spear: 17, Tend: 18, Rest: 19, Flee: 20, Migrate: 21, Carried: 22, Sick: 23, Cook: 24, Toddle: 25, Visit: 26,
 } as const;
 export type Goal = (typeof Goal)[keyof typeof Goal];
 
@@ -96,11 +96,19 @@ export interface Person {
   /* body */
   /** stored food in days of eating, 0..2.5 */
   food: number;
+  /** body condition: how well fed they have been over the last days, 0..2 */
+  condition: number;
+  /** today's running total of food level, for condition */
+  dayFood: number;
   water: number; rest: number; warmth: number; company: number; fear: number; health: number;
+  /** a water skin, 0 empty .. 1 full (a full skin is most of a day's water) */
+  skin: number;
   mood: number;
   /** how hungry childhood has been, 0..1 (stunts growth) */
   childHunger: number;
   injury: number; sick: number;
+  /** what has been wearing their health down lately: hunger, thirst, cold, illness, injury */
+  harm: number[];
   pregnantBy: number; due: number;
   /** the father's genes, kept from conception (he may not live to see the birth) */
   fatherGenome: Genome | null;
@@ -119,6 +127,8 @@ export interface Person {
   prestige: number;
   /** how much they have brought in and taken out lately (food units per day, smoothed) */
   gave: number; took: number;
+  /** food brought to camp today */
+  gaveToday: number;
   longing: number;
 
   /* mind */

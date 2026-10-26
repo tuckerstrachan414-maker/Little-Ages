@@ -26,6 +26,8 @@ export interface Culture {
   locality: number;
   /** chance a child is named after a grandparent */
   namesake: number;
+  /** whether first cousins may marry */
+  cousins: boolean;
 }
 
 const HIDES = ["#a47b52", "#9a7048", "#b08860", "#8f6a46", "#b59a6e"];
@@ -48,6 +50,7 @@ export function makeCulture(id: number, seed: number): Culture {
     sharing: rng.range(0.55, 0.95),
     locality: rng.pick([0.15, 0.5, 0.5, 0.85]),
     namesake: rng.range(0, 0.35),
+    cousins: rng.chance(0.45),
   };
 }
 

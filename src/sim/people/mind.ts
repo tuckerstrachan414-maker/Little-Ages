@@ -22,7 +22,7 @@ const herObj = (p: Person) => (p.sex === "f" ? "her" : "him");
 
 /** Goals that can be dropped any time something better comes up. */
 export function isInterruptible(g: Goal): boolean {
-  return g === Goal.Rest || g === Goal.Play || g === Goal.Toddle || g === Goal.Follow || g === Goal.Warm || g === Goal.None || g === Goal.Tend;
+  return g === Goal.Rest || g === Goal.Play || g === Goal.Toddle || g === Goal.Follow || g === Goal.Warm || g === Goal.None || g === Goal.Tend || g === Goal.Visit;
 }
 
 export function decide(s: Society, p: Person, forced?: Goal): void {
@@ -39,10 +39,13 @@ export function decide(s: Society, p: Person, forced?: Goal): void {
   }
   if (b.moving) {
     const m = b.moving, lead = s.byId.get(m.by);
-    commit(s, p, { g: Goal.Migrate, v: 9, plan: () => [step(St.Go, m.x + Math.cos(p.id) * 2, m.y + Math.sin(p.id) * 1.6, 0, 0, { a: 1 })], why: () => p.id === m.by ? `${p.name} is leading the ${b.name} ${compass(m.x - p.x, m.y - p.y)} to ${m.name}, where ${she(p)} found ${siteReason(s, p, m.x, m.y)}.` : `${p.name} is walking with the ${b.name} to ${m.name}, because ${lead?.name ?? "the band"} said there is ${siteReason(s, lead ?? p, m.x, m.y)} there.`, icon: Bubble.Move });
-    return;
+    /* the band carries its food with it: a hungry walker eats on the way */
+    if (p.food < 0.7 && storeFood(b.store) > 0.3) { commit(s, p, { g: Goal.Eat, v: 9, plan: () => [step(St.Eat, p.x, p.y, 0, 2)], why: () => `${p.name} is eating on the way, from the food the band is carrying.`, icon: Bubble.Meat }); return; }
+    const [mx, my] = s.dryNear(m.x + Math.cos(p.id) * 2, m.y + Math.sin(p.id) * 1.6);
+    if (p.water > 0.12) commit(s, p, { g: Goal.Migrate, v: 9, plan: () => [step(St.Go, mx, my, 0, 0, { a: 1 })], why: () => p.id === m.by ? `${p.name} is leading the ${b.name} ${compass(m.x - p.x, m.y - p.y)} to ${m.name}, where ${she(p)} found ${siteReason(s, p, m.x, m.y)}.` : `${p.name} is walking with the ${b.name} to ${m.name}, because ${lead?.name ?? "the band"} said there is ${siteReason(s, lead ?? p, m.x, m.y)} there.`, icon: Bubble.Move });
+    if (p.water > 0.12) return;
   }
-  if (p.sick > 0.5 || p.injury > 0.6) {
+  if ((p.sick > 0.5 || p.injury > 0.6) && p.water > 0.12) {
     const [hx, hy] = s.homeSpot(p);
     commit(s, p, { g: Goal.Sick, v: 9, plan: () => [step(St.Go, hx, hy), step(St.Sit, hx, hy, 0, 14, { a: 1 })], why: () => p.injury > 0.6 ? `${p.name} is lying down because ${she(p)} is badly hurt.` : `${p.name} is lying down because ${she(p)} is sick with a fever.`, icon: Bubble.Sad });
     return;
@@ -52,18 +55,26 @@ export function decide(s: Society, p: Person, forced?: Goal): void {
   const hunger = clamp01(1 - p.food / 1.4), thirst = clamp01(1 - p.water), tired = 1 - p.rest, cold = 1 - p.warmth, lonely = 1 - p.company;
   const tr = p.traits, night = s.sun < 0.12, dusk = s.dayFrac() > 0.76 || s.dayFrac() < 0.2, dark = night || dusk;
   const dc = Math.hypot(p.x - b.x, p.y - b.y);
-  const short = clamp01(1 - storeDays(b) / 2.5);
+  /* how much the band's store is short of what people feel it should hold: more before a cold winter */
+  const leanWinter = (s.season === 2 || (s.season === 3 && s.dayFrac() < 2)) && s.tempC(b.x, b.y, s.time + 900) < 8;
+  const short = clamp01(1 - storeDays(b) / (leanWinter ? 7 : 2.5));
   const kids = p.children.map(id => s.byId.get(id)).filter((c): c is Person => !!c && c.band === p.band && s.age(c) < 14 && s.age(c) >= 2);
   const kidsHungry = kids.reduce((m, c) => Math.max(m, clamp01(1 - c.food / 1.4)), 0);
   const worker = st === "teen" || st === "adult" || st === "elder";
   const elderly = age > 64 ? 0.55 : 1;
-  const foodDrive = Math.max(hunger, kidsHungry * 1.05, short * (0.3 + 0.45 * tr[7] + 0.25 * tr[1]) * (worker ? elderly : 0.45));
+  /* providing: each adult means to bring home enough for themselves and the children they feed */
+  const feeds = 1 + kids.filter(c => s.age(c) < 12).length * 0.7 + (p.baby ? 0.3 : 0);
+  const plenty = clamp01(1 - (storeDays(b) - (leanWinter ? 8 : 4)) / 6);
+  const provide = clamp01(1 - p.gaveToday / (1.4 * feeds)) * (0.35 + 0.45 * tr[7] + 0.2 * tr[1]) * (worker ? elderly : 0.4) * plenty;
+  const foodDrive = Math.max(hunger, kidsHungry * 1.05, short * (0.6 + 0.3 * tr[7] + 0.2 * tr[1]) * (worker ? elderly : 0.45), provide);
   const busy = (g: Goal) => b.busy.get(g) ?? 0;
   const [fx, fy] = s.fireSpot(p), [hx, hy] = s.homeSpot(p);
 
   /* --- sleep --- */
-  if (night) add({ g: Goal.Sleep, v: 1.15 + tired, plan: () => [step(St.Go, hx, hy), step(St.Sleep, hx, hy, 0, 40)], why: () => `${p.name} is sleeping because it is night${cold > 0.4 ? ` and ${she(p)} is huddled against the cold` : ""}.`, icon: Bubble.Zzz });
-  else if (dusk && dc < 30) add({ g: Goal.Sleep, v: 0.35 + tired * 0.9, plan: () => [step(St.Go, hx, hy), step(St.Sleep, hx, hy, 0, 40)], why: () => `${p.name} is turning in for the night.`, icon: Bubble.Zzz });
+  /* the evening is spent at the fire; bed comes once it is properly dark */
+  const bedtime = s.dayFrac() > 0.87 || s.dayFrac() < 0.21;
+  if (bedtime) add({ g: Goal.Sleep, v: 1.15 + tired, plan: () => [step(St.Go, hx, hy), step(St.Sleep, hx, hy, 0, 40)], why: () => `${p.name} is sleeping because it is night${cold > 0.4 ? ` and ${she(p)} is huddled against the cold` : ""}.`, icon: Bubble.Zzz });
+  else if (dusk && dc < 30) add({ g: Goal.Sleep, v: 0.1 + tired * tired * 1.1, plan: () => [step(St.Go, hx, hy), step(St.Sleep, hx, hy, 0, 40)], why: () => `${p.name} is turning in early, tired out from the day.`, icon: Bubble.Zzz });
   else if (p.rest < 0.3) add({ g: Goal.Sleep, v: tired * tired * 1.3, plan: () => [step(St.Go, hx, hy), step(St.Sleep, hx, hy, 0, 14)], why: () => `${p.name} is napping because ${she(p)} is worn out.`, icon: Bubble.Zzz });
 
   /* --- toddlers stay close to their mother or whoever minds them --- */
@@ -76,17 +87,17 @@ export function decide(s: Society, p: Person, forced?: Goal): void {
   }
 
   /* --- water --- */
-  if (thirst > 0.32) {
+  if (thirst > 0.55 || (thirst > 0.4 && p.skin < 0.2)) {
     const wp = nearestWater(s, p);
-    if (wp) add({ g: Goal.Drink, v: Math.pow(thirst, 1.3) * 2.1, plan: () => [step(St.Go, wp[0], wp[1]), step(St.Drink, wp[0], wp[1], 0, 3)], why: () => `${p.name} is going for a drink because ${she(p)} is thirsty${T > 28 ? " in the heat" : ""}.`, icon: Bubble.Drop });
+    if (wp) add({ g: Goal.Drink, v: Math.pow(thirst, 1.3) * 2.3, plan: () => [step(St.Go, wp[0], wp[1]), step(St.Drink, wp[0], wp[1], 0, 1.5)], why: () => `${p.name} is going for a drink because ${she(p)} is thirsty${T > 28 ? " in the heat" : ""}.`, icon: Bubble.Drop });
   }
 
   /* --- food --- */
-  if (hunger > 0.22) {
+  if (hunger > 0.3) {
     if (p.carryAmt > 0 && p.carryKind > 0 && p.carryKind < 4) add({ g: Goal.Eat, v: hunger * 1.9, plan: () => [step(St.Eat, p.x, p.y, 0, 3, { a: 1 })], why: () => `${p.name} is eating some of the ${foodWord(p.carryKind)} ${she(p)} is carrying, because ${she(p)} is hungry.`, icon: Bubble.Meat });
     if (storeFood(b.store) > 0.4) {
       const cook = (b.store.meat + b.store.fish > 0.5) && worker && b.fire > 0.05;
-      add({ g: Goal.Eat, v: hunger * 1.8 / (1 + dc / 40), plan: () => [step(St.Go, fx, fy), ...(cook ? [step(St.Cook, fx, fy, 0, 4)] : []), step(St.Eat, fx, fy, 0, 3)], why: () => eatWhy(s, p, cook), icon: Bubble.Meat });
+      add({ g: Goal.Eat, v: hunger * 1.8 / (1 + dc / 40), plan: () => [step(St.Go, fx, fy), ...(cook ? [step(St.Cook, fx, fy, 0, 2.5)] : []), step(St.Eat, fx, fy, 0, 2.5)], why: () => eatWhy(s, p, cook), icon: Bubble.Meat });
     }
   }
 
@@ -95,47 +106,64 @@ export function decide(s: Society, p: Person, forced?: Goal): void {
 
   /* --- work for food: gather, fish, snare, hunt, haul --- */
   if ((worker || (st === "child" && age >= 7)) && !dark && !(p.baby && s.age(s.byId.get(p.baby)!) < 0.3 && dc > 20)) {
-    const range = st === "child" ? 14 : p.baby ? 26 : 46;
-    const carry = st === "child" ? 2 : 4;
+    /* late in the day only short trips are worth starting */
+    const late = clamp01((s.dayFrac() - 0.6) / 0.14);
+    const range = (st === "child" ? 10 : p.baby ? 18 : 30) * (1 - late * 0.7);
+    const carry = st === "child" ? 2 : 5;
     let bestPlant: KnownPlace | null = null, bp = 0, bestFish: KnownPlace | null = null, bf = 0, bestRab: KnownPlace | null = null, br = 0, bestGame: KnownPlace | null = null, bg = 0, bestCarc: KnownPlace | null = null, bc = 0;
     for (const pl of p.places) {
       const d = Math.hypot(pl.x - p.x, pl.y - p.y), dfromCamp = Math.hypot(pl.x - b.x, pl.y - b.y);
       if (dfromCamp > range) continue;
-      const dF = 1 / (1 + (d + dfromCamp * 0.5) / 30), e = estimate(pl, s.time);
-      if (pl.k === Place.Plants) { const E = Math.min(carry, e * 0.35) * (0.6 + p.skills[Skill.Gather] * 0.6), v = E / (E + 2.5) * dF; if (v > bp) { bp = v; bestPlant = pl; } }
-      else if (pl.k === Place.Fish && p.knows & Know.Fishing && st !== "child") { const E = Math.min(carry, e * 0.3) * (0.5 + p.skills[Skill.Fish] * 0.8), v = E / (E + 2.5) * dF; if (v > bf) { bf = v; bestFish = pl; } }
-      else if (pl.k === Place.Rabbits && p.knows & Know.Snares) { const E = Math.min(2, e * 0.4) * (0.5 + p.skills[Skill.Hunt] * 0.5), v = E / (E + 2.5) * dF; if (v > br) { br = v; bestRab = pl; } }
+      const dF = 1 / (1 + (d + dfromCamp * 0.6) / 16), e = estimate(pl, s.time);
+      if (pl.k === Place.Plants) { const E = Math.min(carry, e * 0.35) * (0.6 + p.skills[Skill.Gather] * 0.6), v = E / (E + 1.5) * dF; if (v > bp) { bp = v; bestPlant = pl; } }
+      else if (pl.k === Place.Fish && p.knows & Know.Fishing && st !== "child") { const E = Math.min(carry, e * 0.3) * (0.5 + p.skills[Skill.Fish] * 0.8), v = E / (E + 1.5) * dF; if (v > bf) { bf = v; bestFish = pl; } }
+      else if (pl.k === Place.Rabbits && p.knows & Know.Snares) { const E = Math.min(2, e * 0.4) * (0.5 + p.skills[Skill.Hunt] * 0.5), v = E / (E + 1.5) * dF; if (v > br) { br = v; bestRab = pl; } }
       else if (pl.k === Place.Game && pl.sp !== undefined && canHunt(s, p, age) && s.time - pl.t < DAY_SECONDS * 1.5) {
         const sp = pl.sp, E = HUNT_P[sp] * (0.5 + p.skills[Skill.Hunt]) * Math.min(MEAT[sp], b.appetite * 3 + 12);
         const v = E / (E + 6) * dF * (0.5 + tr[0] * 0.5 + p.skills[Skill.Hunt] * 0.3) - DANGER[sp] * (1 - tr[0]) * 3;
         if (v > bg) { bg = v; bestGame = pl; }
       }
-      else if (pl.k === Place.Carcass && worker && e > 2) { const E = Math.min(6, e), v = E / (E + 2) * dF; if (v > bc) { bc = v; bestCarc = pl; } }
+      else if (pl.k === Place.Carcass && worker && e > 2) {
+        /* only worth the walk if the meat is not already spoken for by others on their way */
+        const going = b.members.reduce((n, id) => { const q = s.byId.get(id); return n + (q && q.goal === Goal.Haul && q.plan.some(k => k.k === St.Butcher && k.id === pl.ref) ? 1 : 0); }, 0);
+        const E = Math.min(6, e - going * 6), v = E > 1 ? E / (E + 2) * dF : 0; if (v > bc) { bc = v; bestCarc = pl; }
+      }
     }
     const damp = (g: Goal, k: number) => 1 / (1 + busy(g) * k);
-    if (bestPlant) { const pl = bestPlant; add({ g: Goal.Gather, v: foodDrive * bp * 1.55 * damp(Goal.Gather, 0.05), plan: () => gatherPlan(s, p, pl, carry), why: () => workWhy(s, p, Goal.Gather, pl, hunger, kidsHungry, short), icon: Bubble.Berries }); }
-    if (bestFish) { const pl = bestFish; add({ g: Goal.Fish, v: foodDrive * bf * 1.5 * damp(Goal.Fish, 0.08), plan: () => fishPlan(s, p, pl), why: () => workWhy(s, p, Goal.Fish, pl, hunger, kidsHungry, short), icon: Bubble.Fish }); }
-    if (bestRab) { const pl = bestRab; add({ g: Goal.Snare, v: foodDrive * br * 1.3 * damp(Goal.Snare, 0.15), plan: () => snarePlan(s, p, pl), why: () => workWhy(s, p, Goal.Snare, pl, hunger, kidsHungry, short) }); }
-    if (bestGame) { const pl = bestGame; add({ g: Goal.Hunt, v: (foodDrive * 0.9 + tr[3] * 0.22 + tr[0] * 0.12) * bg * 1.5 * damp(Goal.Hunt, 0.05), plan: () => huntPlan(s, p, pl), why: () => workWhy(s, p, Goal.Hunt, pl, hunger, kidsHungry, short), icon: pl.sp === Species.Mammoth ? Bubble.Mammoth : Bubble.Deer }); }
-    if (bestCarc) { const pl = bestCarc; add({ g: Goal.Haul, v: (foodDrive + tr[1] * 0.2) * bc * 1.4 * damp(Goal.Haul, 0.2), plan: () => [step(St.Go, pl.x, pl.y), step(St.Butcher, pl.x, pl.y, pl.ref, 5), step(St.Go, fx, fy), step(St.Drop, fx, fy)], why: () => `${p.name} is fetching meat from the ${SPECIES_SHORT[pl.sp ?? 0]} ${pl.src ? `${s.byId.get(pl.src)?.name ?? "someone"} killed` : "killed"} ${compass(pl.x - b.x, pl.y - b.y)} of camp, before it spoils.`, icon: Bubble.Meat }); }
+    if (bestPlant) { const pl = bestPlant; add({ g: Goal.Gather, v: foodDrive * bp * 2.1 * damp(Goal.Gather, 0.03), plan: () => gatherPlan(s, p, pl, carry), why: () => workWhy(s, p, Goal.Gather, pl, hunger, kidsHungry, short), icon: Bubble.Berries }); }
+    if (bestFish) { const pl = bestFish; add({ g: Goal.Fish, v: foodDrive * bf * 2.1 * damp(Goal.Fish, 0.05), plan: () => fishPlan(s, p, pl), why: () => workWhy(s, p, Goal.Fish, pl, hunger, kidsHungry, short), icon: Bubble.Fish }); }
+    if (bestRab) { const pl = bestRab; add({ g: Goal.Snare, v: foodDrive * br * 1.7 * damp(Goal.Snare, 0.12), plan: () => snarePlan(s, p, pl), why: () => workWhy(s, p, Goal.Snare, pl, hunger, kidsHungry, short) }); }
+    if (bestGame) { const pl = bestGame; add({ g: Goal.Hunt, v: (foodDrive * 0.9 + tr[3] * 0.22 + tr[0] * 0.12) * bg * 2.1 * damp(Goal.Hunt, 0.04), plan: () => huntPlan(s, p, pl), why: () => workWhy(s, p, Goal.Hunt, pl, hunger, kidsHungry, short), icon: pl.sp === Species.Mammoth ? Bubble.Mammoth : Bubble.Deer }); }
+    if (bestCarc) { const pl = bestCarc; add({ g: Goal.Haul, v: (foodDrive + tr[1] * 0.2) * bc * 2 * damp(Goal.Haul, 0.15), plan: () => [step(St.Go, pl.x, pl.y), step(St.Butcher, pl.x, pl.y, pl.ref, 5), step(St.Go, fx, fy), step(St.Drop, fx, fy)], why: () => `${p.name} is fetching meat from the ${SPECIES_SHORT[pl.sp ?? 0]} ${pl.src ? `${s.byId.get(pl.src)?.name ?? "someone"} killed` : "killed"} ${compass(pl.x - b.x, pl.y - b.y)} of camp, before it spoils.`, icon: Bubble.Meat }); }
   }
 
   /* --- wood for the fire --- */
   if (worker && !night) {
-    const need = clamp01((0.65 - b.fire) * 1.2 + (3 - b.store.wood) / 6) * (0.35 + clamp01((16 - s.tempC(b.x, b.y)) / 20) + (dusk ? 0.3 : 0));
+    /* the fire needs feeding, and a woodpile for the night */
+    const need = clamp01((0.7 - b.fire) * 1.6 + (4 - b.store.wood) / 6) * (0.5 + clamp01((18 - s.tempC(b.x, b.y)) / 18) + (dusk ? 0.3 : 0));
     if (need > 0.05) {
       const spot = woodSpot(s, b.x, b.y);
-      if (spot) add({ g: Goal.Wood, v: need * (0.45 + tr[7] * 0.5) / (1 + busy(Goal.Wood) * 1.6), plan: () => [step(St.Go, spot[0], spot[1]), step(St.Wood, spot[0], spot[1], 0, 6), step(St.Go, fx, fy), step(St.Drop, fx, fy)], why: () => `${p.name} is gathering firewood because ${b.fire < 0.25 ? "the fire is nearly out" : "the woodpile is low"}${s.tempC(b.x, b.y) < 8 ? ` and the nights are cold` : ""}.`, icon: Bubble.Fire });
+      if (spot) add({ g: Goal.Wood, v: need * (0.6 + tr[7] * 0.5) / (1 + busy(Goal.Wood) * 1.3), plan: () => [step(St.Go, spot[0], spot[1]), step(St.Wood, spot[0], spot[1], 0, 6), step(St.Go, fx, fy), step(St.Drop, fx, fy)], why: () => `${p.name} is gathering firewood because ${b.fire < 0.25 ? "the fire is nearly out" : "the woodpile is low"}${s.tempC(b.x, b.y) < 8 ? ` and the nights are cold` : ""}.`, icon: Bubble.Fire });
     }
   }
 
   /* --- other people --- */
-  if (!night && lonely > 0.2 && st !== "baby") {
+  /* evenings at the fire are for talk */
+  const evening = dusk && !bedtime && dc < 10;
+  if (!bedtime && (lonely > 0.2 || evening) && st !== "baby") {
     const t = talkTarget(s, p);
-    if (t) add({ g: Goal.Talk, v: lonely * (0.45 + tr[5] * 0.8) * 0.9 + (p.moveWish > 0.5 ? 0.12 : 0), plan: () => [step(St.Go, t.x, t.y, t.id), step(St.Talk, 0, 0, t.id, 6)], why: () => talkWhy(s, p, t), icon: Bubble.Sun });
+    if (t) add({ g: Goal.Talk, v: (lonely * (0.3 + tr[5] * 0.6) + (evening ? 0.35 + tr[5] * 0.2 : 0)) * 0.8 + (p.moveWish > 0.5 ? 0.1 : 0), plan: () => [step(St.Go, t.x, t.y, t.id), step(St.Talk, 0, 0, t.id, 6)], why: () => talkWhy(s, p, t), icon: Bubble.Sun });
   }
-  if (!night && st === "adult" && !p.partner && p.longing > 0.25) {
+  if (!bedtime && st === "adult" && !p.partner && p.longing > 0.25) {
     const c = courtTarget(s, p);
+    /* nobody to court at home: go and visit a band of one's own people */
+    if (!c && p.longing > 0.45 && !dark && !p.baby) {
+      const other = p.places.filter(pl => pl.k === Place.Camp && pl.ref !== p.band && s.bandById.has(pl.ref)).map(pl => s.bandById.get(pl.ref)!).sort((a, c2) => Math.hypot(a.x - p.x, a.y - p.y) - Math.hypot(c2.x - p.x, c2.y - p.y))[0];
+      if (other && Math.hypot(other.x - p.x, other.y - p.y) < 110) {
+        const [vx, vy] = s.dryNear(other.x + Math.cos(p.id) * 2, other.y + Math.sin(p.id) * 1.5);
+        add({ g: Goal.Visit, v: p.longing * (0.45 + tr[5] * 0.35), plan: () => [step(St.Go, vx, vy), step(St.Sit, vx, vy, 0, 12)], why: () => `${p.name} is visiting the ${other.name}, hoping to find someone to marry. There is nobody for ${herObj(p)} at home.`, icon: Bubble.Heart });
+      }
+    }
     if (c) add({ g: Goal.Court, v: p.longing * c.a * (0.65 + tr[5] * 0.5) * 1.3, plan: () => [step(St.Go, c.q.x, c.q.y, c.q.id), step(St.Talk, 0, 0, c.q.id, 7, { a: 1 })], why: () => `${p.name} is spending time with ${c.q.name} because ${she(p)} is sweet on ${herObj(c.q)}${s.op(c.q, p.id) > 0.3 ? `, and ${c.q.name} seems to like ${herObj(p)} back` : ""}.`, icon: Bubble.Heart });
   }
   if (worker && !night) {
@@ -160,8 +188,8 @@ export function decide(s: Society, p: Person, forced?: Goal): void {
   /* --- exploring --- */
   if (worker && !dark && age < 60 && p.injury < 0.2 && !(p.baby && s.age(s.byId.get(p.baby)!) < 1)) {
     const food = p.places.filter(pl => pl.k === Place.Plants || pl.k === Place.Fish).length;
-    const v = tr[4] * 0.42 * (1 - p.fear) * (foodDrive < 0.6 ? 1 : 0.4) + Math.max(p.moveWish, p.leaveWish) * 0.32 + (food < 5 ? 0.2 : 0) + short * 0.18;
-    add({ g: Goal.Explore, v: v / (1 + busy(Goal.Explore) * 0.6), plan: () => explorePlan(s, p), why: () => exploreWhy(p), icon: Bubble.Question });
+    const v = tr[4] * 0.26 * (1 - p.fear) * (foodDrive < 0.5 ? 1 : 0.4) + Math.max(p.moveWish, p.leaveWish) * 0.45 + (food < 4 ? 0.1 : 0) + short * 0.12;
+    add({ g: Goal.Explore, v: v / (1 + busy(Goal.Explore) * 1.2), plan: () => explorePlan(s, p), why: () => exploreWhy(p), icon: Bubble.Question });
   }
 
   /* --- resting at camp --- */
@@ -180,6 +208,11 @@ function pick(s: Society, p: Person, opts: Option[]): void {
 }
 function commit(s: Society, p: Person, o: Option): boolean {
   const plan = o.plan(); if (!plan || !plan.length) return false;
+  /* anything carried goes into the store first, unless the plan is to eat it or haul more */
+  if (p.carryAmt > 0 && o.g !== Goal.Eat && o.g !== Goal.Flee && o.g !== Goal.Migrate && !plan.some(k => k.k === St.Drop)) {
+    const b = s.band(p);
+    if (Math.hypot(p.x - b.x, p.y - b.y) < 40) { const [fx, fy] = s.fireSpot(p); plan.unshift(step(St.Go, fx, fy), step(St.Drop, fx, fy)); }
+  }
   p.plan = plan; p.si = 0; p.goal = o.g; p.why = o.why(); p.whyAt = s.time;
   if (o.icon && (o.g === Goal.Drink || o.g === Goal.Eat || o.g === Goal.Warm || o.g === Goal.Flee || o.g === Goal.Migrate || o.g === Goal.Sick)) s.bubble(p, o.icon, 2.5);
   return true;
@@ -191,7 +224,7 @@ function gatherPlan(s: Society, p: Person, pl: KnownPlace, carry: number): Step[
   const [fx, fy] = s.fireSpot(p);
   const n = carry > 2 ? 2 : 1;
   const out = [step(St.Go, pl.x, pl.y)];
-  for (let k = 0; k < n; k++) out.push(step(St.Gather, pl.x + (k ? 0.7 : 0), pl.y, 0, 6, { a: carry }));
+  for (let k = 0; k < n; k++) out.push(step(St.Gather, pl.x + (k ? 0.7 : 0), pl.y, 0, 4.5, { a: carry }));
   out.push(step(St.Go, fx, fy), step(St.Drop, fx, fy));
   return out;
 }
@@ -231,7 +264,7 @@ function explorePlan(s: Society, p: Person): Step[] | null {
   for (const pl of p.places) { bx += pl.x - b.x; by += pl.y - b.y; n++; }
   const away = n ? Math.atan2(-by, -bx) : s.rng.next() * Math.PI * 2;
   for (let tries = 0; tries < 8; tries++) {
-    const a = away + (s.rng.next() - 0.5) * 2.4, d = s.rng.range(20, 38);
+    const a = away + (s.rng.next() - 0.5) * 2.4, d = s.rng.range(14, 28);
     const x = b.x + Math.cos(a) * d, y = b.y + Math.sin(a) * d;
     if (!s.walker.dry(x, y)) continue;
     return [step(St.Go, x, y), step(St.Look, x, y, 0, 4), step(St.Go, fx, fy)];
@@ -241,7 +274,7 @@ function explorePlan(s: Society, p: Person): Step[] | null {
 
 /* ---------------- helpers ---------------- */
 
-export const HUNT_P = [0.3, 0.16, 0.12, 0.22, 0, 0.1];
+export const HUNT_P = [0.42, 0.24, 0.17, 0.32, 0, 0.12];
 export const DANGER = [0.004, 0.04, 0.05, 0.01, 0, 0.12];
 export const SPECIES_SHORT = ["deer", "aurochs", "mammoth", "horses", "wolves", "bear"];
 const LEARN: Partial<Record<number, string>> = { [Goal.Gather]: "which plants are good to eat", [Goal.Fish]: "how to fish", [Goal.Snare]: "how to set snares", [Goal.Wood]: "how to keep a fire", [Goal.Craft]: "how to work hides" };
@@ -256,9 +289,10 @@ function nearestWater(s: Society, p: Person): [number, number] | null {
   let best: [number, number] | null = null, bd = 1e9;
   for (const pl of p.places) if (pl.k === Place.Water) { const d = Math.hypot(pl.x - p.x, pl.y - p.y); if (d < bd) { bd = d; best = [pl.x, pl.y]; } }
   if (bd < 6) return best;
-  const w = s.waterNear(p.x, p.y, 10);
+  const w = s.waterNear(p.x, p.y, 12);
   if (w) { s.learnPlace(p, Place.Water, w[0], w[1], 1, 0, 0); return w; }
-  return best;
+  /* everyone knows where their own camp draws its water */
+  return best ?? s.band(p).water;
 }
 export function woodSpot(s: Society, x: number, y: number): [number, number] | null {
   const W = s.w.w;
@@ -287,7 +321,7 @@ function talkTarget(s: Society, p: Person): Person | null {
 }
 /** Who someone single is drawn to: of an age to suit, not close kin, healthy, respected, kind, and liked. */
 export function attraction(s: Society, p: Person, q: Person): number {
-  if (q.sex === p.sex || q.partner || s.kin(p, q, 2)) return 0;
+  if (q.sex === p.sex || q.partner || s.kin(p, q, s.culture(p).cousins ? 1 : 2)) return 0;
   const a = s.age(p), b = s.age(q);
   if (b < 16 || b > 52) return 0;
   const pref = p.sex === "m" ? -2 : 2, fit = Math.exp(-(((b - a - pref) / 7) ** 2));
@@ -405,5 +439,5 @@ function siteReason(s: Society, p: Person, x: number, y: number): string {
   let plants = 0, fish = 0, game = 0;
   for (const pl of p.places) { if (Math.hypot(pl.x - x, pl.y - y) > 30) continue; if (pl.k === Place.Plants) plants += pl.q; else if (pl.k === Place.Fish) fish += pl.q; else if (pl.k === Place.Game) game += pl.q; }
   const best = Math.max(plants, fish, game * 2);
-  return best === 0 ? "fresh land" : best === plants ? `${plantWord(s, x, y)} to gather` : best === fish ? "good fishing" : "game to hunt";
+  return best === 0 ? "fresh land" : best === plants ? `plenty of ${plantWord(s, x, y)} to gather` : best === fish ? "good fishing" : "game to hunt";
 }
