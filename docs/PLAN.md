@@ -1,0 +1,144 @@
+# Little Ages: Plan
+
+## Context
+You want a cute pixel-art civilization sim where nothing in history is scripted. Every person is an individual with needs, a personality, a family, memories and their own knowledge, and they act for themselves. Tribes, leaders, kingdoms, revolts, trade, religions, wars and inventions happen only because people decided they were worth doing. It should run from the Stone Age to rockets (and later space), on a huge procedural world with an underground, with maximum realism and depth, while staying easy to read and fun to watch. The workspace is empty, so this is a brand-new project.
+
+### What you decided
+- **Start:** chosen per world (one cradle *or* scattered bands, plus world size, shape and seed)
+- **Run length:** very long and deep (40+ hours from the Stone Age to rockets)
+- **Your role:** watcher + small nudges, with big god powers behind a sandbox toggle
+- **Realism:** religion and myths, crime and justice, disease and plagues, oppression (all shown non-graphically)
+- **Camera:** top-down 3/4 for the surface, plus underground layer view **and** cross-section view
+- **People:** small ~8×16 sprites · **UI:** corner cards · **UI style:** era-shifting
+- **World:** continents by default + shape picker · **Names:** invented languages
+- **Device:** strong PC (aim: 10,000+ fully simulated people) · **Sound:** music + ambience
+- **Spotlight:** yes, with auto-cam · **Saving:** new GitHub repo · **Title:** *Little Ages*
+- **Style board round 1 picks:** D Field Notes palette, dark outlines, balanced proportions. Your notes: the UI needs to be much better and more creative, the art and animation need to be much better, and it should feel like WorldBox.
+- **What "like WorldBox" means (your answers):** its shapes, animation and movement, where everything feels alive and punchy, plus the zoomed-out living map. Two scales: tiny WorldBox-style people over the world map, detailed 8×16 people up close. Round 2 compares a richer Field Notes palette against a brighter WorldBox-like one. UI concepts to mock up: **pinned field tags** and the **history ribbon**.
+
+---
+
+## Right now: repo + style board round 2
+
+**1. Set up the repo.** Attach `tuckerstrachan414-maker/Little-Ages` with `add_repo` (push access), clone it to `/home/user/Little-Ages`, call `register_repo_root`, and look at what's already in it. Move the style board into `style-board/index.html` in the repo, commit on a working branch, push, and open a draft PR. From now on, every piece of work gets pushed.
+
+**2. Study first, then redraw.** The round 1 art came from rectangles and math. Round 2 is drawn the way pixel artists actually work, using these research rules:
+- **Hand-drawn sprite templates.** Body bases are authored pixel by pixel for each age and sex, in both the tiny and 8×16 sizes, with color regions that genetics, culture and clothing can recolor. Every sprite has to pass the "silhouette at 1×" and grayscale value checks.
+- **Real color ramps.** Each material gets a 3–4 shade ramp that shifts hue: shadows lean cool, highlights lean warm, saturation peaks in the middle tones, and bright colors are never also highly saturated (Slynyrd's method). Light always comes from the top-left.
+- **Outlines.** A dark outer outline (your pick), selective darker lines on the shadow side, and lighter inner lines (Lospec's rules).
+- **Animation that feels alive** (sprite-animation timing guides):
+  - **Walk:** 4 frames at about 100–150ms, with a 1px body bob.
+  - **Idle:** 2–4 frames at 300–500ms, with breathing and blinks.
+  - **Work actions:** a 1-frame anticipation, an impact frame held about 150–200ms, then recovery.
+  - **Throughout:** frame timing varies instead of ticking at a steady rate, motions overshoot by about 30%, swings follow arcs, and hair lags 1px behind.
+  - **Effects on top:** dust puffs, wood chips, splashes and sparks.
+- **WorldBox-style terrain.** Clean biome color fields with tidy edge transitions instead of noisy speckles. Water gets a separate shallow band where the ground shows through, depth shading, and shoreline foam whose animation starts on different frames so it doesn't pulse in unison. Mountains get shading and snow caps, and every tree and unit casts a small ground shadow.
+- **Videos.** I'll try the `watch-video` skill on a couple of pixel-art animation tutorials and WorldBox gameplay to study motion. If the network blocks video sites, I'll rely on the written guides instead.
+
+**3. Rebuild the style board (same link)** with:
+- **A zoomed-out living map:** a continent with biomes, rivers, several villages growing, kingdom borders and tiny units moving around. A zoom slider shows the switch from tiny people to detailed 8×16 people.
+- **The camp close-up**, redrawn with the new art and animation rules.
+- **People, actions, homes, seasons and underground**, all redrawn.
+- **Both palettes side by side:** richer Field Notes vs. bright WorldBox-like.
+- **Two new UI concepts mocked over the world:**
+  - **Pinned field tags:** info cards pinned to the map and tied to the person by a thread. Relationship threads (family, feuds, alliances) appear when you inspect someone.
+  - **History ribbon:** a scrubbable timeline with little event banners. Clicking one flies the camera to that event.
+  - Both use crisp 9-slice pixel panels, a 1px bevel for button states, segmented need bars, and icons designed as silhouettes first. Era-shifting stays as the material layer.
+- **New pick rows** so you can choose again. I read your picks back from the page.
+
+**4. Then milestone 1** (a living valley) starts, using whatever you pick.
+
+---
+
+## The short version (for you)
+
+**Overall.** Little Ages is a cozy pixel-art world you watch, where every single person has their own mind: needs, a personality, a family, memories, friends, enemies and things they know how to do. Nothing in history is scripted. Tribes, chiefs, kings, religions, trade routes, revolts, wars and inventions only happen because individual people decided, for their own reasons, that it was worth doing. Each world is freshly generated with continents, rivers, mountains, biomes, seasons and a real underground, and each culture invents its own language, look and building style. Starting in the Stone Age, people discover things one at a time (fire, farming, bridges, ships, writing, electricity, cars, planes, skyscrapers and eventually rockets), and those discoveries spread or get lost through teaching, trade and war. You mostly watch and follow the stories, with small nudges like weather or a spark of inspiration, and a Story Spotlight plus a self-writing History Book make sure you never miss the drama. A full run is meant to be long and deep, like watching real human history unfold, with giant wars on top and tiny neighbor squabbles underneath.
+
+**The People.** Every person has needs (food, water, rest, warmth, health, safety, love, belonging, respect, freedom, purpose and curiosity), and how much each one matters is different for every person. They also have a personality: how brave, kind, greedy, ambitious, curious, loyal, stubborn or religious they are, partly inherited from their parents and partly shaped by what happens to them. They remember things, like who helped them, who cheated them and where the berries were last spring, and their opinions of every person, leader and idea shift with those memories. Each moment a person weighs what they could do against what they want, what they believe will work and what it will cost them, then makes a real multi-step plan (make a spear, walk to the herd, hunt, carry the meat home, share it with the family). They only know what they've seen or been told, so they can be wrong, fooled by rumors or surprised, just like real people.
+
+**Society & Power.** Nobody is told to form a village. People team up because they notice that sharing hunts, defending each other and splitting work makes their own lives easier. Leaders appear when someone earns enough respect, fear or followers, and rules (sharing food, paying tribute, punishing thieves, who becomes chief next) are ideas people suggest, argue about and either adopt or reject. When things feel unfair (the chief hoards grain, taxes are crushing, one group is oppressed), people grumble, gossip and form factions with others who feel the same. From there each person chooses for themselves: put up with it, go live in the woods alone, found a new village, riot, overthrow the leader or break away as a new nation. Bands, tribes, chiefdoms, kingdoms, republics and empires are just labels the game puts on what people actually built, and they can collapse just as naturally.
+
+**Family, Life & Genetics.** People are born, grow up, fall in love (or marry for land and alliances), have kids, grow old and die, and you can read their age at a glance: babies are carried, kids play, teens are lanky, adults work, elders go gray and use canes. Parents really care about their children, so they keep weighing their own family against what their chief, town or king wants from them, and different personalities choose differently. Looks come from real genetics. Skin tone, hair color and curl, eye color, height and build are inherited from both parents, so the child of a dark-skinned and a light-skinned parent lands in between, and siblings each turn out a little different. Each world starts with ancestries that fit where people begin, and in cradle mode populations slowly adapt to their climate over many generations. Family trees, dynasties, feuds and inheritance all grow out of this, so you can trace a peasant girl's line until her great-great-grandson becomes king.
+
+**Cultures & Languages.** Every group develops its own culture: values (honor, freedom, tradition, faith, family), building style, clothing, food, festivals and customs, passed from parents to kids and slowly drifting over time. Each culture also gets its own invented language with its own sounds, and every name comes from it: people, towns, rivers, kingdoms. When a group splits off, its language and customs drift into a dialect and eventually a whole new language, while trade spreads borrowed words and ideas. Cultures that meet can blend, clash, or one can absorb the other, just like in real history. A map of languages or cultures literally shows the history of who split from whom.
+
+**The World.** Every world is generated from a seed. By default it has continents and oceans (or pick supercontinent, archipelago or random), plus mountains, rivers, lakes, forests, deserts, tundra, jungles, grasslands and coasts. Climate comes from latitude, altitude, wind and rain shadows, and there are full seasons: snow piles up in winter, crops fail in droughts, rivers flood and leaves turn in autumn. Animals live real lives too. Herds migrate, breed and can be hunted to extinction, which can push people to move, farm or tame animals instead. Where people live shapes them: snowy peoples need warm clothes, sturdy houses and food storage, river peoples fish and build boats, desert peoples chase water, and a nation sitting on copper and tin can reach bronze first while its neighbors have to trade or fight for it.
+
+**Underground.** The world has real depth below the surface: soil, rock layers, ore veins, caves and underground water. People dig cellars, wells, mines and tunnels, and later sewers, subways and bunkers, but only when they have a reason and the know-how. The layer view flips the top-down camera between depths (Surface, Shallow, Deep, Caverns), like flipping through the floors of a building. The cross-section tool lets you drag a cut line anywhere and see a side slice of that spot, like an ant farm, with miners on ladders and trains in tunnels. Mining is dangerous: cave-ins, flooding and bad air can happen, and that pushes people to invent supports, pumps and ventilation.
+
+**Progress & Technology.** There's no tech tree you click on. Discoveries happen inside people's heads, when a curious person doing a related activity is under pressure to solve a problem (a hunter knapping flint, a freezing family experimenting with hides). The discovery web runs from fire and stone tools through farming, pottery, bridges, bronze, writing, ships, iron, printing, gunpowder, steam, electricity, cars, planes, skyscrapers, computers and rockets. That's hundreds of real steps, each needing the right knowledge, materials and circumstances. Knowledge spreads through teaching, watching, trade, travel, conquest and later books and schools, so different nations get good at different things and swap ideas along trade routes. It can also be lost: if the only blacksmith dies without an apprentice, or a library burns, that skill can vanish. Every craft also keeps improving slowly forever, so progress never hits a ceiling, and travel to other planets is planned as a later expansion.
+
+**Economy, Trade & Logistics.** Everything is physical. Food is grown, carried, stored and eaten, and can spoil or be stolen, and every item exists somewhere in the world. People start by sharing and bartering, and money appears on its own when one good (shells, copper, salt) becomes something everyone accepts. Each town has its own prices based on what's plentiful and what's scarce, so merchants appear naturally because they personally profit from moving grain from a full town to a hungry one. Moving goods is real work: on backs, then pack animals, carts, boats, ships, trains, trucks and planes, so roads, bridges and ports really matter. Fights over food, water, land and trade routes grow from neighbor arguments into town rivalries and full wars.
+
+**Story & History.** The game watches everything and keeps a living History Book that writes itself as it goes, with eras, nation histories, biographies of notable people, wars, discoveries and disasters. It tracks storylines automatically, so you can follow big plots (an empire's rise and fall) and small subplots (two brothers feuding over a field, a village raided during a war, a widow becoming a famous trader). The Story Spotlight button and optional auto-camera fly you to real moments as they happen: a raid starting, a first invention, a wedding, a riot, a king dying with no heir. Religions, myths, crime, plagues and oppression can all emerge, and so can heroes, reformers, rebels and abolitionists. None of it is scripted. The game only finds the drama and tells it, it never invents it.
+
+**Art Style.** A top-down 3/4 view (like Stardew Valley or RimWorld) with small, cute 8×16 people who are still easy to read: you can tell a man from a woman, a child from a teen from an elder, and see skin tone, hair, beards, clothing and what they're carrying. People and buildings are built from parts instead of being copy-pasted, so no two people look the same. Houses vary by wealth, age, repairs and owner, while each culture keeps a recognizable style (round huts, longhouses, stilt houses). Clothing follows culture, era, climate, job and wealth, so you can spot a fur-wrapped hunter, a silk-robed noble or a factory worker, and day/night, weather, seasons, torches and glowing windows make the world feel alive. You'll choose the exact palette and look from a real full-color style board before anything gets built.
+
+**Animation.** Every action has its own animation, so you can always tell what someone is doing: walking, running, carrying, chopping, mining, plowing, sowing, harvesting, fishing, hunting, cooking, eating, building, sleeping, praying, dancing and fighting. Talking shows gestures plus tiny picture bubbles (a fish, a heart, an angry scribble, a crown), so you can tell what a conversation is about without reading anything. Emotions show in posture: slumped when sad, bouncy when happy, shaking a fist when angry, kids playing tag, couples holding hands. Babies get carried, elders walk slowly, the injured limp and the sick lie in bed. Crowds, armies and festivals are made of individuals each doing their own thing, never cloned blobs.
+
+**UI.** The world fills the whole screen, with small cards in the corners: date and speed top-left, search and menu top-right, a short news feed bottom-left, and an inspect card that slides in when you click anything. The inspect card shows who someone is, how they feel and what they're doing, plus a plain-English "why?" line ("Ama is fishing because her kids are hungry and the river is close"). One more click opens their family tree, memories, friends, enemies, beliefs and skills. Search finds any person, town, nation, river or invention instantly, and map modes color the world by nation, culture, religion, language, wealth, happiness, tech or trade routes. The layout never moves, but the UI's material changes with the era (carved stone, bronze, parchment, riveted brass, glass screens, holo panels), and it stays clean and minimal, showing up only when you need it.
+
+**Your Role.** You're mostly a watcher, free to follow, inspect and read about anyone, anywhere. You can give small nudges: send rain or drought, bless or blight a harvest, add or remove animals, or plant a spark of an idea in a curious person's head, and people react however they would. You can never control anyone directly, so even your nudges ripple out in ways you can't predict. A sandbox toggle unlocks big god powers (earthquakes, plagues, meteors, terraforming, spawning people) for when you want to stir things up. The world-creation screen lets you pick the start (one cradle or scattered bands), world shape, size and seed, so every run is different.
+
+**Time & Pacing.** At normal speed a day takes about a minute, so you can follow one person through their morning, and years pass in four short seasons. Speed controls go from paused up to centuries in minutes, and the Spotlight can slow time down for big moments. A full run from the Stone Age to rockets is tuned to be long and deep (40+ hours), with dozens of generations, like real history. Progress isn't on a timer: a world hit by plagues, wars or a harsh climate can stall for centuries, and a lucky one can surge ahead. Worlds autosave, so you can leave one running and come back to see what happened.
+
+**Sound.** Soft generated music changes with the era (bone flutes and drums early on, lutes later, pianos and synths much later) and with the mood: calm in peacetime, tense in war, grand when a city booms. Ambient sound follows where you're looking: birds and wind in the wild, hammering and chatter in towns, rain, rivers and storms. People babble in tiny voices built from the sounds of their own invented language, so two cultures actually sound different. Big moments get small musical stings, like a discovery chime or a war drum. Everything can be mixed or muted in settings.
+
+### My ideas (tell me which ones you love or hate)
+- **The "why?" line** on every person, so emergent behavior is always understandable instead of confusing.
+- **News travels at real speed.** Rumors and news spread person to person, so word of a famine or a king's death moves at walking pace, then horse, then telegraph, then radio. Rumors can be wrong or deliberately spread.
+- **Grudges and gratitude last generations.** A family remembers who betrayed grandpa, and old feuds can restart wars a century later.
+- **Ruins and rediscovery.** Abandoned towns decay into ruins that later peoples find and wonder about, and lost knowledge can be rediscovered from them.
+- **Place names carry history.** Towns get named after founders or events ("Ama's Ford", "Burnt Hill"), in that culture's own language.
+- **Art reflects real events.** Cave paintings, statues and songs depict things that actually happened to those people (a great hunt, a hero, a flood).
+- **Era-shifting UI** (already chosen), so you feel progress even in the interface.
+
+### Honest notes
+- Because every single person is a real mind, towns and cities will be smaller than in real life (a "big city" might be a few thousand people). The target is 10,000+ people alive at once on a strong PC, and everyone you see is a real individual, never filler.
+- This is a huge game, so it gets built in playable milestones. Each one is complete before the next starts, and nothing from your vision gets cut. It's just the order things are built in.
+
+### What you'll see, in order
+0. **Style board (pictures!)**: round 1 is done (https://claude.ai/artifact/KG9SiiJeevsMhSLLLBW86N). Round 2 adds the redrawn, WorldBox-feel art, the living map, both palettes and the two new UI concepts at the same link. Nothing gets built until you've picked.
+1. **A living valley**: world generation, people with needs/personality/memory, gathering, hunting, fishing, families, births and deaths, genetics, animations, the inspect card with "why?".
+2. **First villages**: sharing, friendships and feuds, groups forming, leaders emerging, the first discoveries (fire, tools, farming), huts in each culture's style, the news feed.
+3. **Chiefs & quarrels**: rules and norms, factions, leaving, revolts, secession, raids, war, religion, crime, the History Book and Spotlight.
+4. **Roads & trade**: barter, then money, then markets, plus merchants, logistics, disease, writing, knowledge spreading and being lost, languages drifting.
+5. **Underground & the big world**: mining, layer and cross-section views, full continents, ships, first contact, map modes, scaling to 10,000+ people.
+6. **The ages roll on**: bronze, iron, medieval, industrial and modern eras (bridges, ships, electricity, cars, planes, skyscrapers, subways), the full era-shifting UI, music and sound.
+7. **Later expansion**: the space age, with rockets to other planets.
+
+Every milestone gets a playable link and is saved to GitHub.
+
+### What I need from you
+- Create an **empty GitHub repo** (suggested name `little-ages`, no README) under your account at github.com/new, then tell me its name. I'll attach it and save everything there.
+
+---
+
+## Build notes (for me; you can skip this)
+
+**Stack:** TypeScript + Vite; PixiJS v8 (WebGL2) for rendering; simulation in Web Worker(s); DOM/CSS overlay for the UI (crisp text, era skins as CSS theme tokens and pixel border images); WebAudio for procedural music and ambience; IndexedDB + fflate for saves; Vitest; Playwright (Chromium is preinstalled) for screenshots. Seeded deterministic RNG throughout. Ship as a single-file build so it can be published as a playable artifact.
+
+**Project:** `/home/user/little-ages/` (the attached repo clone).
+- `src/sim/`: `world/` (worldgen: continents via noise + domain warp, elevation, temperature by latitude/altitude, moisture via winds and rain shadow, rivers via flow accumulation, Whittaker biomes, geology/ore strata, underground layers, vegetation, fauna populations, weather/seasons), `mind/` (needs, personality: Big Five + values, emotions, episodic memory with decay, beliefs, relationships, knowledge; utility-AI goal selection → HTN planner → actions; social actions: talk/gossip, share, trade, court, teach, threaten, fight, steal, protest, conspire), `society/` (emergent groups: household/band/village/polity/faction/religion/guild; norms as memes proposed and adopted through influence; leadership = prestige + dominance + legitimacy; grievance → tolerate/leave/secede/riot/revolt/coup; polity labels derived from structure; war as individual soldiers), `economy/` (inventories, recipes, spoilage, barter → emergent commodity money, local prices from supply/demand, merchants, transport capacity), `tech/` (data-driven discovery graph: prerequisites, activity/need triggers, effects; per-agent discovery; diffusion; loss; unbounded refinement levels), `genetics/` (diploid polygenic loci for pigmentation, hair, eyes, height, build, face, partly heritable temperament; founder allele frequencies; mutation; optional climate selection in cradle mode), `culture/` + `language/` (culture vectors with drift and diffusion; phoneme inventory + phonotactics → names; sound-change drift on separation; loanwords), `health/` (pathogens with transmission routes, immunity, injuries, aging), `chronicle/` (event bus → significance scoring → storyline arcs → varied prose → History Book + Spotlight queue).
+- Sim LOD: everyone is always an individual mind. On-screen agents get step-by-step paths and animation; off-screen agents make the same decisions, but actions resolve by duration. Hierarchical pathfinding (chunk graph + A*), flow fields for crowds and armies. Structure-of-arrays typed arrays for hot data.
+- `src/render/`: chunked autotiled terrain, procedural part-based sprites (body by age/sex, genetics-driven palettes, hair/clothing by culture, era, job and wealth), per-action animation frames, zoom LODs (close → town → region → world glyphs), layer view + cross-section renderer, day/night lighting, weather particles, seasonal snow and tint, thought icons.
+- `src/ui/`: corner cards, inspector with "why?", search, History Book, family tree, map modes, nudges and sandbox menu, world-creation screen, era skins.
+- `src/audio/`: era instrument sets, mood → tempo/mode, biome/zoom ambience, babble synthesized from culture phonemes.
+- `data/`: techs, items, recipes, buildings, biomes, animals.
+
+**No-hard-coding rule:** no event is ever triggered by date, script or quota. Everything has to come from agent decisions, physics, ecology or player nudges.
+
+**Process:**
+1. `add_repo` (owner `tuckerstrachan414-maker`, repo `Little-Ages`, access `push`), clone the repo to `/home/user/Little-Ages`, then `register_repo_root`. Inspect the existing contents.
+2. Copy `/home/user/style-board/index.html` → `Little-Ages/style-board/index.html`, commit on a branch, push with `git push -u origin <branch>`, and open a draft PR.
+3. Run style board round 2 (see "Right now" above). The board's sprite/palette/animation code becomes the seed of `src/render/sprites/`, so the work carries over into the game.
+4. Republish to the same artifact URL (pass `url`, keep `capabilities: {db: {}}`), take one Playwright look at desktop and phone widths, then read picks back with `ArtifactData` on `picks/board`.
+5. After round-2 picks: scaffold the Vite/TS project in the repo and work milestone by milestone. Commit and push each one, with a playable artifact link.
+
+**Verification (every milestone):**
+- Vitest: genetics inheritance stats (mixed-parent children land in between, siblings vary), worldgen determinism and biome sanity, planner correctness, price convergence, tech prerequisites.
+- Headless harness `npm run sim -- --seed N --years Y` reports metrics (population curve, groups formed, leaders, revolts and secessions, discoveries, trade volume, language divergence) across several seeds. This proves emergence happens and differs between seeds.
+- Grep audit for date- or quota-triggered events (enforces the no-hard-coding rule).
+- Playwright screenshots at every zoom level, surface, layer and cross-section views, and each era skin, for visual QA.
+- Performance benchmark: FPS and sim ticks/sec with 10,000+ agents.
+- Publish a playable build and push to GitHub.
