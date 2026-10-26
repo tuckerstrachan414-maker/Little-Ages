@@ -3,6 +3,7 @@ import SimWorker from "./sim/worker.ts?worker&inline";
 import { Renderer } from "./render/renderer.ts";
 import { createScreen, hud } from "./ui/hud.ts";
 import { PeopleUI } from "./ui/people.ts";
+import { Dock } from "./ui/dock.ts";
 import type { CampSnap } from "./shared/people.ts";
 import type { FromWorker, ToWorker } from "./shared/protocol.ts";
 import type { MapMode } from "./shared/types.ts";
@@ -15,6 +16,7 @@ let worker: Worker | null = null;
 let renderer: Renderer | null = null;
 let ui: ReturnType<typeof hud> | null = null;
 let pui: PeopleUI | null = null;
+let dock: Dock | null = null;
 let camps: CampSnap[] = [];
 let lastTick = { time: 0, at: 0, speed: 1 };
 const life = { animals: 0, birds: 0, rabbits: 0, fish: 0, people: 0 };
@@ -38,14 +40,14 @@ function start() {
         screen.progress(5, 0.5);
         renderer = new Renderer(canvas, m.world);
         resize(); renderer.cam.fitWorld();
-        ui = hud(app, m.world, {
+        dock = new Dock(app);
+        ui = hud(m.world, dock, {
           onSpeed: s => { send({ type: "speed", speed: s }); lastTick.speed = s; },
           onMode: (mode: MapMode) => send({ type: "mode", mode }),
-          onNew: () => { worker?.terminate(); worker = null; renderer = null; pui = null; camps = []; app.innerHTML = ""; start(); },
+          onNew: () => { worker?.terminate(); worker = null; renderer = null; pui = null; dock = null; camps = []; app.innerHTML = ""; start(); },
           onMinimap: (u, v) => { if (renderer) { renderer.cam.x = u * renderer.world.w; renderer.cam.y = v * renderer.world.h; renderer.cam.clamp(); } },
-          onPeople: () => pui?.toggleList(camps),
         });
-        pui = new PeopleUI(app, {
+        pui = new PeopleUI(app, dock, {
           pin,
           fly: (x, y, z) => renderer?.cam.flyTo(x, y, z ?? Math.max(renderer.cam.z, 10), 900),
           follow: on => { if (on && renderer && pui?.pinned.person) { const p = renderer.people.pos.get(pui.pinned.person); if (p) renderer.cam.flyTo(p[0], p[1], Math.max(renderer.cam.z, 12), 700); } },
@@ -122,6 +124,7 @@ function bindInput() {
     if ((e.target as HTMLElement).tagName === "INPUT") return;
     held.add(e.key.toLowerCase());
     if (e.key === "Escape") pin(0, 0);
+    if (e.key.toLowerCase() === "h" && dock) dock.setHidden(!dock.isHidden);
     if (e.key === " ") { e.preventDefault(); ui?.setSpeed(lastTick.speed ? 0 : 1); }
     const n = "123456".indexOf(e.key); if (n >= 0) ui?.setSpeed([0, 1, 3, 10, 30, 100][n]);
     if (renderer && (e.key === "+" || e.key === "=")) renderer.cam.zoomAt(renderer.cam.vw / 2, renderer.cam.vh / 2, 1.4);

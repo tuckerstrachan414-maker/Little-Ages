@@ -9,21 +9,36 @@ import { isSnowy } from "../shared/seasonfx.ts";
 import { fineGround } from "./ground.ts";
 import { drawBirds, drawFish, drawRabbits, type Fields, type FlockSnap } from "./life.ts";
 import { PeopleLayer } from "./people.ts";
+import { paintInDepth, type DepthItem } from "./depth.ts";
+import { CREATURE_SCALE } from "./scale.ts";
 
 /*
   Draw order each frame:
     1. the whole map, one pixel per tile, scaled to the zoom (cross-fading between seasons)
-    2. up close: cached chunks of ground texture, then live water (foam, glints)
-    3. up close: cached chunks of trees and rocks, back to front by row
-    4. wildlife and people with their camps, clouds and their shadows, day and night,
-       then campfire light through the dark and band names over their camps
+    2. up close: cached chunks of ground texture, then live water (foam, glints) and fish
+    3. up close: trees, wildlife, birds on the ground and people with their camps, all painted
+       in depth order by the row they stand on, so a creature walks behind a tree that stands
+       in front of it, and in front of one that stands behind it
+    4. flying birds, clouds and their shadows, day and night, then campfire light through the
+       dark and band names over their camps
   Chunks are rebuilt lazily a few per frame, so zooming never stalls.
 */
 
 const BUCKETS = [4, 6, 8, 12, 16, 24, 32, 48];
 const CHUNK_PX = 256;
+/* A tree row is cached on its own canvas that starts LIFT tiles above it: the tallest crown is 3.5 tiles, and a trunk can dip into the next row. */
+const LIFT = 3;
+/* A trunk stands near the bottom of its tile: about 0.42 of a tile below the middle of its row. */
+const TREE_OFFSET = 0.42;
+/* Rows per cached band. Up close a row is its own band; zoomed out, creatures are dots, so rows share a band to save draw calls. */
+const rowsPerBand = (T: number) => (T < 8 ? 4 : 1);
+/* Share of forest tiles that hold a tree. Forests stay dense, with gaps where the creatures can be seen. */
+const TREE_KEEP = 0.62;
+/* How far a creature can reach into a neighboring tree chunk, in tiles: a crown rises 3.5 tiles above its trunk, a creature stands 1.5 tall and about a tile wide. */
+const REACH_UP = 3.5, REACH_DOWN = 2, REACH_SIDE = 2.5;
 
-interface Chunk { ground: HTMLCanvasElement | null; objects: HTMLCanvasElement | null; surf: HTMLCanvasElement[] | null; used: number; px: number; }
+/* A chunk's trees come in two forms: one canvas for the whole chunk, and a sheet of row bands for when creatures are near. */
+interface Chunk { ground: HTMLCanvasElement | null; objects: HTMLCanvasElement | null; sheet: HTMLCanvasElement | null; groups: boolean[]; surf: HTMLCanvasElement[] | null; used: number; px: number; }
 export interface HerdSnap { n: number; data: Float32Array; }   /* per herd: id, species, x, y, count, heading, state */
 export const HERD_STRIDE = 7;
 
@@ -103,17 +118,23 @@ export class Renderer {
     ctx.globalAlpha = 1;
     if (fade >= 1) this.terrainPrev = null;
     ctx.imageSmoothingEnabled = false;
-    /* 2-3. close-up chunks */
+    /* 2. close-up ground, water and fish */
     const detail = z >= 4 && this.mode === "terrain";
     if (detail && this.bucketFor(z) >= 8) this.drawChunks(now, z);   /* below sprite scale the ground is just the map itself */
     if (z >= 6 && this.mode === "terrain") this.drawWater(now, z, this.bucketFor(z) < 8);
-    if (this.fields && this.mode === "terrain") { drawFish(ctx, cam, this.world, this.fields, now, this.season); drawRabbits(ctx, cam, this.world, this.fields, this.gameTime, this.season); }
-    if (detail) this.drawChunks(now, z, true);
-    /* 4. life and weather */
-    this.drawHerds(now, z);
-    if (this.mode === "terrain") this.people.draw(ctx, cam, now, this.season);
+    if (this.fields && this.mode === "terrain") drawFish(ctx, cam, this.world, this.fields, now, this.season);
+    /* 3. everything that stands on the ground, painted in depth order */
     const ba = Math.min(1, (now - this.herdT) / 100);
-    drawBirds(ctx, cam, this.flocks, this.flocksPrev, ba, now, false);
+    const creatures: DepthItem[] = [];
+    this.collectHerds(creatures, now, z);
+    if (this.fields && this.mode === "terrain") drawRabbits(ctx, cam, this.world, this.fields, this.gameTime, this.season, creatures);
+    drawBirds(ctx, cam, this.flocks, this.flocksPrev, ba, now, false, creatures);
+    if (this.mode === "terrain") this.people.collect(creatures, ctx, cam, now, this.season);
+    const trees: DepthItem[] = [];
+    if (detail) this.collectTrees(trees, creatures, now, z);
+    paintInDepth(creatures.concat(trees));
+    if (this.mode === "terrain") this.people.drawOverlay(ctx, cam);
+    /* 4. flying birds, the hover box, weather and light */
     drawBirds(ctx, cam, this.flocks, this.flocksPrev, ba, now, true);
     if (this.hover && z >= 4) { const [hx, hy] = cam.toScreen(this.hover[0], this.hover[1]); ctx.strokeStyle = "rgba(255,240,200,.8)"; ctx.lineWidth = Math.max(1, z / 16); ctx.strokeRect(Math.round(hx) + 0.5, Math.round(hy) + 0.5, Math.round(z) - 1, Math.round(z) - 1); }
     this.drawClouds(z);
@@ -124,7 +145,8 @@ export class Renderer {
 
   /* ---------- chunks ---------- */
   private bucketFor(z: number): number { let b = BUCKETS[0]; for (const v of BUCKETS) if (v <= z + 1e-6) b = v; return b; }
-  private drawChunks(now: number, z: number, objects = false): void {
+  /** The ground of the visible chunks, drawn flat under everything else. */
+  private drawChunks(now: number, z: number): void {
     const { ctx, cam } = this, T = this.bucketFor(z), CH = Math.max(8, Math.round(CHUNK_PX / T)), k = z / T;
     const v = cam.visible();
     const cx0 = Math.floor(v.x0 / CH), cy0 = Math.floor(Math.max(0, v.y0 - 1) / CH), cx1 = Math.floor((v.x1 - 1) / CH), cy1 = Math.floor(Math.min(this.world.h - 1, v.y1 + 3) / CH);
@@ -134,16 +156,50 @@ export class Renderer {
       const key = `${cx},${cy},${T},${this.season}`;
       let ch = this.chunks.get(key);
       /* build missing chunks a few milliseconds' worth per frame, so zooming never stalls */
-      if (!ch && (!objects || T < 8) && (built === 0 || performance.now() - t0 < 7)) { ch = this.buildChunk(cx, cy, T, CH); this.chunks.set(key, ch); this.chunkPixels += ch.px; built++; }
+      if (!ch && (built === 0 || performance.now() - t0 < 7)) { ch = this.buildChunk(cx, cy, T, CH); this.chunks.set(key, ch); this.chunkPixels += ch.px; built++; }
+      if (!ch) { ch = this.findStale(cx, cy, T); if (!ch) continue; }
+      ch.used = now;
+      if (!ch.ground) continue;
+      const [sx, sy] = cam.toScreen(cx * CH, cy * CH);
+      ctx.drawImage(ch.ground, Math.round(sx), Math.round(sy), Math.ceil(CH * T * k), Math.ceil(CH * T * k));
+      if (ch.surf) { const f = ch.surf[Math.floor(now / 520 + (cx * 7 + cy * 3) * 0.37) & 3]; ctx.drawImage(f, Math.round(sx), Math.round(sy), Math.ceil(f.width / 8 * T * k), Math.ceil(f.height / 8 * T * k)); }
+    }
+  }
+  /**
+   * The trees of the visible chunks. A chunk with no creature close to it is one cached canvas, drawn in a single
+   * step. A chunk that creatures can overlap is split by tile row, so each row is painted at its depth among them.
+   */
+  private collectTrees(out: DepthItem[], creatures: DepthItem[], now: number, z: number): void {
+    const { ctx, cam } = this, T = this.bucketFor(z), CH = Math.max(8, Math.round(CHUNK_PX / T)), k = z / T;
+    const v = cam.visible();
+    const cx0 = Math.floor(v.x0 / CH), cy0 = Math.floor(Math.max(0, v.y0 - 1) / CH), cx1 = Math.floor((v.x1 - 1) / CH), cy1 = Math.floor(Math.min(this.world.h - 1, v.y1 + 3) / CH);
+    /* which chunks have a creature within reach of their trees */
+    const busy = new Set<number>(), cell = (cx: number, cy: number) => (cx + 1) * 1_000_003 + (cy + 1);
+    for (const c of creatures) {
+      for (let cx = Math.floor((c.x - REACH_SIDE) / CH); cx <= Math.floor((c.x + REACH_SIDE) / CH); cx++)
+        for (let cy = Math.floor((c.y - REACH_UP) / CH); cy <= Math.floor((c.y + REACH_DOWN) / CH); cy++) busy.add(cell(cx, cy));
+    }
+    const G = rowsPerBand(T), t0 = performance.now();
+    let built = 0;
+    for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) {
+      const key = `${cx},${cy},${T},${this.season}`;
+      let ch = this.chunks.get(key);
+      /* chunks at full scale are built with their ground; only the small-scale ones are built here */
+      if (!ch && T < 8 && (built === 0 || performance.now() - t0 < 7)) { ch = this.buildChunk(cx, cy, T, CH); this.chunks.set(key, ch); this.chunkPixels += ch.px; built++; }
       if (!ch) { ch = this.findStale(cx, cy, T); if (!ch) continue; }
       ch.used = now;
       const [sx, sy] = cam.toScreen(cx * CH, cy * CH);
-      if (!objects) {
-        if (!ch.ground) continue;
-        ctx.drawImage(ch.ground, Math.round(sx), Math.round(sy), Math.ceil(CH * T * k), Math.ceil(CH * T * k));
-        if (ch.surf) { const f = ch.surf[Math.floor(now / 520 + (cx * 7 + cy * 3) * 0.37) & 3]; ctx.drawImage(f, Math.round(sx), Math.round(sy), Math.ceil(f.width / 8 * T * k), Math.ceil(f.height / 8 * T * k)); }
+      if (!busy.has(cell(cx, cy))) {
+        if (ch.objects) { const o = ch.objects; out.push({ x: cx * CH, y: cy * CH, f: () => ctx.drawImage(o, Math.round(sx - T * k), Math.round(sy - 3 * T * k), Math.ceil(o.width * k), Math.ceil(o.height * k)) }); }
+        continue;
       }
-      else if (ch.objects) ctx.drawImage(ch.objects, Math.round(sx - T * k), Math.round(sy - 3 * T * k), Math.ceil(ch.objects.width * k), Math.ceil(ch.objects.height * k));
+      const sheet = ch.sheet; if (!sheet) continue;
+      const BH = (G + LIFT + 1) * T;
+      ch.groups.forEach((on, g) => {
+        if (!on) return;
+        const row = g * G;
+        out.push({ x: cx * CH, y: cy * CH + row + G / 2 + TREE_OFFSET, f: () => ctx.drawImage(sheet, 0, g * BH, sheet.width, BH, Math.round(sx - T * k), Math.round(sy + (row - LIFT) * T * k), Math.ceil(sheet.width * k), Math.ceil(BH * k)) });
+      });
     }
   }
   private findStale(cx: number, cy: number, T: number): Chunk | undefined {
@@ -153,7 +209,7 @@ export class Renderer {
   private buildChunk(cx: number, cy: number, T: number, CH: number): Chunk {
     const wd = this.world, x0 = cx * CH, y0 = cy * CH, cw = Math.min(CH, wd.w - x0), chh = Math.min(CH, wd.h - y0);
     const ground = T >= 8 ? document.createElement("canvas") : null;
-    let objects: HTMLCanvasElement | null = null, surf: HTMLCanvasElement[] | null = null, wet: ((tx: number, ty: number) => boolean) | null = null;
+    let surf: HTMLCanvasElement[] | null = null, wet: ((tx: number, ty: number) => boolean) | null = null;
     if (ground && this.px) {
       ground.width = CH * T; ground.height = CH * T;
       const g = ground.getContext("2d")!; g.imageSmoothingEnabled = false;
@@ -167,14 +223,28 @@ export class Renderer {
         if (tex) g.drawImage(tex, x * T, y * T, T, T);
       }
     }
+    /* trees and rocks: the whole chunk on one canvas for when no creature is near, and one canvas per tile row for when one is */
     const o = document.createElement("canvas"); o.width = (CH + 2) * T; o.height = (CH + 4) * T;
     const oc = o.getContext("2d")!; oc.imageSmoothingEnabled = false;
-    let any = false;
+    /* row bands share one sheet, each band a slot LIFT tiles above its first row, tall enough for the crowns above it */
+    const G = rowsPerBand(T), BH = (G + LIFT + 1) * T, groups = new Array<boolean>(Math.ceil(CH / G)).fill(false);
+    const sheet = document.createElement("canvas"); sheet.width = (CH + 2) * T; sheet.height = groups.length * BH;
+    const sc = sheet.getContext("2d")!; sc.imageSmoothingEnabled = false;
+    const originOf = (row: number) => Math.floor(row / G) * G - LIFT;
+    const slotOf = (row: number) => Math.floor(row / G) * BH;
     const sk = T / 8;
+    let any = false;
     for (let y = 0; y < chh; y++) for (let x = 0; x < cw; x++) {
-      const wx = x0 + x, wy = y0 + y, i = wy * wd.w + wx, sp = wd.tree[i];
+      const wx = x0 + x, wy = y0 + y, i = wy * wd.w + wx;
+      /* not every forest tile holds a tree: thinning leaves gaps for the creatures to be seen in */
+      const sp = hash2(wx, wy, 88) < TREE_KEEP ? wd.tree[i] : 0;
       if (!sp) {
-        if (wd.biome[i] === Biome.Mountain && T >= 8 && hash2(wx, wy, 41) < 0.05 && !(wet && wet(x + 0.5, y + 0.8))) { any = true; this.boulder(oc, (x + 1) * T + T / 2, (y + 3) * T + T * 0.8, sk); }
+        if (wd.biome[i] === Biome.Mountain && T >= 8 && hash2(wx, wy, 41) < 0.05 && !(wet && wet(x + 0.5, y + 0.8))) {
+          any = true;
+          this.boulder(oc, (x + 1) * T + T / 2, (y + 3) * T + T * 0.8, sk);
+          groups[Math.floor(y / G)] = true;
+          this.boulder(sc, (x + 1) * T + T / 2, (y + 0.8 - originOf(y)) * T + slotOf(y), sk);
+        }
         continue;
       }
       const h = hash2(wx, wy, 31);
@@ -183,12 +253,19 @@ export class Renderer {
       if (wet && wet(x + 0.5 + jx, y + 0.5 + jy)) { jx = 0; jy = 0; if (wet(x + 0.5, y + 0.5)) continue; }
       any = true;
       const snowy = isSnowy(wd.temp[i] / 255, wd.biome[i], this.season, hash2(wx, wy, wd.seed + 5));
-      const bx = (x + 1 + 0.5 + jx) * T, by = (y + 3 + 0.5 + jy) * T;
-      if (T >= 8) { const spr = treeSprite(sp, this.season, Math.floor(h * 3), snowy); oc.drawImage(spr, Math.round(bx - spr.width * sk / 2), Math.round(by - spr.height * sk), Math.round(spr.width * sk), Math.round(spr.height * sk)); }
-      else { const gl = treeGlyph(sp, this.season, snowy), gk = T / 4; oc.drawImage(gl, Math.round(bx - gl.width * gk / 2), Math.round(by - gl.height * gk), Math.round(gl.width * gk), Math.round(gl.height * gk)); }
+      const spr = T >= 8 ? treeSprite(sp, this.season, Math.floor(h * 3), snowy) : treeGlyph(sp, this.season, snowy);
+      /* the sprite is drawn with its trunk on the tile, at this scale */
+      const scale = T >= 8 ? sk : T / 4;
+      const w = Math.round(spr.width * scale), hh = Math.round(spr.height * scale);
+      const bx = (x + 1 + 0.5 + jx) * T, byO = (y + 3 + 0.5 + jy) * T, byB = (y + 0.5 + jy - originOf(y)) * T + slotOf(y);
+      oc.drawImage(spr, Math.round(bx - w / 2), Math.round(byO - hh), w, hh);
+      sc.drawImage(spr, Math.round(bx - w / 2), Math.round(byB - hh), w, hh);
+      groups[Math.floor(y / G)] = true;
     }
-    if (any) objects = o;
-    return { ground, objects, surf, used: performance.now(), px: (ground ? ground.width * ground.height : 0) + (objects ? o.width * o.height : 0) + (surf ? surf.length * surf[0].width * surf[0].height : 0) };
+    const objects = any ? o : null, rows = any ? sheet : null;
+    const px = (ground ? ground.width * ground.height : 0) + (surf ? surf.length * surf[0].width * surf[0].height : 0)
+      + (objects ? objects.width * objects.height : 0) + (rows ? rows.width * rows.height : 0);
+    return { ground, objects, sheet: rows, groups, surf, used: performance.now(), px };
   }
   private touchesWater(x: number, y: number): boolean {
     const { w, h, flags } = this.world;
@@ -248,7 +325,8 @@ export class Renderer {
   }
 
   /* ---------- wildlife ---------- */
-  private drawHerds(now: number, z: number): void {
+  /** Herds on the visible land, each member queued at its own feet so it sorts among the trees. */
+  private collectHerds(out: DepthItem[], now: number, z: number): void {
     const cur = this.herds; if (!cur || z < 0.9) return;
     const prev = this.herdsPrev, a = Math.min(1, (now - this.herdT) / 100);
     const { ctx, cam } = this, v = cam.visible(), winter = this.season === 3;
@@ -267,14 +345,13 @@ export class Renderer {
         const wob = Math.sin(now / 1500 + m * 1.7 + id) * 0.25;
         const mx = x + Math.cos(ang) * r + wob, my = y + Math.sin(ang) * r * 0.6;
         const [sx, sy] = cam.toScreen(mx, my);
-        if (z < 6) { const s = z < 2 ? 1 : Math.max(2, Math.round(z / 2)); ctx.fillStyle = ANIMAL_DOT[sp]; ctx.fillRect(Math.round(sx), Math.round(sy), s, s); continue; }
+        if (z < 6) { const s = z < 2 ? 1 : Math.max(2, Math.round(z / 2)); out.push({ x: mx, y: my, f: () => { ctx.fillStyle = ANIMAL_DOT[sp]; ctx.fillRect(Math.round(sx), Math.round(sy), s, s); } }); continue; }
         const moving = state > 0.5;
         const f = moving ? 2 + (Math.floor((now + m * 97) / (state > 1.5 ? 90 : 160)) % (state > 1.5 ? 4 : 2)) : (Math.floor((now / 900) + m * 0.37) % 4 === 0 ? 1 : 0);
         const spr = animalSprite(sp, state > 1.5 ? 4 + (f % 2) : f, winter);
-        const k2 = z / 8, w = spr.width * k2, h = spr.height * k2;
+        const k2 = z / 8 * CREATURE_SCALE, w = spr.width * k2, h = spr.height * k2;
         const facing = Math.cos(heading) >= 0 ? 1 : -1;
-        ctx.save(); ctx.translate(Math.round(sx), Math.round(sy)); if (facing < 0) ctx.scale(-1, 1);
-        ctx.drawImage(spr, Math.round(-w / 2), Math.round(-h), Math.round(w), Math.round(h)); ctx.restore();
+        out.push({ x: mx, y: my, f: () => { ctx.save(); ctx.translate(Math.round(sx), Math.round(sy)); if (facing < 0) ctx.scale(-1, 1); ctx.drawImage(spr, Math.round(-w / 2), Math.round(-h), Math.round(w), Math.round(h)); ctx.restore(); } });
       }
     }
   }

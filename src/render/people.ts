@@ -4,6 +4,8 @@ import { personSprite, tinySprite, animFrame, drawBubble, type View } from "./sp
 import { fireSprite, shelterSprite, storeSprite, woodpileSprite, shelterVariant } from "./sprites/camp.ts";
 import { isSnowy } from "../shared/seasonfx.ts";
 import type { Season, WorldData } from "../shared/types.ts";
+import type { DepthItem } from "./depth.ts";
+import { CREATURE_SCALE } from "./scale.ts";
 
 /*
   Drawing people and their camps. Positions arrive ten times a second and are blended
@@ -30,6 +32,7 @@ export class PeopleLayer {
   private facing = new Map<number, number>();
   private parts: Particle[] = [];
   private lastFrame = 0;
+  private dt = 0;
   readonly world: WorldData;
   constructor(world: WorldData) { this.world = world; }
 
@@ -39,15 +42,14 @@ export class PeopleLayer {
   }
   forget(ids: Set<number>): void { for (const id of this.looks.keys()) if (!ids.has(id)) this.looks.delete(id); }
 
-  /** Everyone and every camp, drawn in one back-to-front pass. */
-  draw(ctx: CanvasRenderingContext2D, cam: Camera, now: number, season: Season): void {
+  /** Queues everyone and every camp for the depth-sorted pass; the trampled earth around camps is painted here, flat, under everything. */
+  collect(out: DepthItem[], ctx: CanvasRenderingContext2D, cam: Camera, now: number, season: Season): void {
     const cur = this.cur; if (!cur) return;
     const z = cam.z, v = cam.visible(), a = Math.min(1, (now - this.at) / 100);
-    const dtReal = Math.min(0.1, (now - this.lastFrame) / 1000); this.lastFrame = now;
+    const dtReal = Math.min(0.1, (now - this.lastFrame) / 1000); this.lastFrame = now; this.dt = dtReal;
     const prevAt = new Map<number, number>();
     if (this.prev) for (let k = 0; k < this.prev.n; k++) prevAt.set(this.prev.data[k * PERSON_STRIDE], k);
     this.pos.clear();
-    const items: { y: number; f: () => void }[] = [];
     const margin = 4;
     /* camps: first the trampled earth around the fire, under everything else */
     if (z >= 4) for (const c of this.camps) {
@@ -60,11 +62,11 @@ export class PeopleLayer {
         const i = (c.y | 0) * this.world.w + (c.x | 0), snow = isSnowy(this.world.temp[i] / 255, this.world.biome[i], season, 0.5);
         for (let k = 0; k < c.shelters.length; k += 2) {
           const hx = c.shelters[k], hy = c.shelters[k + 1];
-          items.push({ y: hy - 0.3, f: () => this.stamp(ctx, cam, shelterSprite(c.shelter, shelterVariant(hx, hy), snow), hx, hy, z / 8, 1) });
+          out.push({ x: hx, y: hy - 0.3, f: () => this.stamp(ctx, cam, shelterSprite(c.shelter, shelterVariant(hx, hy), snow), hx, hy, z / 8, 1) });
         }
-        items.push({ y: c.y, f: () => this.stamp(ctx, cam, fireSprite(Math.floor(now / 110 + c.id), c.fire), c.x, c.y + 0.35, z / 8, 1) });
-        if (c.food > 0) items.push({ y: c.y - 0.6, f: () => this.stamp(ctx, cam, storeSprite(c.food * 0.6, c.food * 0.4), c.x + 1.6, c.y - 0.6, z / 8, 1) });
-        items.push({ y: c.y - 0.9, f: () => this.stamp(ctx, cam, woodpileSprite(3), c.x - 1.6, c.y - 0.8, z / 8, 1) });
+        out.push({ x: c.x, y: c.y, f: () => this.stamp(ctx, cam, fireSprite(Math.floor(now / 110 + c.id), c.fire), c.x, c.y + 0.35, z / 8, 1) });
+        if (c.food > 0) out.push({ x: c.x + 1.6, y: c.y - 0.6, f: () => this.stamp(ctx, cam, storeSprite(c.food * 0.6, c.food * 0.4), c.x + 1.6, c.y - 0.6, z / 8, 1) });
+        out.push({ x: c.x - 1.6, y: c.y - 0.9, f: () => this.stamp(ctx, cam, woodpileSprite(3), c.x - 1.6, c.y - 0.8, z / 8, 1) });
         if (z >= 8 && c.fire > 0.05 && Math.random() < dtReal * 6) this.parts.push({ x: c.x + (Math.random() - 0.5) * 0.3, y: c.y - 0.4, vx: (Math.random() - 0.5) * 0.3, vy: -0.9 - Math.random() * 0.6, life: 1.6, age: 0, c: Math.random() < 0.25 ? "#ffdf7e" : "#d9d8d0", g: 0 });
       }
     }
@@ -81,12 +83,14 @@ export class PeopleLayer {
       const dir = cur.data[o + 3], anim = cur.data[o + 4], flags = cur.data[o + 5], bubble = cur.data[o + 6];
       if (dir === 1) this.facing.set(id, 1); else if (dir === 3) this.facing.set(id, -1);
       if (z < 2) continue;
-      items.push({ y, f: () => this.drawPerson(ctx, cam, l, id, x, y, dir, anim, flags, bubble, now, dtReal) });
+      out.push({ x, y, f: () => this.drawPerson(ctx, cam, l, id, x, y, dir, anim, flags, bubble, now, dtReal) });
     }
-    items.sort((p, q) => p.y - q.y);
-    for (const it of items) it.f();
-    if (z < 2) this.drawSpecks(ctx, cam);
-    this.drawParticles(ctx, cam, dtReal, z);
+  }
+
+  /** After the depth-sorted pass: the specks of the far view, then the dust and sparks flying over everything. */
+  drawOverlay(ctx: CanvasRenderingContext2D, cam: Camera): void {
+    if (cam.z < 2) this.drawSpecks(ctx, cam);
+    this.drawParticles(ctx, cam, this.dt, cam.z);
   }
 
   /** Bare, trodden earth around a camp: a soft-edged oval of dirt with scuffs, under the shelters. Built once per layout. */
@@ -139,7 +143,7 @@ export class PeopleLayer {
     const frame = animFrame(anim, now, phase);
     const load = flags & PFlag.Meat ? 2 : 1;
     const d = personSprite(l, anim, frame, view, flags, load);
-    const k = z / 8, w = d.c.width * k, h = d.c.height * k;
+    const k = z / 8 * CREATURE_SCALE, w = d.c.width * k, h = d.c.height * k;
     /* soft ground shadow, away from the northwest light */
     ctx.fillStyle = "rgba(12,14,24,0.24)";
     const shw = lying ? w * 0.8 : 6 * k;
@@ -158,7 +162,7 @@ export class PeopleLayer {
     }
     /* chips, dust and sparks at the moment of impact */
     if (d.hit && frame === 2 && Math.random() < dt * 14) {
-      const hx = x + (flip ? -1 : 1) * (d.hit[0] - d.c.width / 2) / 8, hy = y - (d.c.height - 2 - d.hit[1]) / 8;
+      const hx = x + (flip ? -1 : 1) * (d.hit[0] - d.c.width / 2) / 8 * CREATURE_SCALE, hy = y - (d.c.height - 2 - d.hit[1]) / 8 * CREATURE_SCALE;
       const col = anim === Anim.Chop ? ["#a8805a", "#dcc085"] : anim === Anim.Knap ? ["#f2efe6", "#aaa79d"] : anim === Anim.Butcher ? ["#a8433a", "#cf6a52"] : ["#ad8562", "#93694a"];
       for (let i = 0; i < 3; i++) this.parts.push({ x: hx, y: hy, vx: (Math.random() - 0.5) * 2.2, vy: -1.5 - Math.random() * 1.5, life: 0.5, age: 0, c: col[i % 2], g: 7 });
     }
