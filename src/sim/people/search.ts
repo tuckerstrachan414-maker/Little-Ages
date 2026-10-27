@@ -18,8 +18,8 @@ export interface SearchItem {
   look?: Look;
 }
 
-/** Lowercase, accents and apostrophes gone. */
-export const fold = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/['’`]/g, "").toLowerCase();
+/** Lowercase, accents and apostrophes gone. Escapes, not literal characters, so the built page stays ASCII. */
+export const fold = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036F]/g, "").replace(/['\u2019`]/g, "").toLowerCase();
 
 /** 0 for no match; higher is better. Whole name, then start of name, then start of any word, then anywhere. */
 export function score(name: string, q: string): number {
