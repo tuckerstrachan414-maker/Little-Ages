@@ -48,7 +48,7 @@ const MAX = 6000;
 
 /** A person sprite: feet at the bottom center of the canvas (one transparent pixel row for the outline). */
 export function personSprite(l: Look, anim: number, frame: number, view: View, flags: number, load: number): Drawn {
-  const key = `${l.id}|${l.stage}|${l.wear}|${l.style}|${(l.gray * 6) | 0}|${anim}|${frame}|${view}|${flags & (PFlag.Sling | PFlag.Spear | PFlag.Pregnant | PFlag.Sad | PFlag.Happy | PFlag.Wood | PFlag.Carrying | PFlag.Meat | PFlag.Injured)}|${load}`;
+  const key = `${l.id}|${l.stage}|${l.wear}|${l.style}|${(l.gray * 6) | 0}|${anim}|${frame}|${view}|${flags & (PFlag.Sling | PFlag.Spear | PFlag.Pregnant | PFlag.Sad | PFlag.Happy | PFlag.Wood | PFlag.Carrying | PFlag.Meat | PFlag.Injured | PFlag.Leader)}|${load}`;
   let d = cache.get(key);
   if (d) return d;
   if (cache.size > MAX) { let n = 0; for (const k of cache.keys()) { cache.delete(k); if (++n > MAX / 4) break; } }
@@ -319,6 +319,13 @@ function personGrid(l: Look, anim: number, f: number, view: View, flags: number,
     }
   }
 
+  /* the one the band listens to wears a feather in the hair, set at the back of the head */
+  if (flags & PFlag.Leader && (st === "adult" || st === "elder")) {
+    const quill = "#8a6a3a", vane = "#f2ead6", tipC = "#b5502a";
+    if (side) { put(g, hx, hY - 1, quill); put(g, hx - 1, hY - 2, vane); put(g, hx - 1, hY - 3, vane); put(g, hx - 2, hY - 4, tipC); }
+    else { const fx = hx + hw - (back ? 2 : 1); put(g, fx, hY - 1, quill); put(g, fx, hY - 2, vane); put(g, fx + 1, hY - 3, vane); put(g, fx + 1, hY - 4, tipC); }
+  }
+
   /* loads: a basket on the head (berries, roots, fish), meat over the shoulder, a bundle of firewood */
   if (a === "carry" || (flags & (PFlag.Carrying | PFlag.Wood) && (walking || a === "idle"))) {
     if (flags & PFlag.Wood) { for (let i = 0; i < hw + 3; i++) { put(g, hx - 2 + i, ty - 1 - (i % 3 === 0 ? 1 : 0), i % 2 ? P.wood : P.woodL); put(g, hx - 1 + i, ty - 2, i % 3 === 1 ? P.woodD : null); } }
@@ -419,6 +426,9 @@ const ICONS: Record<number, { c: Record<string, string>; px: string[] }> = {
   18: { c: { a: "#8c8a84", b: "#5c5952" }, px: ["b...b", "aaaa.", "aaaaa", "a..a."] },                /* wolf */
   19: { c: { a: "#6e4a32", b: "#efe6d2" }, px: [".aaa.", "aaaaa", "aa.ab", "a.a.b"] },                /* mammoth */
   20: { c: { a: "#a47b52", b: "#5e4a2c" }, px: ["..a..", ".aba.", "aabaa", "aabaa"] },                /* home: tent */
+  21: { c: { a: "#d9b45a", b: "#9a2f45", d: "#6f8a44" }, px: ["a...a", ".a.a.", "b.d.b", ".bdb."] },   /* gift: a string of beads */
+  22: { c: { a: "#6f9a44", b: "#4e7a34", d: "#8a6a3a" }, px: ["..a.a", ".aba.", "a.b..", "..d.."] },   /* peace: a green sprig */
+  23: { c: { a: "#a47b52", b: "#6e5442", d: "#d9a277" }, px: ["....d", "...d.", "abbba", ".aaa."] },   /* asking: an empty bowl held out */
 };
 /** A speech bubble with a little picture, its tail pointing down at (x, y). Drawn at screen scale `k` (1 at true size). */
 export function drawBubble(ctx: CanvasRenderingContext2D, x: number, y: number, icon: number, k: number): void {

@@ -1,8 +1,11 @@
 import { Biome, Flag, Species, Tree, DAY_SECONDS } from "../../shared/types.ts";
 import { Bubble } from "../../shared/people.ts";
-import { storeDays, storeFood, estimate } from "./band.ts";
-import { Goal, Know, Place, St, Skill, step, type KnownPlace, type Person, type Step } from "./person.ts";
+import { storeFood, estimate, homeOf } from "./band.ts";
+import { Goal, Know, Place, St, Skill, step, kinWord, type KnownPlace, type Person, type Step } from "./person.ts";
 import { MEAT, compass, type Society } from "./society.ts";
+import { askTarget, reachFood, familyDays } from "./sharing.ts";
+import { feudOf, peaceToMake } from "./feuds.ts";
+import { visitTarget } from "./friends.ts";
 
 /*
   Deciding what to do. A person looks at everything they could do right now and gives
@@ -24,6 +27,8 @@ const herObj = (p: Person) => (p.sex === "f" ? "her" : "him");
 export function isInterruptible(g: Goal): boolean {
   return g === Goal.Rest || g === Goal.Play || g === Goal.Toddle || g === Goal.Follow || g === Goal.Warm || g === Goal.None || g === Goal.Tend || g === Goal.Visit;
 }
+/** Someone whose marriage has gone sour, and who might be drawn to someone else. */
+export function unhappy(s: Society, p: Person): boolean { return !!p.partner && s.op(p, p.partner) < -0.05; }
 
 export function decide(s: Society, p: Person, forced?: Goal): void {
   p.plan = []; p.si = 0; p.path = null; p.pi = 0;
@@ -41,7 +46,7 @@ export function decide(s: Society, p: Person, forced?: Goal): void {
   if (b.moving) {
     const m = b.moving, lead = s.byId.get(m.by);
     /* the band carries its food with it: a hungry walker eats on the way */
-    if (p.food < 0.7 && storeFood(b.store) > 0.3) { commit(s, p, { g: Goal.Eat, v: 9, plan: () => [step(St.Eat, p.x, p.y, 0, 2)], why: () => `${p.name} is eating on the way, from the food the band is carrying.`, icon: Bubble.Meat }); return; }
+    if (p.food < 0.7 && reachFood(s, p) > 0.3) { commit(s, p, { g: Goal.Eat, v: 9, plan: () => [step(St.Eat, p.x, p.y, 0, 2)], why: () => `${p.name} is eating on the way, from the food the band is carrying.`, icon: Bubble.Meat }); return; }
     const [mx, my] = s.dryNear(m.x + Math.cos(p.id) * 2, m.y + Math.sin(p.id) * 1.6);
     if (p.water > 0.12) commit(s, p, { g: Goal.Migrate, v: 9, plan: () => [step(St.Go, mx, my, 0, 0, { a: 1 })], why: () => p.id === m.by ? `${p.name} is leading the ${b.name} ${compass(m.x - p.x, m.y - p.y)} to ${m.name}, where ${she(p)} found ${siteReason(s, p, m.x, m.y)}.` : `${p.name} is walking with the ${b.name} to ${m.name}, because ${lead?.name ?? "the band"} said there is ${siteReason(s, lead ?? p, m.x, m.y)} there.`, icon: Bubble.Move });
     if (p.water > 0.12) return;
@@ -56,16 +61,17 @@ export function decide(s: Society, p: Person, forced?: Goal): void {
   const hunger = clamp01(1 - p.food / 1.4), thirst = clamp01(1 - p.water), tired = 1 - p.rest, cold = 1 - p.warmth, lonely = 1 - p.company;
   const tr = p.traits, night = s.sun < 0.12, dusk = s.dayFrac() > 0.76 || s.dayFrac() < 0.2, dark = night || dusk;
   const dc = Math.hypot(p.x - b.x, p.y - b.y);
-  /* how much the band's store is short of what people feel it should hold: more before a cold winter */
+  /* how far the family's food (its hearth and its share of the pot) is short of what they feel it should be: more before a cold winter */
   const leanWinter = (s.season === 2 || (s.season === 3 && s.dayFrac() < 2)) && s.tempC(b.x, b.y, s.time + 900) < 8;
-  const short = clamp01(1 - storeDays(b) / (leanWinter ? 7 : 2.5));
+  const days = familyDays(s, p);
+  const short = clamp01(1 - days / (leanWinter ? 7 : 2.5));
   const kids = p.children.map(id => s.byId.get(id)).filter((c): c is Person => !!c && c.band === p.band && s.age(c) < 14 && s.age(c) >= 2);
   const kidsHungry = kids.reduce((m, c) => Math.max(m, clamp01(1 - c.food / 1.4)), 0);
   const worker = st === "teen" || st === "adult" || st === "elder";
   const elderly = age > 64 ? 0.55 : 1;
   /* providing: each adult means to bring home enough for themselves and the children they feed */
   const feeds = 1 + kids.filter(c => s.age(c) < 12).length * 0.7 + (p.baby ? 0.3 : 0);
-  const plenty = clamp01(1 - (storeDays(b) - (leanWinter ? 8 : 4)) / 6);
+  const plenty = clamp01(1 - (days - (leanWinter ? 8 : 4)) / 6);
   const provide = clamp01(1 - p.gaveToday / (1.4 * feeds)) * (0.35 + 0.45 * tr[7] + 0.2 * tr[1]) * (worker ? elderly : 0.4) * plenty;
   const foodDrive = Math.max(hunger, kidsHungry * 1.05, short * (0.6 + 0.3 * tr[7] + 0.2 * tr[1]) * (worker ? elderly : 0.45), provide);
   const busy = (g: Goal) => b.busy.get(g) ?? 0;
@@ -74,9 +80,11 @@ export function decide(s: Society, p: Person, forced?: Goal): void {
   /* --- sleep --- */
   /* the evening is spent at the fire; bed comes once it is properly dark. Caught far out on a mild night, they sleep where they are */
   const bedtime = s.dayFrac() > 0.87 || s.dayFrac() < 0.21;
-  const [ox, oy] = s.dryNear(p.x, p.y), far = dc > 40 && T > 6;
+  /* a visitor at another band's camp sleeps by their fire */
+  const guest = dc > 30 && s.bands.some(o => o.id !== b.id && Math.hypot(o.x - p.x, o.y - p.y) < 10);
+  const [ox, oy] = s.dryNear(p.x, p.y), far = (dc > 40 && T > 6) || guest;
   const bed = (dur: number, out: boolean) => out ? [step(St.Sleep, ox, oy, 0, dur)] : [step(St.Go, hx, hy), step(St.Sleep, hx, hy, 0, dur)];
-  const rough = (out: boolean) => out ? `, out under the sky because camp is too far to walk back to` : "";
+  const rough = (out: boolean) => out ? (guest ? `, as a guest at another band's camp` : `, out under the sky because camp is too far to walk back to`) : "";
   if (bedtime) add({ g: Goal.Sleep, v: 1.15 + tired, plan: () => bed(40, far), why: () => `${p.name} is sleeping because it is night${rough(far)}${cold > 0.4 ? ` and ${she(p)} is huddled against the cold` : ""}.`, icon: Bubble.Zzz });
   else if (dusk && dc < 30) add({ g: Goal.Sleep, v: 0.1 + tired * tired * 1.1, plan: () => bed(40, false), why: () => `${p.name} is turning in early, tired out from the day.`, icon: Bubble.Zzz });
   else if (p.rest < 0.3) add({ g: Goal.Sleep, v: tired * tired * 1.3, plan: () => bed(14, far), why: () => `${p.name} is napping because ${she(p)} is worn out${rough(far)}.`, icon: Bubble.Zzz });
@@ -86,7 +94,7 @@ export function decide(s: Society, p: Person, forced?: Goal): void {
     const minder = s.byId.get(p.mother) ?? s.byId.get(p.guardian) ?? s.byId.get(p.father);
     if (minder && minder.band === p.band) add({ g: Goal.Toddle, v: 0.6, plan: () => [step(St.Follow, 0, 0, minder.id, 16)], why: () => `${p.name} is toddling after ${her(p)} ${minder.id === p.mother ? "mother" : minder.id === p.father ? "father" : "minder"}, ${minder.name}.` });
     add({ g: Goal.Play, v: 0.4 + tr[5] * 0.2, plan: () => [step(St.Play, b.x + Math.cos(p.id * 3) * 1.5, b.y + Math.sin(p.id * 3) * 1.2, 0, 8)], why: () => `${p.name} is playing by the fire.`, icon: Bubble.Sun });
-    if (hunger > 0.3 && storeFood(b.store) > 0.3 && dc < 8) add({ g: Goal.Eat, v: hunger * 1.6, plan: () => [step(St.Go, fx, fy), step(St.Eat, fx, fy, 0, 3)], why: () => `${p.name} is eating because ${she(p)} is hungry.`, icon: Bubble.Meat });
+    if (hunger > 0.3 && reachFood(s, p) > 0.3 && dc < 8) add({ g: Goal.Eat, v: hunger * 1.6, plan: () => [step(St.Go, fx, fy), step(St.Eat, fx, fy, 0, 3)], why: () => `${p.name} is eating because ${she(p)} is hungry.`, icon: Bubble.Meat });
     return pick(s, p, opts);
   }
 
@@ -96,12 +104,22 @@ export function decide(s: Society, p: Person, forced?: Goal): void {
     if (wp) add({ g: Goal.Drink, v: Math.pow(thirst, 1.3) * 2.3, plan: () => [step(St.Go, wp[0], wp[1]), step(St.Drink, wp[0], wp[1], 0, 1.5)], why: () => `${p.name} is going for a drink because ${she(p)} is thirsty${T > 28 ? " in the heat" : ""}.`, icon: Bubble.Drop });
   }
 
-  /* --- food --- */
+  /* --- food: from the family's hearth or the band's pot, or asked for at another hearth --- */
+  const reach = reachFood(s, p), hh = b.hearths.get(homeOf(p, s.byId, s.time));
   if (hunger > 0.3) {
     if (p.carryAmt > 0 && p.carryKind > 0 && p.carryKind < 4) add({ g: Goal.Eat, v: hunger * 1.9, plan: () => [step(St.Eat, p.x, p.y, 0, 3, { a: 1 })], why: () => `${p.name} is eating some of the ${foodWord(p.carryKind)} ${she(p)} is carrying, because ${she(p)} is hungry.`, icon: Bubble.Meat });
-    if (storeFood(b.store) > 0.4) {
-      const cook = (b.store.meat + b.store.fish > 0.5) && worker && b.fire > 0.05;
+    if (reach > 0.4) {
+      const cook = (b.store.meat + b.store.fish + (hh ? hh.meat + hh.fish : 0) > 0.5) && worker && b.fire > 0.05;
       add({ g: Goal.Eat, v: hunger * 1.8 / (1 + dc / 40), plan: () => [step(St.Go, fx, fy), ...(cook ? [step(St.Cook, fx, fy, 0, 2.5)] : []), step(St.Eat, fx, fy, 0, 2.5)], why: () => eatWhy(s, p, cook), icon: Bubble.Meat });
+    }
+  }
+  const askNeed = Math.max(hunger, kidsHungry);
+  if (askNeed > 0.45 && age >= 15 && dc < 14 && !night && s.time > p.askedAt && reach < 0.4 + kids.length * 0.3) {
+    const t = askTarget(s, p);
+    if (t) {
+      const by = t.by;
+      const [ax, ay] = s.dryNear(by.x + 0.8, by.y);
+      add({ g: Goal.Ask, v: askNeed * 1.75 * (0.75 + Math.max(0, t.v) * 0.25), plan: () => [step(St.Go, ax, ay), step(St.Ask, 0, 0, t.head, 1.6, { o: by.id }), step(St.Go, fx, fy), step(St.Eat, fx, fy, 0, 2.5)], why: () => askWhy(s, p, by, kidsHungry > hunger), icon: Bubble.Ask });
     }
   }
 
@@ -137,7 +155,7 @@ export function decide(s: Society, p: Person, forced?: Goal): void {
     if (bestPlant) { const pl = bestPlant; add({ g: Goal.Gather, v: foodDrive * bp * 2.1 * damp(Goal.Gather, 0.03), plan: () => gatherPlan(s, p, pl, carry), why: () => workWhy(s, p, Goal.Gather, pl, hunger, kidsHungry, short), icon: Bubble.Berries }); }
     if (bestFish) { const pl = bestFish; add({ g: Goal.Fish, v: foodDrive * bf * 2.1 * damp(Goal.Fish, 0.05), plan: () => fishPlan(s, p, pl), why: () => workWhy(s, p, Goal.Fish, pl, hunger, kidsHungry, short), icon: Bubble.Fish }); }
     if (bestRab) { const pl = bestRab; add({ g: Goal.Snare, v: foodDrive * br * 1.7 * damp(Goal.Snare, 0.12), plan: () => snarePlan(s, p, pl), why: () => workWhy(s, p, Goal.Snare, pl, hunger, kidsHungry, short) }); }
-    if (bestGame) { const pl = bestGame; add({ g: Goal.Hunt, v: (foodDrive * 0.9 + tr[3] * 0.22 + tr[0] * 0.12) * bg * 2.1 * damp(Goal.Hunt, 0.04), plan: () => huntPlan(s, p, pl), why: () => workWhy(s, p, Goal.Hunt, pl, hunger, kidsHungry, short), icon: pl.sp === Species.Mammoth ? Bubble.Mammoth : Bubble.Deer }); }
+    if (bestGame) { const pl = bestGame; add({ g: Goal.Hunt, v: (foodDrive * 0.9 + tr[3] * 0.22 + tr[0] * 0.12 + (b.respected === p.id ? 0.12 : 0)) * bg * 2.1 * damp(Goal.Hunt, 0.04), plan: () => huntPlan(s, p, pl), why: () => workWhy(s, p, Goal.Hunt, pl, hunger, kidsHungry, short), icon: pl.sp === Species.Mammoth ? Bubble.Mammoth : Bubble.Deer }); }
     if (bestCarc) { const pl = bestCarc; add({ g: Goal.Haul, v: (foodDrive + tr[1] * 0.2) * bc * 2 * damp(Goal.Haul, 0.15), plan: () => [step(St.Go, pl.x, pl.y), step(St.Butcher, pl.x, pl.y, pl.ref, 5), step(St.Go, fx, fy), step(St.Drop, fx, fy)], why: () => `${p.name} is fetching meat from the ${SPECIES_SHORT[pl.sp ?? 0]} ${pl.src ? `${s.byId.get(pl.src)?.name ?? "someone"} killed` : "killed"} ${compass(pl.x - b.x, pl.y - b.y)} of camp, before it spoils.`, icon: Bubble.Meat }); }
   }
 
@@ -159,19 +177,25 @@ export function decide(s: Society, p: Person, forced?: Goal): void {
     /* an empty belly crowds out a chat in daylight; evenings at the fire are another matter */
     if (t) add({ g: Goal.Talk, v: (lonely * (0.3 + tr[5] * 0.6) * (1 - 0.75 * Math.max(hunger, kidsHungry)) + (evening ? 0.35 + tr[5] * 0.2 : 0)) * 0.8 + (p.moveWish > 0.5 ? 0.1 : 0), plan: () => [step(St.Go, t.x, t.y, t.id), step(St.Talk, 0, 0, t.id, 6)], why: () => talkWhy(s, p, t), icon: Bubble.Sun });
   }
-  if (!bedtime && st === "adult" && !p.partner && p.longing > 0.25) {
+  if (!bedtime && st === "adult" && (!p.partner || unhappy(s, p)) && p.longing > 0.25) {
     const c = courtTarget(s, p);
     /* nobody to court at home: go and visit a band of one's own people */
-    if (!c && p.longing > 0.45 && !dark && !p.baby) {
+    if (!c && !p.partner && p.longing > 0.45 && !dark && !p.baby) {
       const other = p.places.filter(pl => pl.k === Place.Camp && pl.ref !== p.band && s.bandById.has(pl.ref)).map(pl => s.bandById.get(pl.ref)!).sort((a, c2) => Math.hypot(a.x - p.x, a.y - p.y) - Math.hypot(c2.x - p.x, c2.y - p.y))[0];
       if (other && Math.hypot(other.x - p.x, other.y - p.y) < 110 && s.walkable(b.x, b.y, other.x, other.y)) {
         const [vx, vy] = s.dryNear(other.x + Math.cos(p.id) * 2, other.y + Math.sin(p.id) * 1.5);
         add({ g: Goal.Visit, v: p.longing * (0.45 + tr[5] * 0.35) * (1 - 0.8 * hunger), plan: () => [step(St.Go, vx, vy), step(St.Sit, vx, vy, 0, 12)], why: () => `${p.name} is visiting the ${other.name}, hoping to find someone to marry. There is nobody for ${herObj(p)} at home.`, icon: Bubble.Heart });
       }
     }
-    if (c) add({ g: Goal.Court, v: p.longing * c.a * (0.65 + tr[5] * 0.5) * 1.3 * (1 - 0.6 * hunger), plan: () => [step(St.Go, c.q.x, c.q.y, c.q.id), step(St.Talk, 0, 0, c.q.id, 7, { a: 1 })], why: () => `${p.name} is spending time with ${c.q.name} because ${she(p)} is sweet on ${herObj(c.q)}${s.op(c.q, p.id) > 0.3 ? `, and ${c.q.name} seems to like ${herObj(p)} back` : ""}.`, icon: Bubble.Heart });
+    if (c) add({ g: Goal.Court, v: p.longing * c.a * (0.65 + tr[5] * 0.5) * 1.3 * (1 - 0.6 * hunger), plan: () => [step(St.Go, c.q.x, c.q.y, c.q.id), step(St.Talk, 0, 0, c.q.id, 7, { a: 1 })], why: () => `${p.name} is spending time with ${c.q.name} because ${she(p)} is sweet on ${herObj(c.q)}${p.partner ? `, though ${she(p)} has a ${p.sex === "f" ? "husband" : "wife"} at home` : ""}${s.op(c.q, p.id) > 0.3 ? `, and ${c.q.name} seems to like ${herObj(p)} back` : ""}.`, icon: Bubble.Heart });
   }
   if (worker && !night) {
+    /* a respected go-between, or a kind elder, tries to settle a feud in the band */
+    const pm = peaceToMake(s, p);
+    if (pm) {
+      const leader = b.respected === p.id;
+      add({ g: Goal.Mediate, v: (0.55 + pm.f.heat * 0.5) * (0.6 + tr[1] * 0.6) * (1 - foodDrive * 0.4) / (1 + busy(Goal.Mediate) * 2), plan: () => [step(St.Go, 0, 0, pm.a.id), step(St.Talk, 0, 0, pm.a.id, 6, { a: 8, o: pm.b.id }), step(St.Go, 0, 0, pm.b.id), step(St.Talk, 0, 0, pm.b.id, 6, { a: 8, o: pm.a.id })], why: () => `${p.name} is trying to make peace between ${pm.a.name} and ${pm.b.name}, ${leader ? `as the one the ${b.name} listen to` : "as an elder they both respect"}. The feud began when ${pm.b.name} ${pm.f.cause}.`, icon: Bubble.Peace });
+    }
     const sickOne = tendTarget(s, p);
     if (sickOne) add({ g: Goal.Tend, v: sickOne.v / (1 + busy(Goal.Tend) * 1.2), plan: () => [step(St.Go, sickOne.q.x, sickOne.q.y, sickOne.q.id), step(St.Tend, 0, 0, sickOne.q.id, 14)], why: () => `${p.name} is looking after ${sickOne.q.name}, who is ${sickOne.q.sick > 0 ? "sick" : "hurt"}${sickOne.kin ? `, because family looks after family` : `, because ${she(p)} is kind-hearted`}.`, icon: Bubble.Heart });
   }
@@ -189,6 +213,18 @@ export function decide(s: Society, p: Person, forced?: Goal): void {
     if (who) add({ g: Goal.Craft, v: 0.55 * (0.4 + tr[7] * 0.6), plan: () => [step(St.Go, fx, fy), step(St.Craft, fx, fy, who.id, 14)], why: () => `${p.name} is sewing ${s.tempC(b.x, b.y) < 0 ? "furs" : "hide clothes"} for ${who === p ? "${her}self".replace("${her}", her(p)) : who.name} because ${who === p ? `${her(p)} own are worn thin` : `${who.name} has nothing warm to wear`}.` });
   }
   if (age >= 14 && age <= 62 && p.spear < 0.25 && p.knows & Know.Spear && !night && !p.pregnantBy) add({ g: Goal.Spear, v: 0.4 + tr[3] * 0.15 + tr[7] * 0.15, plan: () => [step(St.Go, fx, fy), step(St.Knap, fx, fy, 0, 10)], why: () => p.spear <= 0 && s.age(p) < 18 ? `${p.name} is knapping ${her(p)} first spear point, old enough now to hunt.` : `${p.name} is knapping a new spear point because ${her(p)} old spear ${p.spear <= 0 ? "broke" : "is falling apart"}.` });
+
+  /* --- visiting kin and friends in another band, with a gift --- */
+  /* nobody sets off on a day's walk with little ones at home who would trail after them */
+  const little = p.children.some(id => { const c = s.byId.get(id); return !!c && c.band === p.band && s.age(c) >= 1.5 && s.age(c) < 6; });
+  if (worker && age >= 15 && age < 66 && !dark && !little && s.dayFrac() < 0.45 && T > -4 && hunger < 0.45 && kidsHungry < 0.35 && p.injury < 0.2 && s.time - p.visitedAt > DAY_SECONDS * 6 && !(p.baby && s.age(s.byId.get(p.baby)!) < 0.5) && !(p.pregnantBy && s.time > p.due - DAY_SECONDS * 12)) {
+    const vt = visitTarget(s, p);
+    if (vt) {
+      const [vx, vy] = s.dryNear(vt.band.x + Math.cos(p.id) * 2.5, vt.band.y + Math.sin(p.id) * 1.8);
+      const rel = kinWord(p, vt.q.id, vt.q);
+      add({ g: Goal.Call, v: (0.08 + lonely * 0.25 + tr[5] * 0.14 + Math.min(1, vt.w) * 0.2) * (1 - foodDrive * 0.8), plan: () => { p.visitedAt = s.time; return [step(St.Go, vx, vy), step(St.Go, 0, 0, vt.q.id), step(St.Talk, 0, 0, vt.q.id, 8, { a: 4 })]; }, why: () => `${p.name} is walking over to the ${vt.band.name} to visit ${rel ? `${her(p)} ${rel}` : "an old friend"}, ${vt.q.name}, with a gift.`, icon: Bubble.Gift });
+    }
+  }
 
   /* --- exploring --- */
   if (worker && !dark && age < 60 && p.injury < 0.2 && !(p.baby && s.age(s.byId.get(p.baby)!) < 1)) {
@@ -251,7 +287,7 @@ function pick(s: Society, p: Person, opts: Option[]): void {
   const [fx, fy] = s.fireSpot(p);
   commit(s, p, { g: Goal.Rest, v: 0.1, plan: () => [step(St.Go, fx, fy), step(St.Sit, fx, fy, 0, 6)], why: () => restWhy(s, p) });
 }
-const TRIPS = new Set<Goal>([Goal.Gather, Goal.Fish, Goal.Snare, Goal.Hunt, Goal.Haul, Goal.Wood, Goal.Explore, Goal.Visit]);
+const TRIPS = new Set<Goal>([Goal.Gather, Goal.Fish, Goal.Snare, Goal.Hunt, Goal.Haul, Goal.Wood, Goal.Explore, Goal.Visit, Goal.Call]);
 function commit(s: Society, p: Person, o: Option): boolean {
   const plan = o.plan(); if (!plan || !plan.length) return false;
   const b = s.band(p), dc = Math.hypot(p.x - b.x, p.y - b.y);
@@ -299,11 +335,12 @@ function recruit(s: Society, lead: Person, pl: KnownPlace): void {
   for (const q of s.near(lead.x, lead.y, 9)) {
     if (joined >= big || q === lead || q.band !== lead.band || q.party || !isInterruptible(q.goal) && q.goal !== Goal.None) continue;
     const age = s.age(q); if (!canHunt(s, q, age) || q.food < 0.3 || q.water < 0.3) continue;
-    const willing = 0.25 + s.op(q, lead.id) * 0.5 + q.traits[0] * 0.3 + q.traits[7] * 0.15 - (q.baby ? 0.4 : 0);
+    if (feudOf(s, q, lead)) continue;
+    const willing = 0.25 + s.op(q, lead.id) * 0.5 + q.traits[0] * 0.3 + q.traits[7] * 0.15 - (q.baby ? 0.4 : 0) + (q.follows === lead.id ? 0.3 : 0);
     if (s.rng.next() > willing) continue;
     q.plan = [step(St.Go, pl.x + (s.rng.next() - 0.5) * 2, pl.y + (s.rng.next() - 0.5) * 2), step(St.Stalk, pl.x, pl.y, pl.ref, 40), step(St.Butcher, 0, 0, 0, 6), step(St.Go, ...s.fireSpot(q)), step(St.Drop, ...s.fireSpot(q))];
     q.si = 0; q.path = null; q.goal = Goal.Hunt; q.party = lead.id; q.whyAt = s.time;
-    q.why = `${q.name} is hunting ${SPECIES_SHORT[pl.sp ?? 0]} with ${lead.name}, because ${lead.name} asked for help and the band needs meat.`;
+    q.why = `${q.name} is hunting ${SPECIES_SHORT[pl.sp ?? 0]} with ${lead.name}, because ${lead.name} asked for help${q.follows === lead.id ? `, and ${q.name} listens to ${herObj(lead)}` : " and the band needs meat"}.`;
     joined++;
   }
 }
@@ -373,6 +410,7 @@ function talkTarget(s: Society, p: Person): Person | null {
     const qAge = s.age(q); if (qAge < 4) continue;
     if ((pAge < 13) !== (qAge < 13) && !(q.id === p.mother || q.id === p.father || p.id === q.mother || p.id === q.father)) continue;
     const r = p.rel.get(q.id); if (!r && q.band !== p.band) continue;
+    if (r && r.op < -0.3) continue;
     const v = (r?.op ?? 0) + (r?.fam ?? 0) * 0.3 + (q.id === p.partner ? 0.35 : 0) + (isInterruptible(q.goal) ? 0.3 : -0.4) - Math.hypot(q.x - p.x, q.y - p.y) * 0.02 + s.rng.next() * 0.3;
     if (v > bv) { bv = v; best = q; }
   }
@@ -380,11 +418,11 @@ function talkTarget(s: Society, p: Person): Person | null {
 }
 /** Who someone single is drawn to: of an age to suit, not close kin, healthy, respected, kind, and liked. */
 export function attraction(s: Society, p: Person, q: Person): number {
-  if (q.sex === p.sex || q.partner || s.kin(p, q, s.culture(p).cousins ? 1 : 2)) return 0;
+  if (q.sex === p.sex || q.id === p.partner || (q.partner && !unhappy(s, q)) || s.kin(p, q, s.culture(p).cousins ? 1 : 2)) return 0;
   const a = s.age(p), b = s.age(q);
   if (b < 16 || b > 52) return 0;
   const pref = p.sex === "m" ? -2 : 2, fit = Math.exp(-(((b - a - pref) / 7) ** 2));
-  return fit * (0.45 + q.health * 0.2 + Math.min(1, q.prestige) * 0.2 + q.traits[1] * 0.15) * (0.55 + s.op(p, q.id) * 0.6);
+  return fit * (0.45 + q.health * 0.2 + Math.min(1, q.prestige) * 0.2 + q.traits[1] * 0.15) * (0.55 + s.op(p, q.id) * 0.6) * (q.partner ? 0.6 : 1);
 }
 function courtTarget(s: Society, p: Person): { q: Person; a: number } | null {
   let best: Person | null = null, ba = 0.12;
@@ -470,9 +508,15 @@ function workWhy(s: Society, p: Person, g: Goal, pl: KnownPlace, hunger: number,
 }
 const She = (p: Person) => (p.sex === "f" ? "She" : "He");
 function eatWhy(s: Society, p: Person, cook: boolean): string {
-  const b = s.band(p);
-  const what = b.store.meat > b.store.plant && b.store.meat > b.store.fish ? "meat" : b.store.fish > b.store.plant ? "fish" : "food";
-  return `${p.name} is ${cook ? "cooking and eating" : "eating"} ${what} from the band's store, because ${she(p)} is hungry.`;
+  const b = s.band(p), h = b.hearths.get(homeOf(p, s.byId, s.time));
+  const own = !!h && storeFood(h) > 0.4, pot = storeFood(b.store) > 0.4, st = own ? h! : b.store;
+  const what = own || pot ? (st.meat > st.plant && st.meat > st.fish ? "meat" : st.fish > st.plant ? "fish" : "food") : "food";
+  const from = own ? `from ${her(p)} household's hearth` : pot ? "from the band's pot" : `at ${her(p)} family's hearth, since there is nothing left at ${her(p)} own or in the pot`;
+  return `${p.name} is ${cook ? "cooking and eating" : "eating"} ${what} ${from}, because ${she(p)} is hungry.`;
+}
+function askWhy(s: Society, p: Person, by: Person, forKids: boolean): string {
+  const rel = kinWord(p, by.id, by);
+  return `${p.name} is going to ask ${rel ? `${her(p)} ${rel} ` : ""}${by.name} for food, because ${forKids ? `${her(p)} children are hungry` : `${she(p)} is hungry`} and there is nothing left at ${her(p)} hearth or in the band's pot.${s.op(p, by.id) > 0.45 && !rel ? ` They are good friends.` : ""}`;
 }
 function talkWhy(s: Society, p: Person, q: Person): string {
   const op = s.op(p, q.id), kin = q.id === p.partner ? (p.sex === "f" ? "her husband" : "his wife") : q.id === p.mother ? `${her(p)} mother` : q.id === p.father ? `${her(p)} father` : q.mother === p.id || q.father === p.id ? `${her(p)} ${q.sex === "f" ? "daughter" : "son"}` : "";

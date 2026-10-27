@@ -2,7 +2,12 @@ import { Species, Flag, DAY_SECONDS } from "../../shared/types.ts";
 import { Anim, Bubble } from "../../shared/people.ts";
 import { Food, Goal, Know, Mem, Place, St, Skill, YEAR, step, type Person, type Step } from "./person.ts";
 import { MEAT, type Society } from "./society.ts";
-import { HUNT_P, DANGER, SPECIES_SHORT, attraction, she } from "./mind.ts";
+import { HUNT_P, DANGER, SPECIES_SHORT, attraction, she, unhappy } from "./mind.ts";
+import { deposit, answer, eat, hearthOf, pass } from "./sharing.ts";
+import { endFight, talkRound, grievance } from "./feuds.ts";
+import { mock } from "./leaders.ts";
+import { gift } from "./friends.ts";
+import { storeFood } from "./band.ts";
 
 /*
   Doing things. Each plan is a list of steps (walk there, gather, walk back, put it in the
@@ -60,6 +65,8 @@ export function doStep(s: Society, p: Person, dt: number): void {
     case St.Knap: work(s, p, st, dt, Anim.Knap); break;
     case St.Tend: tend(s, p, st, dt); break;
     case St.Wait: case St.Feed: p.anim = Anim.Idle; st.t += dt; if (st.t >= st.dur) next(p); break;
+    case St.Ask: ask(s, p, st, dt); break;
+    case St.Fight: fight(s, p, st, dt); break;
   }
 }
 
@@ -244,11 +251,13 @@ function drop(s: Society, p: Person): void {
   const amt = p.carryAmt, kind = p.carryKind;
   if (kind === Food.Wood) b.store.wood += amt;
   else {
-    if (kind === Food.Plant) { b.store.plant += amt; b.today.plant += amt; } else if (kind === Food.Fish) { b.store.fish += amt; b.today.fish += amt; } else { b.store.meat += amt; b.today.meat += amt; }
+    if (kind === Food.Plant) b.today.plant += amt; else if (kind === Food.Fish) b.today.fish += amt; else b.today.meat += amt;
+    /* some into the band's pot, the rest to the household's own hearth */
+    deposit(s, p, kind, amt);
     p.gave = p.gave * 0.98 + amt * 0.02 * 40; p.gaveToday += amt;
     p.tripYield = p.tripYield * 0.7 + amt * 0.3;
-    p.prestige += amt / (kind === Food.Meat ? 40 : 90);
     const big = s.carcasses.find(c => c.meat > 3 && (c.by === p.id || c.by === p.party) && Math.hypot(c.x - b.x, c.y - b.y) < 60);
+    if (big && kind === Food.Meat && amt >= 4) mock(s, p, big);
     for (const q of s.near(b.x, b.y, 7)) {
       if (q === p || q.band !== p.band) continue;
       if (q.food < 0.7) s.rel(q, p.id).op = Math.min(1, s.rel(q, p.id).op + 0.02);
@@ -298,6 +307,8 @@ function stalk(s: Society, p: Person, st: Step, dt: number): void {
     const victim = s.rng.pick(party.length ? party : [p]), sev = s.rng.range(0.25, 0.9);
     victim.injury = Math.min(1, victim.injury + sev); victim.health -= sev * 0.6;
     s.remember(victim, Mem.Injured, 0, -0.6, h.sp);
+    /* someone hurt on another's hunt may blame the one who led it */
+    if (victim !== p && s.op(victim, p.id) < 0.4) { s.rel(victim, p.id).op -= 0.15; grievance(s, victim, p, 0.4, `led the hunt where ${victim.sex === "f" ? "she" : "he"} was hurt`); }
     if (victim.health <= 0) s.die(victim, `hunting ${h.sp === Species.Mammoth ? "a mammoth" : h.sp === Species.Bear ? "a bear" : h.sp === Species.Aurochs ? "an aurochs" : "game"}`);
     else s.event("hurt", Bubble.Sad, `${victim.name} was hurt by ${h.sp === Species.Aurochs ? "an aurochs" : h.sp === Species.Mammoth ? "a mammoth" : "the animal"} on a hunt.`, victim.x, victim.y, [victim.id], victim.band);
   }
@@ -359,11 +370,20 @@ function talk(s: Society, p: Person, st: Step, dt: number): void {
     /* walk up to them, then see whether they will stop to talk */
     if (d > 1.8) { moveToward(s, p, q.x, q.y, speedOf(s, p, false) * dt, 1.2); p.anim = Anim.Walk; st.w = (st.w ?? 0) + dt; if (st.w > 8) fail(s, p); return; }
     const cur = q.plan[q.si];
-    const free = !cur || q.goal === Goal.None || (q.goal !== Goal.Sleep && q.goal !== Goal.Flee && q.goal !== Goal.Sick && q.goal !== Goal.Migrate && q.goal !== Goal.Hunt && (cur.k === St.Sit || cur.k === St.Wait || cur.k === St.Play || cur.k === St.Follow || cur.k === St.Go && (q.goal === Goal.Rest || q.goal === Goal.Talk)));
-    if (!free || q.carrier) { fail(s, p); return; }
-    q.plan = [step(St.Talk, 0, 0, p.id, st.dur, { a: ((st.a ?? 0) & 1) | 2 })]; q.si = 0; q.path = null;
-    q.goal = (st.a ?? 0) & 1 ? Goal.Court : Goal.Talk; q.whyAt = s.time;
-    q.why = (st.a ?? 0) & 1 ? `${q.name} is talking with ${p.name}, who has been seeking ${q.sex === "f" ? "her" : "him"} out.` : `${q.name} is talking with ${p.name}, who came over to chat.`;
+    const free = !cur || q.goal === Goal.None || (q.goal !== Goal.Sleep && q.goal !== Goal.Flee && q.goal !== Goal.Sick && q.goal !== Goal.Migrate && q.goal !== Goal.Hunt && q.goal !== Goal.Fight && (cur.k === St.Sit || cur.k === St.Wait || cur.k === St.Play || cur.k === St.Follow || cur.k === St.Go && (q.goal === Goal.Rest || q.goal === Goal.Talk)));
+    if (!free || q.carrier) {
+      /* someone who walked all the way over with a gift waits a while for them */
+      if ((st.a ?? 0) & 4 && (st.w ?? 0) < 30 && q.goal !== Goal.Migrate) { st.w = (st.w ?? 0) + dt; p.anim = Anim.Idle; face(p, q.x, q.y); return; }
+      fail(s, p); return;
+    }
+    const a = st.a ?? 0;
+    q.plan = [step(St.Talk, 0, 0, p.id, st.dur, { a: (a & 1) | 2 })]; q.si = 0; q.path = null;
+    q.goal = a & 1 ? Goal.Court : Goal.Talk; q.whyAt = s.time;
+    const other = a & 8 ? s.byId.get(st.o ?? 0) : undefined;
+    q.why = a & 1 ? `${q.name} is talking with ${p.name}, who has been seeking ${q.sex === "f" ? "her" : "him"} out.`
+      : other ? `${q.name} is listening to ${p.name}, who is trying to make peace between ${q.sex === "f" ? "her" : "him"} and ${other.name}.`
+      : a & 4 ? `${q.name} is welcoming ${p.name} of the ${s.band(p).name}, who has come visiting.`
+      : `${q.name} is talking with ${p.name}, who came over to chat.`;
   }
   st.t += dt;
   p.anim = Anim.Talk; face(p, q.x, q.y);
@@ -371,10 +391,12 @@ function talk(s: Society, p: Person, st: Step, dt: number): void {
   if (listener) { if (st.t > st.dur + 4) next(p); return; }
   /* topics come up as they talk */
   if (st.t % 2.2 < dt) s.bubble(p, topicIcon(s, p, q, st), 1.8);
-  if (st.t >= st.dur) { converse(s, p, q, ((st.a ?? 0) & 1) !== 0); next(p); }
+  if (st.t >= st.dur) { converse(s, p, q, st); next(p); }
 }
 function topicIcon(s: Society, p: Person, q: Person, st: Step): number {
   if ((st.a ?? 0) & 1) return Bubble.Heart;
+  if ((st.a ?? 0) & 8) return Bubble.Peace;
+  if ((st.a ?? 0) & 4 && st.t < 3) return Bubble.Gift;
   if (p.moveWish > 0.5) return Bubble.Move;
   const r = s.rng.next();
   const pl = p.places.filter(k => k.k !== Place.Water && k.k !== Place.Camp && k.src === 0).sort((a, c) => c.t - a.t)[0];
@@ -388,10 +410,15 @@ function topicIcon(s: Society, p: Person, q: Person, st: Step): number {
   pass on what they know about where food is, spread what they think of others, and
   talk over moving camp. Courting is a conversation where hearts are at stake.
 */
-function converse(s: Society, a: Person, b: Person, court: boolean): void {
+function converse(s: Society, a: Person, b: Person, st: Step): void {
+  const flags = st.a ?? 0, court = (flags & 1) !== 0;
   const ra = s.rel(a, b.id), rb = s.rel(b, a.id);
   ra.fam = Math.min(1, ra.fam + 0.06); rb.fam = Math.min(1, rb.fam + 0.06); ra.seen = rb.seen = s.time;
   a.company = Math.min(1, a.company + 0.3); b.company = Math.min(1, b.company + 0.3);
+  /* a go-between talking one side of a feud round */
+  if (flags & 8) { talkRound(s, a, b, st.o ?? 0); share(s, a, b); return; }
+  /* a visit: a gift handed over, then the news */
+  if (flags & 4) { gift(s, a, b); share(s, a, b); share(s, b, a); share(s, a, b); return; }
   const stress = (a.food < 0.4 ? 0.1 : 0) + (b.food < 0.4 ? 0.1 : 0);
   const quarrel = 0.025 + a.traits[6] * b.traits[6] * 0.22 + (ra.op < -0.1 ? 0.15 : 0) + stress - (a.traits[1] + b.traits[1]) * 0.03;
   if (s.rng.chance(quarrel)) {
@@ -399,6 +426,9 @@ function converse(s: Society, a: Person, b: Person, court: boolean): void {
     s.remember(a, Mem.Argued, b.id, -0.3); s.remember(b, Mem.Argued, a.id, -0.3);
     s.bubble(a, Bubble.Angry, 2.5); s.bubble(b, Bubble.Angry, 2.5);
     a.why = `${a.name} just quarreled with ${b.name}.`; a.whyAt = s.time;
+    /* quarrels that keep coming back add up */
+    grievance(s, a, b, 0.15, `keeps picking quarrels with ${a.sex === "f" ? "her" : "him"}`);
+    grievance(s, b, a, 0.15, `keeps picking quarrels with ${b.sex === "f" ? "her" : "him"}`);
     return;
   }
   const warm = 0.04 + (a.traits[5] + b.traits[5]) * 0.02 + (a.traits[1] + b.traits[1]) * 0.015;
@@ -431,7 +461,7 @@ function share(s: Society, from: Person, to: Person): void {
 }
 function courtship(s: Society, a: Person, b: Person, ra: { court: number; op: number }, rb: { court: number; op: number }): void {
   const back = attraction(s, b, a);
-  if (back > 0.18 && !b.partner && !a.partner) {
+  if (back > 0.18 && (!b.partner || unhappy(s, b)) && (!a.partner || unhappy(s, a))) {
     ra.court = Math.min(1, ra.court + 0.22 + back * 0.3); rb.court = Math.min(1, rb.court + 0.18 + back * 0.3);
     ra.op = Math.min(1, ra.op + 0.06); rb.op = Math.min(1, rb.op + 0.06);
     s.bubble(b, Bubble.Heart, 2.5);
@@ -471,6 +501,28 @@ function follow(s: Society, p: Person, st: Step, dt: number): void {
     }
   }
 }
+/** At another household's hearth, asking for food. `id` is the household, `o` the one asked. */
+function ask(s: Society, p: Person, st: Step, dt: number): void {
+  const g = s.byId.get(st.o ?? 0);
+  if (!g || g.band !== p.band || Math.hypot(g.x - p.x, g.y - p.y) > 3.5) { p.askedAt = s.time + DAY_SECONDS * 0.08; fail(s, p, `${p.name} went to ask for food, but there was nobody at the hearth.`); return; }
+  st.t += dt; p.anim = Anim.Talk; face(p, g.x, g.y);
+  if (st.t < st.dur) { if (st.t < dt * 1.5) s.bubble(p, Bubble.Ask, 2); return; }
+  if (answer(s, g, p, st.id) <= 0) { fail(s, p); return; }
+  next(p);
+}
+/** Two people come to blows: a scuffle of shoves and shouting, until others pull them apart. */
+function fight(s: Society, p: Person, st: Step, dt: number): void {
+  const q = s.byId.get(st.id);
+  if (!q) { next(p); return; }
+  st.t += dt;
+  if (Math.hypot(q.x - p.x, q.y - p.y) > 1.1) moveToward(s, p, q.x, q.y, speedOf(s, p, false) * dt, 0.9);
+  p.anim = Math.floor(st.t * 4 + p.id) % 3 === 0 ? Anim.Throw : Anim.Wave; face(p, q.x, q.y);
+  if (st.t < st.dur) return;
+  /* whichever of the two finishes first settles it for both */
+  if (st.a !== 1) { const qs = q.plan[q.si]; if (qs && qs.k === St.Fight && qs.id === p.id) qs.a = 1; endFight(s, p, q); }
+  next(p);
+}
+
 function tend(s: Society, p: Person, st: Step, dt: number): void {
   st.t += dt;
   const q = s.byId.get(st.id);
@@ -480,7 +532,11 @@ function tend(s: Society, p: Person, st: Step, dt: number): void {
   q.injury = Math.max(0, q.injury - 0.0008 * dt);
   /* carers bring water and food to the sick */
   q.water = Math.max(q.water, 0.7);
-  if (q.food < 0.8) s.eatFromStore(q, s.band(q), 0.02 * dt);
+  if (q.food < 0.8 && s.eatFromStore(q, s.band(q), 0.02 * dt) <= 0 && q.band === p.band) {
+    /* nothing at their hearth or in the pot: the carer feeds them from their own */
+    const mine = hearthOf(s, p), theirs = hearthOf(s, q);
+    if (mine !== theirs && storeFood(mine) > 0.5 && pass(mine, theirs, 0.02 * dt) > 0) eat(s, q, s.band(q), 0.02 * dt);
+  }
   const r = s.rel(q, p.id); r.op = Math.min(1, r.op + 0.004 * dt);
   if (st.t + dt >= st.dur) s.remember(q, Mem.Helped, p.id, 0.35);
 }

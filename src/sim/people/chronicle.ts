@@ -16,14 +16,21 @@ const BASE: Record<string, [number, string]> = {
   birth: [0.14, "A birth"], death: [0.2, "A death"], couple: [0.3, "A new couple"], parted: [0.32, "A couple parts"],
   kill: [0.4, "A great hunt"], hurt: [0.28, "Hurt on a hunt"], attack: [0.4, "Attacked by wild animals"],
   contact: [0.45, "Neighbors meet"], move: [0.3, "A band moves camp"], split: [0.7, "A band splits"],
-  leave: [0.28, "A family moves on"], merge: [0.55, "A band joins another"], "band-end": [0.95, "A band is no more"], respect: [0.35, "A voice rises"],
+  leave: [0.28, "A family moves on"], merge: [0.55, "A band joins another"], "band-end": [0.95, "A band is no more"],
+  leader: [0.42, "A new leader"], contest: [0.38, "Two voices"],
+  refused: [0.2, "Food refused"], feud: [0.43, "Bad blood"], fight: [0.36, "A fight"], peace: [0.3, "Peace is made"],
+  leftfor: [0.4, "Left for another"], mocked: [0.18, "Taken down a peg"], gift: [0.14, "A gift between bands"],
 };
+/** Every kind of event the simulation tells of. */
+export const KINDS = Object.keys(BASE);
 /** How much rarer-than-usual an event of this kind is allowed to count for. */
 const RARITY = 0.3;
 
 /**
   `hint` carries what only the caller knows: the animal for a hunt (a Species), 1 for strangers who speak
-  another language or a move into unknown land, 2 for twins.
+  another language or a move into unknown land, 2 for twins; 1 for a feud passed down, a fight where someone
+  was hurt, peace made by a go-between, a family driven out by a feud, a split along a feud or a following,
+  gifts between two peoples.
 */
 export function weigh(s: Society, kind: string, who: number[], band: number, hint: number): Weighed {
   const [base, name] = BASE[kind] ?? [0.2, "Something happened"];
@@ -59,7 +66,13 @@ export function weigh(s: Society, kind: string, who: number[], band: number, hin
     }
     case "contact": if (hint === 1) { sig += 0.2; title = "Strangers meet"; } else title = "Kin found"; break;
     case "move": if (hint === 1) { sig += 0.08; title = "A band sets off into the unknown"; } break;
-    case "respect": title = "A new voice of the band"; break;
+    case "feud": if (hint === 1) { sig += 0.04; title = "A feud passes down"; } break;
+    case "fight": if (hint === 1) { sig += 0.08; title = "Hurt in a fight"; } break;
+    case "peace": if (hint === 1) { sig += 0.12; title = "A feud is settled"; } else title = "A feud cools"; break;
+    case "leave": if (hint === 1) { sig += 0.12; title = "Driven out by a feud"; } break;
+    case "split": if (hint === 1) { sig += 0.05; title = "A band divides"; } break;
+    case "gift": if (hint === 1) { sig += 0.2; title = "Gifts between peoples"; } break;
+    case "refused": if (hint === 1) sig += 0.06; break;
   }
   /* the first of anything counts for more; the thousandth for nothing extra */
   sig += RARITY / (1 + n);

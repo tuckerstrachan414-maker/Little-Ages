@@ -24,10 +24,11 @@ export const dateLong = (t: number) => `${SEASON_NAMES[seasonOf(t)]}, day ${dayO
 
 /** The groups the journal and the ribbon sort events into. */
 export const CATEGORIES = [
-  { key: "life", label: "Births and couples", kinds: ["birth", "couple", "parted"] },
+  { key: "life", label: "Births and couples", kinds: ["birth", "couple", "parted", "leftfor"] },
   { key: "loss", label: "Deaths and dangers", kinds: ["death", "hurt", "attack", "band-end"] },
   { key: "hunt", label: "Hunts", kinds: ["kill"] },
-  { key: "bands", label: "Bands and moves", kinds: ["move", "split", "leave", "merge", "respect"] },
+  { key: "bands", label: "Bands and leaders", kinds: ["move", "split", "leave", "merge", "leader", "contest"] },
+  { key: "ties", label: "Friends and feuds", kinds: ["refused", "feud", "fight", "peace", "mocked", "gift"] },
   { key: "meet", label: "Meetings", kinds: ["contact"] },
 ] as const;
 export type CategoryKey = (typeof CATEGORIES)[number]["key"];
@@ -36,7 +37,8 @@ export const categoryOf = (kind: string): CategoryKey => CATEGORIES.find(c => (c
 /** The color of each kind on the ribbon. */
 export const KIND_COLOR: Record<string, string> = {
   birth: "#e58aa0", couple: "#e0586c", parted: "#d0884a", death: "#9aa0b8", hurt: "#c8a46a", attack: "#d8584a", "band-end": "#c0392b",
-  kill: "#d08a44", move: "#7fbf5a", split: "#f0c43c", leave: "#a4cf6a", merge: "#6fc2c0", respect: "#f6d77a", contact: "#7fa8e6",
+  kill: "#d08a44", move: "#7fbf5a", split: "#f0c43c", leave: "#a4cf6a", merge: "#6fc2c0", leader: "#f6d77a", contest: "#e3ad2f", contact: "#7fa8e6",
+  leftfor: "#c86a8a", refused: "#b0703a", feud: "#a8231c", fight: "#d0402a", peace: "#8fbf6a", mocked: "#c9b48c", gift: "#d9b45a",
 };
 
 export interface Filter {
