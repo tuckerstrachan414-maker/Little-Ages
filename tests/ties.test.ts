@@ -333,10 +333,16 @@ describe("love lost, and friends far away", () => {
 
 describe("a few years of sharing, quarrels and leading", () => {
   const { s, run } = fresh(10);
-  /* for everyone who starves: how much food was at their own family's hearth */
+  /* for everyone who starves at camp: how much food was at their own family's hearth (out on the land is another matter) */
   const starved: number[] = [];
   const die = s.die.bind(s);
-  s.die = (p, cause) => { if (cause === "hunger" && s.byId.has(p.id)) { const h = s.band(p).hearths.get(homeOf(p, s.byId, s.time)); starved.push(h ? storeFood(h) : 0); } die(p, cause); };
+  s.die = (p, cause) => {
+    if (cause === "hunger" && s.byId.has(p.id)) {
+      const b = s.band(p), h = b.hearths.get(homeOf(p, s.byId, s.time));
+      if (Math.hypot(p.x - b.x, p.y - b.y) < 8) starved.push(h ? storeFood(h) : 0);
+    }
+    die(p, cause);
+  };
   run(4);
   it("most food is shared into the pot, food passes between hearths, and households keep some back", () => {
     const o = s.stats.social;

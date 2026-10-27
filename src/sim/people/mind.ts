@@ -155,7 +155,7 @@ export function decide(s: Society, p: Person, forced?: Goal): void {
     if (bestPlant) { const pl = bestPlant; add({ g: Goal.Gather, v: foodDrive * bp * 2.1 * damp(Goal.Gather, 0.03), plan: () => gatherPlan(s, p, pl, carry), why: () => workWhy(s, p, Goal.Gather, pl, hunger, kidsHungry, short), icon: Bubble.Berries }); }
     if (bestFish) { const pl = bestFish; add({ g: Goal.Fish, v: foodDrive * bf * 2.1 * damp(Goal.Fish, 0.05), plan: () => fishPlan(s, p, pl), why: () => workWhy(s, p, Goal.Fish, pl, hunger, kidsHungry, short), icon: Bubble.Fish }); }
     if (bestRab) { const pl = bestRab; add({ g: Goal.Snare, v: foodDrive * br * 1.7 * damp(Goal.Snare, 0.12), plan: () => snarePlan(s, p, pl), why: () => workWhy(s, p, Goal.Snare, pl, hunger, kidsHungry, short) }); }
-    if (bestGame) { const pl = bestGame; add({ g: Goal.Hunt, v: (foodDrive * 0.9 + tr[3] * 0.22 + tr[0] * 0.12 + (b.respected === p.id ? 0.12 : 0)) * bg * 2.1 * damp(Goal.Hunt, 0.04), plan: () => huntPlan(s, p, pl), why: () => workWhy(s, p, Goal.Hunt, pl, hunger, kidsHungry, short), icon: pl.sp === Species.Mammoth ? Bubble.Mammoth : Bubble.Deer }); }
+    if (bestGame) { const pl = bestGame; add({ g: Goal.Hunt, v: (foodDrive * 0.9 + tr[3] * 0.22 + tr[0] * 0.12) * bg * 2.1 * damp(Goal.Hunt, 0.04), plan: () => huntPlan(s, p, pl), why: () => workWhy(s, p, Goal.Hunt, pl, hunger, kidsHungry, short), icon: pl.sp === Species.Mammoth ? Bubble.Mammoth : Bubble.Deer }); }
     if (bestCarc) { const pl = bestCarc; add({ g: Goal.Haul, v: (foodDrive + tr[1] * 0.2) * bc * 2 * damp(Goal.Haul, 0.15), plan: () => [step(St.Go, pl.x, pl.y), step(St.Butcher, pl.x, pl.y, pl.ref, 5), step(St.Go, fx, fy), step(St.Drop, fx, fy)], why: () => `${p.name} is fetching meat from the ${SPECIES_SHORT[pl.sp ?? 0]} ${pl.src ? `${s.byId.get(pl.src)?.name ?? "someone"} killed` : "killed"} ${compass(pl.x - b.x, pl.y - b.y)} of camp, before it spoils.`, icon: Bubble.Meat }); }
   }
 
@@ -336,7 +336,7 @@ function recruit(s: Society, lead: Person, pl: KnownPlace): void {
     if (joined >= big || q === lead || q.band !== lead.band || q.party || !isInterruptible(q.goal) && q.goal !== Goal.None) continue;
     const age = s.age(q); if (!canHunt(s, q, age) || q.food < 0.3 || q.water < 0.3) continue;
     if (feudOf(s, q, lead)) continue;
-    const willing = 0.25 + s.op(q, lead.id) * 0.5 + q.traits[0] * 0.3 + q.traits[7] * 0.15 - (q.baby ? 0.4 : 0) + (q.follows === lead.id ? 0.3 : 0);
+    const willing = 0.25 + s.op(q, lead.id) * 0.5 + q.traits[0] * 0.3 + q.traits[7] * 0.15 - (q.baby ? 0.4 : 0) + (q.follows === lead.id ? 0.15 : 0);
     if (s.rng.next() > willing) continue;
     q.plan = [step(St.Go, pl.x + (s.rng.next() - 0.5) * 2, pl.y + (s.rng.next() - 0.5) * 2), step(St.Stalk, pl.x, pl.y, pl.ref, 40), step(St.Butcher, 0, 0, 0, 6), step(St.Go, ...s.fireSpot(q)), step(St.Drop, ...s.fireSpot(q))];
     q.si = 0; q.path = null; q.goal = Goal.Hunt; q.party = lead.id; q.whyAt = s.time;

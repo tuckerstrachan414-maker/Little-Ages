@@ -1005,7 +1005,6 @@ export class Society {
     const deficit = Math.max(0, 1 - (b.yesterday.plant + b.yesterday.meat + b.yesterday.fish) / Math.max(1, b.appetite));
     const short = Math.max(0, 1 - storeDays(b) / 2);
     let wFor = 0, wAll = 0, lead: Person | null = null, leadW = -1;
-    const weight = new Map<number, number>(), keen = new Set<number>();
     /* the places those who want to go speak for, best first; the loudest voice leads */
     const offers: { v: number; at: [number, number]; by?: Person }[] = [];
     for (const q of adults) {
@@ -1024,21 +1023,12 @@ export class Society {
       const danger = q.mem.some(m => m.k === Mem.Attacked && this.time - m.t < DAY_SECONDS * 4) ? 0.3 : 0;
       const push = Math.min(1, 0.65 * deficit + 0.35 * short + danger), pull = mine.length ? Math.min(1, bestV / Math.max(4, here + 4)) : 0;
       q.moveWish = Math.min(1, q.moveWish * 0.35 + 0.65 * push * (0.55 + 0.45 * pull) * (0.8 + q.traits[4] * 0.4));
-      /* the one most of the band listens to speaks loudest */
-      const wt = 0.5 + q.prestige + q.traits[3] * 0.4 + (b.respected === q.id ? 0.3 + b.followers * 0.12 : 0);
-      wAll += wt; weight.set(q.id, wt);
+      const wt = 0.5 + q.prestige + q.traits[3] * 0.4;
+      wAll += wt;
       if (q.moveWish > 0.4 && pull > 0.35) {
-        wFor += wt; keen.add(q.id); if (wt > leadW) { leadW = wt; lead = q; }
+        wFor += wt; if (wt > leadW) { leadW = wt; lead = q; }
         for (const m of mine.slice(0, 4)) offers.push({ v: m.v * (1 + wt * 0.2), at: m.at, by: q });
       }
-    }
-    /* people go along with whoever they listen to: for it if they are, held back if they are firmly against */
-    for (const q of adults) {
-      if (q.follows === q.id) continue;
-      const wt = weight.get(q.id) ?? 0, f = adults.find(o => o.id === q.follows);
-      if (!f) continue;
-      if (!keen.has(q.id) && keen.has(f.id)) wFor += wt * 0.6;
-      else if (keen.has(q.id) && f.moveWish < 0.2) wFor -= wt * 0.4;
     }
     /*
       Hungry enough, a band will set out even without anyone knowing somewhere better:
@@ -1055,8 +1045,7 @@ export class Society {
         fresh.push({ v: far * crowd, at: [x, y] });
       }
       const sorted = adults.slice().sort((a, c) => c.prestige + c.traits[3] * 0.4 - (a.prestige + a.traits[3] * 0.4));
-      const head = adults.find(q => q.id === b.respected);
-      if (fresh.length && sorted.length) { lead = head ?? sorted[0]; wFor = wAll; fresh.sort((a, c) => c.v - a.v); }
+      if (fresh.length && sorted.length) { lead = sorted[0]; wFor = wAll; fresh.sort((a, c) => c.v - a.v); }
     }
     if (!lead || wFor / wAll < 0.45) return;
     /* the first of the places on offer where a camp can actually stand: dry, roomy ground by fresh water, that they can walk to */

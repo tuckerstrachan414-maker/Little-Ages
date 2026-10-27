@@ -290,7 +290,7 @@ export function answer(s: Society, g: Person, a: Person, head: number): number {
   families send each other nothing, and the stingy keep most of theirs, which is noticed.
 */
 export function shareRound(s: Society, b: Band): void {
-  type HH = { head: number; folk: Person[]; app: number; h: Hearth; days: number; by: Person; generous: number };
+  type HH = { head: number; folk: Person[]; app: number; h: Hearth; days: number; by: Person; generous: number; small: boolean };
   const hs: HH[] = [];
   const seen = new Set<number>();
   for (const id of b.members) {
@@ -302,12 +302,15 @@ export function shareRound(s: Society, b: Band): void {
     const h = b.hearths.get(head) ?? hearthOf(s, q), app = appetiteOf(s, folk);
     const c = s.culture(by), t = by.traits;
     const generous = clamp01(c.sharing * 0.6 + (0.5 - t[2]) * 0.5 + (t[1] - 0.5) * 0.4 + (b.respected === by.id ? 0.15 : 0));
-    hs.push({ head, folk, app, h, days: storeFood(h) / app, by, generous });
+    /* a household with a nursing or expecting mother, or little children, is fed first */
+    const small = folk.some(q => q.pregnantBy || q.baby || s.age(q) < 6);
+    hs.push({ head, folk, app, h, days: storeFood(h) / app, by, generous, small });
   }
   if (hs.length < 2) return;
   const potDays = storeFood(b.store) / Math.max(1, b.appetite);
   /* the hungriest first, each drawing on the households they are closest to */
-  const needy = hs.filter(x => x.days + potDays < 1.5).sort((x, y) => x.days - y.days);
+  const want = (x: HH) => 1.5 + (x.small ? 0.5 : 0);
+  const needy = hs.filter(x => x.days + potDays < want(x)).sort((x, y) => (x.days - (x.small ? 0.5 : 0)) - (y.days - (y.small ? 0.5 : 0)));
   for (const n of needy) {
     /* only the two households at the heart of a feud send each other nothing; their kin still share */
     const givers = hs.filter(g => g !== n && g.days > Math.max(0.6, n.days + 0.5) && !g.folk.some(x => n.folk.some(y => feudBetween(s, x, y)))).map(g => {
@@ -317,9 +320,14 @@ export function shareRound(s: Society, b: Band): void {
     }).sort((x, y) => y.tie - x.tie);
     for (const { g, tie } of givers) {
       const gap = g.days - n.days;
-      if (gap <= 0.4 || n.days + potDays >= 1.5) break;
-      /* half the difference between them, shared out as their generosity and the tie between them go */
-      const amt = pass(g.h, n.h, gap / 2 * Math.min(g.app, n.app) * g.generous * Math.min(1, 0.35 + tie * 0.65));
+      if (gap <= 0.4 || n.days + potDays >= want(n)) break;
+      /*
+        Half the difference between them, as their generosity and the tie between them go.
+        A family that is really short is another matter: almost nobody keeps food back from
+        them, so in hard times the band pools nearly everything, as foragers do.
+      */
+      const short = n.days + potDays < 0.7;
+      const amt = pass(g.h, n.h, gap / 2 * Math.min(g.app, n.app) * (short ? 0.9 : (0.4 + g.generous * 0.6) * Math.min(1, 0.45 + tie * 0.55)));
       if (amt <= 0.05) continue;
       g.days = storeFood(g.h) / g.app; n.days = storeFood(n.h) / n.app;
       const r = s.rel(n.by, g.by.id); r.op = Math.min(1, r.op + 0.01 + Math.min(0.04, amt * 0.008)); r.owe += amt * 0.3;
