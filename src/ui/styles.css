@@ -177,6 +177,19 @@ button { font: inherit; color: inherit; }
 .tag .members .mb { border: 0; background: none; padding: 0; cursor: pointer; }
 .tag .members .portrait { width: 26px; height: 26px; }
 .tag .muted { color: var(--ink-3); }
+.tag .hearth { margin: 0 0 4px; font-size: 12px; color: var(--ink-2); }
+.tag .hearth b { font-family: var(--f-label); font-size: 10px; letter-spacing: .04em; font-weight: 400; text-transform: uppercase; color: var(--ink-2); }
+.tag .voice, .tag .owes, .tag .voices, .tag .sharing { margin: 4px 0; font-size: 12.5px; }
+.tag .lnk { border: 0; background: none; padding: 0; font: inherit; font-weight: 600; color: var(--ink); text-decoration: underline; text-decoration-color: var(--ink-3); text-underline-offset: 2px; cursor: pointer; }
+.tag .lnk:hover { text-decoration-color: var(--ink); }
+.tag .feuds { display: grid; gap: 3px; }
+.tag .feuds .fd { display: flex; gap: 6px; align-items: center; border: 1px solid transparent; background: none; padding: 2px; text-align: left; cursor: pointer; border-radius: 2px; }
+.tag .feuds .fd:hover { background: var(--paper-2); border-color: var(--paper-3); }
+.tag .feuds .kn { display: flex; flex-direction: column; line-height: 1.2; }
+.tag .feuds .kn b { font-size: 12.5px; }
+.tag .feuds .kn small { font-size: 11px; color: #8a3a2a; }
+.tag .hearths .need { grid-template-columns: 9.2em 1fr; }
+.tag .members .mb.lead { outline: 2px solid #e3ad2f; outline-offset: -1px; border-radius: 2px; }
 .tag.docked { left: 8px !important; right: 8px; top: auto !important; bottom: 8px; width: auto; max-height: 52vh; }
 .tag.docked.collapsed, #app.no-ui .tag.docked { transform: translateY(24px); }
 

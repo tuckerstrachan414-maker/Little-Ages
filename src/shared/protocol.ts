@@ -55,12 +55,35 @@ export interface PersonDetail {
   children: Kin[]; siblings: Kin[]; friends: Kin[]; rivals: Kin[];
   memories: { text: string; ago: number; v: number }[];
   pregnant: boolean; carrying: string; prestige: number; respected: boolean;
+  /** days of food at their household's hearth, and in the band's pot */
+  hearth: number; pot: number;
+  /** whose word they go along with (null when it is their own), and how many listen to them */
+  follows: { id: number; name: string } | null; followers: number;
+  /** days they have led their band, or -1 */
+  leads: number;
+  /** how much of what they bring in they share, 0..1 */
+  shareRate: number;
+  /** feuds they are part of: the other side, what started it, how hot it is, whether it is their own or their family's */
+  feuds: Feuding[];
+  /** food debts between hearths: owed by them (positive) or to them (negative) */
+  owes: { id: number; name: string; amt: number }[];
   x: number; y: number;
 }
+
+export interface Feuding { id: number; name: string; heat: number; cause: string; days: number; own: boolean; inherited: boolean; look?: Look; }
+export interface BandFeud { a: { id: number; name: string }; b: { id: number; name: string }; heat: number; cause: string; days: number; }
 
 export interface BandDetail {
   id: number; name: string; people: string; pop: number; adults: number; children: number; couples: number;
   respected: { id: number; name: string } | null;
+  /** how many listen to the leader and for how many days they have led; a second voice with a following of their own */
+  followers: number; ledDays: number;
+  contender: { id: number; name: string; followers: number } | null;
+  /** each household's hearth: its head, how many live there and days of food */
+  hearths: { id: number; name: string; people: number; days: number }[];
+  /** days of food in the pot, and the share of yesterday's food that went into it */
+  pot: number; sharedYesterday: number;
+  feuds: BandFeud[];
   store: { plant: number; meat: number; fish: number; wood: number; hides: number };
   days: number; fire: number; moves: number; camp: string;
   yesterday: { brought: number; eaten: number };

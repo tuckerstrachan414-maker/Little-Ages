@@ -67,7 +67,7 @@ describe("how much an event matters", () => {
     expect(mk(5, 5)).toBeGreaterThan(mk(6, 5) + 0.3);
   });
   it("gives every event the kind that decides which journal group it is in", () => {
-    for (const e of s.events) expect(["life", "loss", "hunt", "bands", "meet"]).toContain(categoryOf(e.kind));
+    for (const e of s.events) expect(["life", "loss", "hunt", "bands", "ties", "meet"]).toContain(categoryOf(e.kind));
   });
 });
 
@@ -164,7 +164,8 @@ describe("relationship threads", () => {
     expect(tight.length).toBeLessThan(all.length);
     const capped = bondEdges(s, everywhere, 10);
     expect(capped.length).toBe(30);
-    expect(capped[2]).toBe(Bond.Couple);
+    /* the two at the heart of a feud come first, then couples */
+    expect(capped[2]).toBe([...all].some((v, i) => i % 3 === 2 && v === Bond.Feud) ? Bond.Feud : Bond.Couple);
   });
 });
 

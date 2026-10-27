@@ -21,12 +21,14 @@ export const KNOW_NAMES: [number, string][] = [[1, "keeping fire"], [2, "spear h
 export const Goal = {
   None: 0, Sleep: 1, Drink: 2, Eat: 3, Gather: 4, Fish: 5, Snare: 6, Hunt: 7, Haul: 8, Wood: 9, Warm: 10, Talk: 11, Court: 12,
   Play: 13, Follow: 14, Explore: 15, Craft: 16, Spear: 17, Tend: 18, Rest: 19, Flee: 20, Migrate: 21, Carried: 22, Sick: 23, Cook: 24, Toddle: 25, Visit: 26,
+  Ask: 27, Fight: 28, Mediate: 29, Call: 30,
 } as const;
 export type Goal = (typeof Goal)[keyof typeof Goal];
 
 export const St = {
   Go: 0, Gather: 1, Fish: 2, Snare: 3, Stalk: 4, Butcher: 5, Wood: 6, Drop: 7, Eat: 8, Drink: 9, Sleep: 10, Sit: 11, Talk: 12,
   Play: 13, Follow: 14, Look: 15, Craft: 16, Knap: 17, Tend: 18, Wait: 19, Cook: 20, Feed: 21,
+  Ask: 22, Fight: 23,
 } as const;
 export type St = (typeof St)[keyof typeof St];
 
@@ -43,6 +45,8 @@ export interface Step {
   a?: number;
   /** seconds spent waiting before the step could start */
   w?: number;
+  /** another person the step is about (the other side of a quarrel being smoothed over) */
+  o?: number;
 }
 export const step = (k: St, x = 0, y = 0, id = 0, dur = 0, extra: Partial<Step> = {}): Step => ({ k, x, y, id, dur, t: 0, ...extra });
 
@@ -72,11 +76,16 @@ export interface Rel {
   /** courtship progress 0..1 */
   court: number;
   seen: number;
+  /** food owed: what they gave us in a hard time and we have not yet paid back (negative: what they owe us) */
+  owe: number;
+  /** wrongs held against them and not yet let go, fading over weeks; enough of it hardens into a feud */
+  grudge: number;
 }
 
 export const Mem = {
   Shared: 0, Fed: 1, Hungry: 2, Argued: 3, NiceTalk: 4, Stranger: 5, Kill: 6, Attacked: 7, Injured: 8, Birth: 9, Death: 10,
   Paired: 11, Parted: 12, Moved: 13, Split: 14, Learned: 15, Found: 16, Cold: 17, Rejected: 18, Freeloader: 19, Helped: 20, Feast: 21,
+  Refused: 22, Fight: 23, Peace: 24, Gift: 25, Mocked: 26, Left: 27, Feud: 28, Repaid: 29, Stingy: 30,
 } as const;
 export interface Memory { t: number; k: number; who: number; v: number; x: number; y: number; n: number; }
 
@@ -129,7 +138,17 @@ export interface Person {
   gave: number; took: number;
   /** food brought to camp today */
   gaveToday: number;
+  /** how much of what they bring in they share with the band, smoothed (0 keeps it all for the family, 1 shares it all) */
+  shareRate: number;
+  /** food shared with others lately, per day smoothed: into the band's pot, and handed to other hearths */
+  shared: number;
   longing: number;
+  /** whose word they go along with when the band decides something (their own id if nobody's) */
+  follows: number;
+  /** until when they will not ask that household for food again, after being turned away */
+  askedAt: number;
+  /** when they last went visiting kin or friends in another band */
+  visitedAt: number;
 
   /* mind */
   goal: Goal; plan: Step[]; si: number; why: string; whyAt: number;

@@ -1,4 +1,4 @@
-import type { BandDetail, Kin, PersonDetail } from "../shared/protocol.ts";
+import type { BandDetail, Feuding, Kin, PersonDetail } from "../shared/protocol.ts";
 import type { CampSnap, ChronicleEvent, Look } from "../shared/people.ts";
 import { Anim, Bubble } from "../shared/people.ts";
 import { DAY_SECONDS, DAYS_PER_SEASON, DAYS_PER_YEAR, SEASON_NAMES } from "../shared/types.ts";
@@ -44,6 +44,8 @@ export function dateOf(t: number): string {
   const day = Math.floor(t / DAY_SECONDS), y = Math.floor(day / DAYS_PER_YEAR) + 1, s = Math.floor(day / DAYS_PER_SEASON) % 4;
   return `${SEASON_NAMES[s]}, year ${y}`;
 }
+/** "half a day", "1 day", "3 days" of food */
+const daysText = (d: number) => d < 0.3 ? "hardly any" : d < 0.75 ? "half a day's" : d < 1.5 ? "a day's" : `${Math.round(d)} days'`;
 const bars = (rows: [string, number, string][]) => rows.map(([n, v, col]) => `<div class="need"><span>${n}</span><span class="segs" style="--c:${col}">${Array.from({ length: 8 }, (_, i) => `<i class="${i < Math.round(Math.max(0, Math.min(1, v)) * 8) ? "on" : ""}"></i>`).join("")}</span></div>`).join("");
 
 export interface PeopleUICallbacks {
@@ -190,9 +192,9 @@ export class PeopleUI {
 
   private renderPerson(t: HTMLElement, d: PersonDetail): void {
     /* rebuild only what changed, so buttons stay put under the pointer */
-    const key = `${d.id}|${this.tab}|${d.stage}|${d.partner?.id}|${d.children.length}|${d.memories.length}|${d.look.wear}|${d.friends.map(f => f.id).join()}|${d.rivals.map(f => f.id).join()}`;
+    const key = `${d.id}|${this.tab}|${d.stage}|${d.partner?.id}|${d.children.length}|${d.memories.length}|${d.look.wear}|${d.friends.map(f => f.id).join()}|${d.rivals.map(f => f.id).join()}|${d.feuds.map(f => f.id).join()}|${d.follows?.id}|${d.followers}|${d.owes.map(o => o.id).join()}`;
     const ageText = d.age < 1 ? `${Math.max(1, Math.round(d.age * 12))} months` : `${Math.floor(d.age)}`;
-    const role = d.respected ? `the one the ${d.band.name} listen to` : d.pregnant ? "expecting a child" : "";
+    const role = d.respected ? `the one the ${d.band.name} listen to` : d.feuds.some(f => f.own && f.heat > 0.4) ? "in a feud" : d.pregnant ? "expecting a child" : "";
     if (key !== this.renderedKey) {
       this.renderedKey = key;
       t.innerHTML = `${this.chrome()}
@@ -212,7 +214,7 @@ export class PeopleUI {
       const body = t.querySelector(".body")!;
       if (this.tab === "family") body.append(this.familyView(d));
       else if (this.tab === "mind") body.append(this.mindView(d));
-      else body.innerHTML = `<p class="doing"></p><p class="why"></p><div class="needs"></div><p class="mood"></p>`;
+      else body.innerHTML = `<p class="doing"></p><p class="why"></p><div class="needs"></div><p class="mood"></p><p class="hearth"></p>`;
     }
     t.querySelector(".nm")!.textContent = `${d.name}, ${ageText}`;
     t.querySelector(".sub")!.textContent = `${d.sex === "f" ? "Woman" : "Man"} of the ${d.band.name}${role ? `, ${role}` : ""}`.replace(/^(Woman|Man) of/, (_m, w) => (d.age < 16 ? (d.sex === "f" ? "Girl" : "Boy") : w) + " of");
@@ -222,6 +224,7 @@ export class PeopleUI {
       t.querySelector(".why")!.innerHTML = `<strong>Why?</strong> ${esc(d.why.replace(/^\S+ is /, "").replace(/^./, c => c.toUpperCase()))}`;
       t.querySelector(".needs")!.innerHTML = bars([["FOOD", n.food, "#c97a3a"], ["WATER", n.water, "#4f8fb8"], ["REST", n.rest, "#7a6ab0"], ["WARMTH", n.warmth, "#d0653a"], ["COMPANY", n.company, "#5e8f3e"], ["HEALTH", n.health, "#b04050"]]);
       t.querySelector(".mood")!.innerHTML = `<b>${d.moodWord}</b>${d.feelings.length ? ` &middot; ${d.feelings.map(esc).join(", ")}` : ""}`;
+      t.querySelector(".hearth")!.innerHTML = d.age < 2 ? "" : `<b>Hearth</b> ${esc(daysText(d.hearth))} food &middot; <b>the band's pot</b> ${esc(daysText(d.pot))} food`;
     }
   }
 
@@ -251,6 +254,22 @@ export class PeopleUI {
   private mindView(d: PersonDetail): HTMLElement {
     const box = el("div", "mind");
     box.append(el("p", "traits", d.traits.map(t => `<span class="trait">${esc(t.word)}</span>`).join(" ")));
+    /* whose word they go along with, who goes along with theirs, and how they share */
+    if (d.age >= 16) {
+      const she = d.sex === "f" ? "she" : "he", her = d.sex === "f" ? "her" : "him";
+      const p = el("p", "voice");
+      const lead = d.leads >= 0 ? `Leads the ${esc(d.band.name)}${d.leads >= 10 ? ` (for ${Math.floor(d.leads / 10)} season${d.leads >= 20 ? "s" : ""})` : ""}. ` : "";
+      p.innerHTML = `${lead}${d.follows ? `${d.leads >= 0 ? "Takes counsel from" : "Listens to"} <button type="button" class="lnk" data-pin="${d.follows.id}">${esc(d.follows.name)}</button>. ` : `Goes by ${d.sex === "f" ? "her" : "his"} own judgment. `}${d.followers ? `${d.followers} of the band listen to ${her}. ` : ""}${d.shareRate > 0.75 ? `Shares nearly everything ${she} brings in.` : d.shareRate > 0.5 ? `Shares most of what ${she} brings in.` : d.shareRate > 0.3 ? `Keeps much of what ${she} brings in for ${d.sex === "f" ? "her" : "his"} own.` : `Keeps most of what ${she} brings in for ${d.sex === "f" ? "her" : "his"} own.`}`;
+      p.querySelectorAll<HTMLButtonElement>("[data-pin]").forEach(b => b.onclick = () => this.cb.pin(+b.dataset.pin!, 0));
+      box.append(p);
+      if (d.owes.length) {
+        const o = el("p", "owes");
+        o.innerHTML = d.owes.map(x => x.amt > 0 ? `Owes <button type="button" class="lnk" data-pin="${x.id}">${esc(x.name)}</button> for food in a hungry time.` : `<button type="button" class="lnk" data-pin="${x.id}">${esc(x.name)}</button> owes ${her} for food.`).join(" ");
+        o.querySelectorAll<HTMLButtonElement>("[data-pin]").forEach(b => b.onclick = () => this.cb.pin(+b.dataset.pin!, 0));
+        box.append(o);
+      }
+    }
+    if (d.feuds.length) { box.append(el("h4", "", "Bad blood")); box.append(this.feudRows(d.feuds)); }
     box.append(el("div", "needs", bars(d.skills.map(s => [s.name.toUpperCase(), s.v, "#8a6a3a"] as [string, number, string]))));
     if (d.knows.length) box.append(el("p", "knows", `<b>Knows</b> ${d.knows.map(esc).join(", ")}`));
     if (d.friends.length) { box.append(el("h4", "", "Friends")); box.append(this.kinRow(d.friends)); }
@@ -259,20 +278,45 @@ export class PeopleUI {
     return box;
   }
 
+  /** Each feud: the other side, and what it is about. */
+  private feudRows(list: Feuding[]): HTMLElement {
+    const box = el("div", "feuds");
+    for (const f of list) {
+      const b = el("button", "fd"); b.type = "button";
+      if (f.look) b.append(portrait(f.look, 28));
+      const heat = f.heat > 0.7 ? "bitter" : f.heat > 0.4 ? "hot" : "cooling";
+      b.append(el("span", "kn", `<b>${esc(f.name)}</b><small>${f.own ? "" : "family feud, "}${heat}${f.inherited ? ", handed down" : ""}: ${esc(f.cause)}</small>`));
+      b.onclick = () => this.cb.pin(f.id, 0);
+      box.append(b);
+    }
+    return box;
+  }
+
   private renderBand(t: HTMLElement, d: BandDetail): void {
-    const key = `b${d.id}|${d.pop}|${d.events.length}|${d.respected?.id}`;
+    const key = `b${d.id}|${d.pop}|${d.events.length}|${d.respected?.id}|${d.contender?.id}|${d.feuds.map(f => f.a.id + "-" + f.b.id).join()}|${d.hearths.length}`;
     if (key !== this.renderedKey) {
       this.renderedKey = key;
       t.innerHTML = `${this.chrome()}
         <div class="nm">The ${esc(d.name)}</div><div class="sub">A band of the ${esc(d.people)} people, camped at ${esc(d.camp)}</div>
-        <p class="stats"></p><div class="needs"></div><h4>People</h4><div class="members"></div><div class="chips"><button type="button" data-act="journal">Journal</button></div>${d.events.length ? `<h4>Lately</h4><ul class="mem">${d.events.map(e => `<li>${esc(e.text)} <em>${when(e.t, this.time)}</em></li>`).join("")}</ul>` : ""}`;
+        <p class="stats"></p><p class="voices"></p><div class="needs"></div><h4>Hearths</h4><div class="hearths"></div><p class="sharing"></p>${d.feuds.length ? `<h4>Bad blood</h4><ul class="mem feuds-b"></ul>` : ""}<h4>People</h4><div class="members"></div><div class="chips"><button type="button" data-act="journal">Journal</button></div>${d.events.length ? `<h4>Lately</h4><ul class="mem">${d.events.map(e => `<li>${esc(e.text)} <em>${when(e.t, this.time)}</em></li>`).join("")}</ul>` : ""}`;
       this.bindChrome(t);
       t.querySelector<HTMLButtonElement>("[data-act=journal]")!.onclick = () => this.cb.journal({ band: d.id, name: `The ${d.name}`, note: "their story" });
       const m = t.querySelector(".members")!;
-      for (const p of d.members) { const b = el("button", "mb"); b.type = "button"; b.title = `${p.name}, ${p.age}`; b.append(portrait(p.look, 24)); b.onclick = () => this.cb.pin(p.id, 0); m.append(b); }
+      for (const p of d.members) { const b = el("button", "mb" + (d.respected?.id === p.id ? " lead" : "")); b.type = "button"; b.title = `${p.name}, ${p.age}${d.respected?.id === p.id ? ", leads the band" : ""}`; b.append(portrait(p.look, 24)); b.onclick = () => this.cb.pin(p.id, 0); m.append(b); }
+      const fl = t.querySelector(".feuds-b");
+      if (fl) for (const f of d.feuds) {
+        const li = el("li", "bad", `<button type="button" class="lnk" data-pin="${f.a.id}">${esc(f.a.name)}</button> against <button type="button" class="lnk" data-pin="${f.b.id}">${esc(f.b.name)}</button>, who ${esc(f.cause)} <em>${f.heat > 0.7 ? "bitter" : f.heat > 0.4 ? "hot" : "cooling"}</em>`);
+        li.querySelectorAll<HTMLButtonElement>("[data-pin]").forEach(b => b.onclick = () => this.cb.pin(+b.dataset.pin!, 0));
+        fl.append(li);
+      }
     }
-    t.querySelector(".stats")!.innerHTML = `<b>${d.pop}</b> people: ${d.adults} adults, ${d.children} children, ${d.couples} couples.${d.respected ? ` Most listened to: <b>${esc(d.respected.name)}</b>.` : ""}${d.moving ? " <b>On the move.</b>" : ""} Moved camp ${d.moves} times. Brought in ${d.yesterday.brought} and ate ${d.yesterday.eaten} yesterday.`;
-    t.querySelector(".needs")!.innerHTML = bars([["FOOD STORE", Math.min(1, d.days / 4), "#c97a3a"], ["FIRE", d.fire, "#d0653a"]]);
+    const voices = t.querySelector(".voices")!;
+    voices.innerHTML = d.respected ? `Led by <button type="button" class="lnk" data-pin="${d.respected.id}">${esc(d.respected.name)}</button>, whom ${d.followers} of the adults listen to${d.ledDays >= 10 ? `, for ${Math.floor(d.ledDays / 10)} season${d.ledDays >= 20 ? "s" : ""} now` : ""}.${d.contender ? ` A second voice: <button type="button" class="lnk" data-pin="${d.contender.id}">${esc(d.contender.name)}</button>, with ${d.contender.followers}.` : ""}` : "Nobody leads the band: each goes by their own judgment.";
+    voices.querySelectorAll<HTMLButtonElement>("[data-pin]").forEach(b => b.onclick = () => this.cb.pin(+b.dataset.pin!, 0));
+    t.querySelector(".stats")!.innerHTML = `<b>${d.pop}</b> people: ${d.adults} adults, ${d.children} children, ${d.couples} couples.${d.moving ? " <b>On the move.</b>" : ""} Moved camp ${d.moves} times. Brought in ${d.yesterday.brought} and ate ${d.yesterday.eaten} yesterday.`;
+    t.querySelector(".needs")!.innerHTML = bars([["ALL FOOD", Math.min(1, d.days / 4), "#c97a3a"], ["THE POT", Math.min(1, d.pot / 4), "#b5683a"], ["FIRE", d.fire, "#d0653a"]]);
+    t.querySelector(".hearths")!.innerHTML = `<div class="needs">${bars(d.hearths.slice(0, 8).map(h => [`${h.name.slice(0, 9).toUpperCase()} ${h.people}`, Math.min(1, h.days / 4), "#8a6a3a"] as [string, number, string]))}</div>${d.hearths.length > 8 ? `<p class="muted">and ${d.hearths.length - 8} more</p>` : ""}`;
+    t.querySelector(".sharing")!.textContent = d.yesterday.brought > 0 ? `Yesterday ${Math.round(d.sharedYesterday * 100)}% of the food brought in went into the pot; the rest stayed at the hearths of those who brought it.` : "";
   }
 
   /** Put a ring on the map where something happened, for a few seconds. */

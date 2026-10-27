@@ -8,7 +8,9 @@ import { el } from "./dom.ts";
 /*
   Relationship threads over the whole map. Switch BONDS on and every couple, parent and child,
   pair of friends and pair of rivals in view is joined by a thread: rose for couples, green
-  for family, blue for friends, dashed red for rivals. They follow people as they walk. The
+  for family, blue for friends, dashed red for rivals, a heavy dark red line for the two at the
+  heart of a feud, and a fine gold line from each adult to the one whose word they go along
+  with, so a band's leader sits in a star of gold. They follow people as they walk. The
   simulation works out the strongest ones in view a couple of times a second; people who are
   not in view are not worked out at all.
 */
@@ -18,7 +20,11 @@ export const BOND_STYLE: Record<number, { name: string; color: string; width: nu
   [Bond.Kin]: { name: "Family", color: "#7fbf5a", width: 1.6, dash: [] },
   [Bond.Friend]: { name: "Friends", color: "#7fb3e6", width: 1.6, dash: [] },
   [Bond.Rival]: { name: "Rivals", color: "#e0584a", width: 1.8, dash: [5, 4] },
+  [Bond.Feud]: { name: "Feuds", color: "#a8231c", width: 3.2, dash: [] },
+  [Bond.Follow]: { name: "Listens to", color: "#e8bf4a", width: 1.1, dash: [2, 3] },
 };
+/** Drawn first to last: the fine gold lines underneath, couples and feuds on top. */
+const ORDER = [Bond.Follow, Bond.Rival, Bond.Friend, Bond.Kin, Bond.Couple, Bond.Feud];
 /** Below this zoom the threads are a tangle, not information. */
 export const MIN_ZOOM = 3;
 
@@ -42,7 +48,7 @@ export class BondLayer {
     root.prepend(this.canvas);
     this.el = el("div", "paper"); this.el.id = "hud-bonds";
     this.el.style.borderImageSource = `url(${frameURL()})`;
-    this.el.innerHTML = `<h3>Bonds</h3><div class="bd-list">${[Bond.Couple, Bond.Kin, Bond.Friend, Bond.Rival].map(k => `<button type="button" data-bond="${k}" aria-pressed="true"><svg width="30" height="8" aria-hidden="true"><line x1="1" y1="4" x2="29" y2="4" stroke="${BOND_STYLE[k].color}" stroke-width="${BOND_STYLE[k].width + 0.6}" stroke-dasharray="${BOND_STYLE[k].dash.join(" ")}"/></svg>${BOND_STYLE[k].name}<b data-n="${k}"></b></button>`).join("")}</div><p class="bd-note"></p>`;
+    this.el.innerHTML = `<h3>Bonds</h3><div class="bd-list">${[Bond.Couple, Bond.Kin, Bond.Friend, Bond.Rival, Bond.Feud, Bond.Follow].map(k => `<button type="button" data-bond="${k}" aria-pressed="true"><svg width="30" height="8" aria-hidden="true"><line x1="1" y1="4" x2="29" y2="4" stroke="${BOND_STYLE[k].color}" stroke-width="${BOND_STYLE[k].width + 0.6}" stroke-dasharray="${BOND_STYLE[k].dash.join(" ")}"/></svg>${BOND_STYLE[k].name}<b data-n="${k}"></b></button>`).join("")}</div><p class="bd-note"></p>`;
     this.note = this.el.querySelector(".bd-note")!;
     this.el.querySelectorAll<HTMLButtonElement>("[data-bond]").forEach(b => b.onclick = () => {
       const k = +b.dataset.bond!; if (this.off.has(k)) this.off.delete(k); else this.off.add(k);
@@ -73,7 +79,7 @@ export class BondLayer {
     this.note.textContent = close ? "" : "Zoom in to see the threads.";
     if (this.counted !== this.edges) {
       this.counted = this.edges;
-      const n = [0, 0, 0, 0];
+      const n = [0, 0, 0, 0, 0, 0];
       for (let i = 2; i < this.edges.length; i += 3) n[this.edges[i]]++;
       this.el.querySelectorAll<HTMLElement>("[data-n]").forEach(b => { b.textContent = String(n[+b.dataset.n!]); });
     }
@@ -83,7 +89,7 @@ export class BondLayer {
     const fade = Math.min(1, (cam.z - MIN_ZOOM) / 3);
     x.lineCap = "round";
     /* per bond, the segments as x1,y1,x2,y2; those touching the pinned person are drawn heavier */
-    const plain: number[][] = [[], [], [], []], hot: number[][] = [[], [], [], []];
+    const plain: number[][] = [[], [], [], [], [], []], hot: number[][] = [[], [], [], [], [], []];
     const e = this.edges;
     for (let i = 0; i < e.length; i += 3) {
       const k = e[i + 2]; if (this.off.has(k)) continue;
@@ -94,7 +100,7 @@ export class BondLayer {
       (e[i] === pinned || e[i + 1] === pinned ? hot : plain)[k].push(sx, sy, tx, ty);
     }
     /* the dark edge under every thread first, so they read on any ground, then the colors */
-    for (const k of [Bond.Rival, Bond.Friend, Bond.Kin, Bond.Couple]) {
+    for (const k of ORDER) {
       const st = BOND_STYLE[k];
       x.setLineDash(st.dash);
       for (const [segs, extra] of [[plain[k], 0], [hot[k], 1.5]] as [number[], number][]) {

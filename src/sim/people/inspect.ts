@@ -1,9 +1,12 @@
 import { DAY_SECONDS, SPECIES_NAMES } from "../../shared/types.ts";
-import type { BandDetail, Kin, PersonDetail } from "../../shared/protocol.ts";
+import type { BandDetail, BandFeud, Feuding, Kin, PersonDetail } from "../../shared/protocol.ts";
 import { TRAITS } from "./genetics.ts";
 import { Goal, KNOW_NAMES, Mem, SKILL_NAMES, kinWord, type Person } from "./person.ts";
-import { storeFood } from "./band.ts";
+import { storeFood, campFood } from "./band.ts";
 import { RIVAL_OP } from "./search.ts";
+import { hearthDays, household, appetiteOf } from "./sharing.ts";
+import { feudsWith, sideOf } from "./feuds.ts";
+import { followersOf, leads } from "./leaders.ts";
 import type { Society } from "./society.ts";
 
 /*
@@ -18,6 +21,7 @@ const GOAL_WORDS: Partial<Record<number, string>> = {
   [Goal.Talk]: "Talking", [Goal.Court]: "Courting", [Goal.Play]: "Playing", [Goal.Follow]: "Learning", [Goal.Explore]: "Exploring",
   [Goal.Craft]: "Sewing clothes", [Goal.Spear]: "Making a spear", [Goal.Tend]: "Caring for the sick", [Goal.Rest]: "Resting", [Goal.Flee]: "Fleeing",
   [Goal.Migrate]: "Moving camp", [Goal.Carried]: "Being carried", [Goal.Sick]: "Sick in bed", [Goal.Toddle]: "Toddling about", [Goal.Visit]: "Visiting",
+  [Goal.Ask]: "Asking for food", [Goal.Fight]: "Fighting", [Goal.Mediate]: "Making peace", [Goal.Call]: "Visiting friends",
 };
 const TRAIT_WORDS: [string, string][] = [
   ["timid", "brave"], ["cold", "kind"], ["generous", "greedy"], ["easygoing", "ambitious"],
@@ -37,7 +41,18 @@ function memoryText(s: Society, p: Person, m: Person["mem"][number]): string {
   const who = m.who ? s.byId.get(m.who)?.name ?? s.archive.get(m.who)?.name ?? "someone" : "";
   const rel = m.who ? (() => { const q = s.byId.get(m.who) ?? s.archive.get(m.who); return q ? kinWord(p, m.who, q) : null; })() : null;
   const whoRel = rel ? `${p.sex === "f" ? "her" : "his"} ${rel}, ${who}` : who;
+  const her = p.sex === "f" ? "her" : "him", she = p.sex === "f" ? "she" : "he";
   switch (m.k) {
+    case Mem.Fed: return `${who} gave ${her} food in a hungry time`;
+    case Mem.Refused: return `${who} turned ${her} away when ${she} asked for food`;
+    case Mem.Repaid: return `${who} paid back the food ${she} gave`;
+    case Mem.Stingy: return `Saw ${who} keep food from a hungry family`;
+    case Mem.Fight: return `Came to blows with ${who}`;
+    case Mem.Peace: return `Made peace with ${who}`;
+    case Mem.Feud: return `Bad blood with ${who}`;
+    case Mem.Gift: return `${who} brought ${her} a gift`;
+    case Mem.Mocked: return `${who} made fun of ${p.sex === "f" ? "her" : "his"} kill`;
+    case Mem.Left: return `${who} left ${her} for someone else`;
     case Mem.Argued: return `Quarreled with ${who}`;
     case Mem.NiceTalk: return `A good talk with ${who}`;
     case Mem.Stranger: return `Met ${who}, a stranger`;
@@ -93,8 +108,28 @@ export function personDetail(s: Society, id: number): PersonDetail | null {
     mother: kin(s, p, p.mother), father: kin(s, p, p.father), partner: kin(s, p, p.partner),
     children: p.children.map(c => kin(s, p, c)!).filter(Boolean), siblings, friends, rivals, memories,
     pregnant: !!p.pregnantBy, carrying, prestige: p.prestige, respected: b.respected === p.id,
+    hearth: hearthDays(s, p), pot: storeFood(b.store) / Math.max(1, b.appetite),
+    follows: p.follows && p.follows !== p.id && s.byId.has(p.follows) ? { id: p.follows, name: s.byId.get(p.follows)!.name } : null,
+    followers: followersOf(s, p), leads: leads(s, p), shareRate: p.shareRate,
+    feuds: feudsOf(s, p), owes: debts(s, p),
     x: p.x, y: p.y,
   };
+}
+function feudsOf(s: Society, p: Person): Feuding[] {
+  const out: Feuding[] = [];
+  for (const f of feudsWith(s, p)) {
+    const side = sideOf(s, f, p), otherId = side === 1 ? f.b : f.a, other = s.byId.get(otherId);
+    if (!other) continue;
+    const own = p.id === f.a || p.id === f.b;
+    /* the cause is said of b, and reads the same from either side */
+    const lead = s.byId.get(f.a)?.name ?? "", tail = s.byId.get(f.b)?.name ?? "";
+    const cause = `${lead} will not forgive ${tail}, who ${f.cause}`;
+    out.push({ id: other.id, name: other.name, heat: f.heat, cause, days: (s.time - f.since) / 60, own, inherited: f.inherited, look: s.look_(other) });
+  }
+  return out;
+}
+function debts(s: Society, p: Person): { id: number; name: string; amt: number }[] {
+  return [...p.rel].filter(([id, r]) => Math.abs(r.owe) >= 0.5 && s.byId.has(id)).sort((a, c) => Math.abs(c[1].owe) - Math.abs(a[1].owe)).slice(0, 3).map(([id, r]) => ({ id, name: s.byId.get(id)!.name, amt: r.owe }));
 }
 
 export function bandDetail(s: Society, id: number): BandDetail | null {
@@ -108,8 +143,14 @@ export function bandDetail(s: Society, id: number): BandDetail | null {
     id, name: b.name, people: cult.lang.name, pop: ms.length,
     adults: ms.filter(q => s.age(q) >= 16).length, children: ms.filter(q => s.age(q) < 16).length, couples,
     respected: resp ? { id: resp.id, name: resp.name } : null,
+    followers: b.followers, ledDays: (s.time - b.ledSince) / 60,
+    contender: s.byId.get(b.contender) ? { id: b.contender, name: s.byId.get(b.contender)!.name, followers: followersOf(s, s.byId.get(b.contender)!) } : null,
+    hearths: [...b.hearths.keys()].map(head => { const folk = household(s, b, head); const h = b.hearths.get(head)!; return { id: head, name: s.byId.get(head)?.name ?? "", people: folk.length, days: folk.length ? storeFood(h) / appetiteOf(s, folk) : 0 }; }).filter(h => h.people > 0 && h.name).sort((a, c) => c.days - a.days),
+    pot: storeFood(b.store) / Math.max(1, b.appetite),
+    sharedYesterday: b.yesterday.plant + b.yesterday.meat + b.yesterday.fish > 0 ? b.yesterday.shared / (b.yesterday.plant + b.yesterday.meat + b.yesterday.fish) : 0,
+    feuds: s.feuds.filter(f => f.heat >= 0.1 && (s.byId.get(f.a)?.band === b.id || s.byId.get(f.b)?.band === b.id)).map(f => ({ a: { id: f.a, name: s.byId.get(f.a)?.name ?? "" }, b: { id: f.b, name: s.byId.get(f.b)?.name ?? "" }, heat: f.heat, cause: f.cause, days: (s.time - f.since) / 60 }) as BandFeud),
     store: { plant: Math.round(b.store.plant), meat: Math.round(b.store.meat), fish: Math.round(b.store.fish), wood: Math.round(b.store.wood), hides: Math.round(b.store.hides) },
-    days: storeFood(b.store) / Math.max(1, b.appetite), fire: b.fire, moves: b.moves, camp: b.siteName,
+    days: campFood(b) / Math.max(1, b.appetite), fire: b.fire, moves: b.moves, camp: b.siteName,
     yesterday: { brought: Math.round(b.yesterday.plant + b.yesterday.meat + b.yesterday.fish), eaten: Math.round(b.yesterday.eaten) },
     shelter: cult.shelter, sharing: cult.sharing, cousins: cult.cousins,
     sample: [cult.lang.name, ...ms.slice(0, 5).map(q => q.name)],

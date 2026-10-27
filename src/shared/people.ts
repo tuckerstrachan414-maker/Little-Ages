@@ -13,12 +13,13 @@ export type AnimName = (typeof ANIM_NAMES)[number];
 export const Bubble = {
   None: 0, Berries: 1, Fish: 2, Deer: 3, Heart: 4, Angry: 5, Sun: 6, Baby: 7, Fire: 8, Drop: 9, Meat: 10, Cold: 11,
   Sad: 12, Move: 13, Fear: 14, Zzz: 15, Star: 16, Question: 17, Wolf: 18, Mammoth: 19, Home: 20,
+  Gift: 21, Peace: 22, Ask: 23,
 } as const;
 export type Bubble = (typeof Bubble)[keyof typeof Bubble];
 
 /** Per person in each tick: id, x, y, dir (0 south, 1 east, 2 north, 3 west), anim, flags, bubble, mood, carrier id. */
 export const PERSON_STRIDE = 9;
-export const PFlag = { Carrying: 1, Spear: 2, Sling: 4, Wood: 8, Injured: 16, Sad: 32, Happy: 64, Selected: 128, Pregnant: 256, Meat: 512 } as const;
+export const PFlag = { Carrying: 1, Spear: 2, Sling: 4, Wood: 8, Injured: 16, Sad: 32, Happy: 64, Selected: 128, Pregnant: 256, Meat: 512, Leader: 1024 } as const;
 
 export type Stage = "baby" | "toddler" | "child" | "teen" | "adult" | "elder";
 export type Wear = "loin" | "wrap" | "tunic" | "dress" | "furs";

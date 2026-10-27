@@ -85,7 +85,7 @@ function personItem(s: Society, p: Person, note = ""): SearchItem {
 
 /* ---------------- relationship threads ---------------- */
 
-export const Bond = { Couple: 0, Kin: 1, Friend: 2, Rival: 3 } as const;
+export const Bond = { Couple: 0, Kin: 1, Friend: 2, Rival: 3, Feud: 4, Follow: 5 } as const;
 export type Bond = (typeof Bond)[keyof typeof Bond];
 /** Someone this far below zero in another's eyes is a rival (the tag says "can't stand"). */
 export const RIVAL_OP = -0.2;
@@ -94,15 +94,22 @@ const MAX_LEN = 20;
 
 /**
   The relationships between people in a stretch of map, as triples [a, b, bond]: couples, parents
-  and children, friends who like each other back, and rivals who dislike each other back. The
-  strongest are kept when there are too many to read.
+  and children, friends who like each other back, rivals who dislike each other back, the two at
+  the heart of each feud, and each adult to the one whose word they go along with. The strongest
+  are kept when there are too many to read.
 */
 export function bondEdges(s: Society, view: { x0: number; y0: number; x1: number; y1: number }, cap = 600): Int32Array {
   const inView = (p: { x: number; y: number }) => p.x >= view.x0 && p.x <= view.x1 && p.y >= view.y0 && p.y <= view.y1;
   const edges: { a: number; b: number; k: Bond; w: number }[] = [];
   const near = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.hypot(a.x - b.x, a.y - b.y) <= MAX_LEN;
+  for (const f of s.feuds) {
+    if (f.heat < 0.1) continue;
+    const a = s.byId.get(f.a), b = s.byId.get(f.b);
+    if (a && b && (inView(a) || inView(b)) && near(a, b)) edges.push({ a: a.id, b: b.id, k: Bond.Feud, w: 20 + f.heat });
+  }
   for (const p of s.people) {
     if (!inView(p)) continue;
+    if (p.follows && p.follows !== p.id) { const l = s.byId.get(p.follows); if (l && near(p, l)) edges.push({ a: p.id, b: l.id, k: Bond.Follow, w: 1.2 }); }
     const q = p.partner ? s.byId.get(p.partner) : undefined;
     if (q && p.id < q.id && near(p, q)) edges.push({ a: p.id, b: q.id, k: Bond.Couple, w: 10 });
     for (const pid of [p.mother, p.father]) {
@@ -111,7 +118,7 @@ export function bondEdges(s: Society, view: { x0: number; y0: number; x1: number
       if (o && near(p, o) && p.carrier !== o.id) edges.push({ a: o.id, b: p.id, k: Bond.Kin, w: 6 });
     }
     for (const [oid, r] of p.rel) {
-      if (oid <= p.id || oid === p.partner || oid === p.mother || oid === p.father) continue;
+      if (oid <= p.id || oid === p.partner || oid === p.mother || oid === p.father || s.feuds.some(f => f.heat >= 0.1 && ((f.a === p.id && f.b === oid) || (f.b === p.id && f.a === oid)))) continue;
       const o = s.byId.get(oid);
       if (!o || !near(p, o)) continue;
       const back = o.rel.get(p.id);

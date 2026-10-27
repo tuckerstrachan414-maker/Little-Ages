@@ -43,6 +43,8 @@ const report = (label: string) => {
   if (people) {
     const s = people.stats, ad = people.people.filter(p => people.age(p) >= 16);
     line += `\n${"".padEnd(16)} people ${people.people.length} (${ad.length} adults) in ${people.bands.length} bands | born ${s.births}, died ${s.deaths} [${[...s.causes].sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(", ")}] | couples ${s.couples}, moves ${s.moves}, splits ${s.splits}, merges ${s.merges}, contacts ${s.contacts} | mood ${mean(people.people.map(p => p.mood)).toFixed(2)}`;
+    const o = s.social, led = people.bands.filter(b => b.respected).length;
+    line += `\n${"".padEnd(16)} shared ${(o.shared / Math.max(1, o.shared + o.kept) * 100).toFixed(0)}% into the pot | ${Math.round(o.given)} food passed between hearths (${Math.round(o.rounds)} in the evening rounds, ${Math.round(o.family)} eaten at family hearths), ${o.asks} asked for, ${o.refused} refused, ${Math.round(o.repaid)} paid back | feuds ${o.feuds} begun (${people.feuds.length} burning, ${o.peace} settled, ${o.cooled} cooled, ${o.inherited} passed down), fights ${o.fights}, families driven out ${o.driven}, feud/faction splits ${o.factionSplits} | ${led}/${people.bands.length} bands led, new leaders ${o.leaders}, two voices ${o.contests}, mocked ${o.mocked} | gifts ${o.gifts}, left for another ${o.leftFor}`;
   }
   console.log(line);
 };

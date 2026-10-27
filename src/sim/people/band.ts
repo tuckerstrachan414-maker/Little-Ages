@@ -1,27 +1,39 @@
 import { Place, type Person } from "./person.ts";
 
 /*
-  A band: the people who share a fire. It has a camp, a store everyone brings food to, and
-  a fire someone has to keep fed. Households (a couple and their children, or a single
-  adult) each raise a shelter around the fire. Nobody runs a band: whether it stays,
-  moves or splits comes from what its members want and who they listen to.
+  A band: the people who share a fire. It has a camp, a fire someone has to keep fed, and
+  food in two kinds of place: the band's pot, which anyone may eat from, and each
+  household's own hearth. Households (a couple and their children, or a single adult)
+  each raise a shelter around the fire. How much of what someone brings in goes into the
+  pot and how much stays at their own hearth is up to them, and their people's custom.
+  Nobody runs a band: whether it stays, moves or splits comes from what its members want
+  and who they listen to.
 */
 
 export interface Store { plant: number; meat: number; fish: number; wood: number; hides: number; }
+/** The food a household keeps back for itself, at its own hearth. */
+export interface Hearth { plant: number; meat: number; fish: number; }
 export interface Band {
   id: number; name: string; culture: number; color: string;
   /** the fire, center of camp */
   x: number; y: number;
   fire: number;
-  store: Store;
   members: number[];
   founded: number; movedAt: number; moves: number;
   /** household head id to shelter position */
   homes: Map<number, [number, number]>;
   /** how many members are on each goal right now */
   busy: Map<number, number>;
-  /** the adult others listen to most */
+  /** the band's pot: food anyone may eat */
+  store: Store;
+  /** household head id to the food that household keeps at its own hearth */
+  hearths: Map<number, Hearth>;
+  /** the adult most of the others listen to (0 while nobody has a following) */
   respected: number;
+  /** how many adults listen to them, and since when they have led */
+  followers: number; ledSince: number;
+  /** someone else with a following of their own, nearly as big: a second voice */
+  contender: number;
   parent: number;
   /** bands they have met */
   met: Set<number>;
@@ -35,13 +47,20 @@ export interface Band {
   /** where the band has camped lately, newest last */
   past: [number, number][];
   /** food brought in and eaten today, and yesterday's totals (for the band card and for tuning) */
-  today: { plant: number; meat: number; fish: number; eaten: number };
-  yesterday: { plant: number; meat: number; fish: number; eaten: number };
+  today: Day;
+  yesterday: Day;
 }
+/** Food brought in, how much of it went into the pot, what was eaten, and what passed between hearths. */
+export interface Day { plant: number; meat: number; fish: number; eaten: number; shared: number; given: number; }
+export const newDay = (): Day => ({ plant: 0, meat: 0, fish: 0, eaten: 0, shared: 0, given: 0 });
 
-export const storeFood = (s: Store) => s.plant + s.meat + s.fish;
-/** Days the band could eat from its store. */
-export const storeDays = (b: Band) => storeFood(b.store) / Math.max(1, b.appetite);
+export const storeFood = (s: { plant: number; meat: number; fish: number }) => s.plant + s.meat + s.fish;
+/** All the food at the hearths of a band. */
+export function hearthFood(b: Band): number { let v = 0; for (const h of b.hearths.values()) v += storeFood(h); return v; }
+/** All the food in camp: the pot and every hearth. */
+export const campFood = (b: Band) => storeFood(b.store) + hearthFood(b);
+/** Days the band could eat from all the food in camp. */
+export const storeDays = (b: Band) => campFood(b) / Math.max(1, b.appetite);
 
 /** A person's guess at what a place holds now, from when they last heard about it. */
 export function estimate(pl: { k: number; q: number; t: number }, now: number): number {
