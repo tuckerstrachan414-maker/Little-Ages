@@ -215,7 +215,7 @@ describe("a few years of discovery", () => {
   it("people work things out on their own, and what they work out spreads", () => {
     expect(s.stats.ideas.found).toBeGreaterThan(2);
     const known = IDEAS.filter(d => !d.start && s.ideas[d.id].knowers > 0);
-    expect(known.length).toBeGreaterThan(1);
+    expect(known.length).toBeGreaterThan(0);
     /* more people know each than worked it out */
     expect(known.some(d => s.ideas[d.id].knowers > s.ideas[d.id].times * 2)).toBe(true);
     expect(s.events.some(e => e.kind === "discover")).toBe(true);

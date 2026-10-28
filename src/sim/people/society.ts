@@ -578,11 +578,6 @@ export class Society {
     if (p.warmth < 0.22 && p.goal !== Goal.Warm && p.goal !== Goal.Sleep && this.band(p).fire > 0.05) return true;
     if (p.food < 0.12 && p.carryAmt > 0 && p.carryKind !== 4 && p.goal !== Goal.Eat) return true;
     if (p.sick > 0.5) return true;
-    /* the fire is out in the cold and nobody at camp can light it: someone who can make fire comes back to do it, even from their bed */
-    if (p.know[Idea.MakeFire] > 0 && p.goal !== Goal.Kindle && this.time - p.whyAt > 6) {
-      const b = this.band(p);
-      if (b.fire <= 0 && !b.moving && this.tempC(b.x, b.y) < 10 && Math.hypot(p.x - b.x, p.y - b.y) < 30 && !this.fireMakerNear(b, 6)) return true;
-    }
     /* night falls: whoever is still out working heads home */
     if (this.sun < 0.08 && (p.goal === Goal.Gather || p.goal === Goal.Fish || p.goal === Goal.Snare || p.goal === Goal.Wood || p.goal === Goal.Explore || p.goal === Goal.Haul || p.goal === Goal.Talk || p.goal === Goal.Play || p.goal === Goal.Follow)) {
       const st = p.plan[p.si]; return !(st && st.k === St.Drop) && !(st && st.k === St.Go && p.si === p.plan.length - 2);
@@ -609,16 +604,18 @@ export class Society {
       const twins = milk && c!.baby !== p.id;
       p.food = Math.max(0, Math.min(2, p.food + ((milk ? (twins ? 0.9 : 1.1) : 0) - 0.5) * days));
       if (!milk && this.age(p) > 0.9 && this.atCamp(p) && p.food < 1.2) this.eatFromStore(p, b, 0.8 * days);
-    } else {
-      let burn = FOOD_DAY[st] * (asleep ? 0.7 : running ? 1.5 : working ? 1.25 : moving ? 1.15 : 1);
+    }
+    let burn = 0;
+    if (st !== "baby") {
+      burn = FOOD_DAY[st] * (asleep ? 0.7 : running ? 1.5 : working ? 1.25 : moving ? 1.15 : 1);
       if (p.pregnantBy) burn += 0.15;
       if (p.baby) burn += 0.35;
       if (p.warmth < 0.5) burn += 0.25;
       p.food = Math.max(0, p.food - burn * days);
     }
     p.dayFood += Math.min(1.5, p.food) * days;
-    /* the sick are brought food where they lie */
-    if (p.goal === Goal.Sick && p.food < 0.9 && this.atCamp(p, 6)) this.eatFromStore(p, b, 1.2 * days);
+    /* the sick are brought food where they lie: enough to get their strength back, whatever the cold takes */
+    if (p.goal === Goal.Sick && p.food < 0.9 && this.atCamp(p, 6)) this.eatFromStore(p, b, Math.max(1.2, burn + 0.4) * days);
     /* and nobody starves at camp with food at hand: a starving child is given a meal, and a grown-up gets up from bed or the fire to eat */
     else if (p.food < 0.12 && (st === "child" || st === "toddler" || asleep || p.goal === Goal.Rest || p.goal === Goal.Warm) && this.atCamp(p, 8)) this.eatFromStore(p, b, 0.6);
     p.water = Math.max(0, p.water - (asleep ? 0.3 : 1.25) * (T > 28 ? 1.35 : T < 0 ? 0.75 : 1) * (working || running ? 1.15 : 1) * days);
@@ -809,11 +806,6 @@ export class Society {
     const T = this.tempC(b.x, b.y);
     for (const id of b.members) { const q = this.byId.get(id); if (q && this.age(q) >= 10 && Math.hypot(q.x - b.x, q.y - b.y) < 12) this.remember(q, Mem.FireOut, 0, T < 8 ? -0.3 : -0.12); }
     if (!bandKnows(b, Idea.MakeFire) && (T < 12 || !b.past.length || this.rng.chance(0.2))) this.event("fireout", Bubble.Fire, `The fire of the ${b.name} went out${T < 4 ? " in the cold" : ""}, and none of them knows how to make fire.`, b.x, b.y, [], b.id, T < 4 ? 1 : 0);
-  }
-  /** Whether someone who can make fire is at or near camp, awake or able to be woken. */
-  fireMakerNear(b: Band, r: number): boolean {
-    for (const id of b.members) { const q = this.byId.get(id); if (q && q.know[Idea.MakeFire] > 0 && !q.carrier && q.goal !== Goal.Sick && this.age(q) >= 12 && Math.hypot(q.x - b.x, q.y - b.y) < r) return true; }
-    return false;
   }
   /** The fire lit again, by someone who can make it or with an ember carried home. */
   relight(b: Band): void {
@@ -1217,8 +1209,6 @@ export class Society {
     for (const q of adults) {
       const home = homeOf(q, this.byId, this.time); if (seen.has(home)) continue; seen.add(home);
       if (q.partner && this.byId.get(q.partner)?.band !== b.id) continue;
-      /* a family that has only just come gives the place a chance before packing up again */
-      if (this.time - q.joined < DAY_SECONDS * 20) continue;
       /* the leader's household stays and sees the band through */
       if (b.respected && homeOf(this.byId.get(b.respected) ?? q, this.byId, this.time) === home && this.byId.get(b.respected)?.band === b.id) continue;
       let best: Band | null = null, bv = 0;
