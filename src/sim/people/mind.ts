@@ -177,8 +177,8 @@ export function decide(s: Society, p: Person, forced?: Goal): void {
   /* --- wood for the fire --- */
   if (worker && !night) {
     /* the fire needs feeding, and a woodpile for the night */
-    /* a band that cannot make fire never lets it die, whatever the weather */
-    const guard = b.fire > 0 && b.fire < 0.5 && b.store.wood < 3 && !bandKnows(b, Idea.MakeFire) ? 0.4 : 0;
+    /* nobody at camp could light it again if it died: so it must not die, whatever the weather */
+    const guard = b.fire > 0 && b.fire < 0.5 && b.store.wood < 3 && !s.fireMakerNear(b, 15) ? 0.4 : 0;
     const need = clamp01((0.7 - b.fire) * 1.6 + (4 - b.store.wood) / 6) * (0.5 + clamp01((18 - s.tempC(b.x, b.y)) / 18) + (dusk ? 0.3 : 0)) + guard;
     if (need > 0.05) {
       const spot = woodSpot(s, b.x, b.y);
@@ -192,14 +192,14 @@ export function decide(s: Society, p: Person, forced?: Goal): void {
   if (b.fire <= 0 && !b.moving && age >= 12 && dc < 30) {
     const coldNow = clamp01((14 - s.tempC(b.x, b.y)) / 18);
     if (p.ember) add({ g: Goal.Kindle, v: 2, plan: () => [step(St.Go, fx, fy), step(St.Kindle, fx, fy, 0, 2, { a: 1 })], why: () => `${p.name} is bringing home the ember ${she(p)} carried from another band's fire, to light the ${b.name}'s again.`, icon: Bubble.Fire });
-    else if (knows(p, Idea.MakeFire)) add({ g: Goal.Kindle, v: (0.75 + coldNow * 0.8 + (dusk ? 0.2 : 0)) / (1 + busy(Goal.Kindle) * 3), plan: () => [step(St.Go, fx, fy), step(St.Kindle, fx, fy, 0, 4)], why: () => `${p.name} is making a new fire, because the old one went out${coldNow > 0.5 ? " and it is cold" : ""}.`, icon: Bubble.Fire });
-    else if (worker && !bandKnows(b, Idea.MakeFire)) {
+    else if (knows(p, Idea.MakeFire)) add({ g: Goal.Kindle, v: (0.75 + coldNow * 1.4 + (dusk ? 0.2 : 0)) / (1 + busy(Goal.Kindle) * 3), plan: () => [step(St.Go, fx, fy), step(St.Kindle, fx, fy, 0, 4)], why: () => `${p.name} is making a new fire, because the old one went out${coldNow > 0.5 ? " and it is cold" : ""}.`, icon: Bubble.Fire });
+    else if (worker && !s.fireMakerNear(b, 15)) {
       const host = age >= 15 && age < 62 && p.injury < 0.3 && !(p.pregnantBy && s.time > p.due - DAY_SECONDS * 10) && !busy(Goal.Ember) && !p.ember ? emberSource(s, p, b) : null;
       if (host) {
         const [ex, ey] = s.dryNear(host.x + 1.4, host.y + 0.8);
-        add({ g: Goal.Ember, v: (0.55 + coldNow * 0.7) * (1 - hunger * 0.4) * (night ? 0.45 : 1) * (0.7 + tr[1] * 0.3 + tr[0] * 0.2), plan: () => [step(St.Go, ex, ey), step(St.Ember, ex, ey, host.id, 2.5), step(St.Go, fx, fy), step(St.Kindle, fx, fy, 0, 2, { a: 1 })], why: () => `${p.name} is walking to the ${host.name} to fetch fire, because the ${b.name}'s fire went out and none of them can make it.`, icon: Bubble.Fire });
+        add({ g: Goal.Ember, v: (0.55 + coldNow * 0.7) * (1 - hunger * 0.4) * (night ? 0.45 : 1) * (0.7 + tr[1] * 0.3 + tr[0] * 0.2), plan: () => [step(St.Go, ex, ey), step(St.Ember, ex, ey, host.id, 2.5), step(St.Go, fx, fy), step(St.Kindle, fx, fy, 0, 2, { a: 1 })], why: () => `${p.name} is walking to the ${host.name} to fetch fire, because the ${b.name}'s fire went out and ${bandKnows(b, Idea.MakeFire) ? "nobody who can make fire is at camp" : "none of them can make it"}.`, icon: Bubble.Fire });
       }
-      add({ g: Goal.Kindle, v: (0.16 + tr[4] * 0.45) * (0.5 + coldNow) * (1 - foodDrive * 0.5) / (1 + busy(Goal.Kindle) * 0.7), plan: () => [step(St.Go, fx, fy), step(St.Kindle, fx, fy, 0, 9)], why: () => `${p.name} is trying to make fire, twirling a stick hard against dry wood and striking stones over tinder, because the band's fire went out and nobody knows how to light it again.`, icon: Bubble.Fire });
+      add({ g: Goal.Kindle, v: (0.16 + tr[4] * 0.45) * (0.5 + coldNow) * (1 - foodDrive * 0.5) / (1 + busy(Goal.Kindle) * 0.7), plan: () => [step(St.Go, fx, fy), step(St.Kindle, fx, fy, 0, 9)], why: () => `${p.name} is trying to make fire, twirling a stick hard against dry wood and striking stones over tinder, because the band's fire went out and ${bandKnows(b, Idea.MakeFire) ? "nobody who could light it again is at camp" : "nobody knows how to light it again"}.`, icon: Bubble.Fire });
     }
   }
 
