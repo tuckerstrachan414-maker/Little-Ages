@@ -1,11 +1,14 @@
 import { Biome, Flag, Species, Tree, DAY_SECONDS } from "../../shared/types.ts";
 import { Bubble } from "../../shared/people.ts";
 import { storeFood, estimate, homeOf } from "./band.ts";
-import { Goal, Know, Place, St, Skill, step, kinWord, type KnownPlace, type Person, type Step } from "./person.ts";
+import { Goal, Place, St, Skill, step, kinWord, type KnownPlace, type Person, type Step } from "./person.ts";
 import { MEAT, compass, type Society } from "./society.ts";
-import { askTarget, reachFood, familyDays } from "./sharing.ts";
+import { askTarget, reachFood, familyDays, householdAppetite } from "./sharing.ts";
 import { feudOf, peaceToMake } from "./feuds.ts";
 import { visitTarget } from "./friends.ts";
+import { IDEAS, Idea, knows, bandKnows, showTarget } from "./ideas.ts";
+import { Work, weirSite, weirFor, plotSite, sownThisYear, ripePlot } from "./works.ts";
+import type { Band } from "./band.ts";
 
 /*
   Deciding what to do. A person looks at everything they could do right now and gives
@@ -131,15 +134,16 @@ export function decide(s: Society, p: Person, forced?: Goal): void {
     /* late in the day only short trips are worth starting */
     const late = clamp01((s.dayFrac() - 0.6) / 0.14);
     const range = (st === "child" ? 10 : p.baby ? 18 : 30) * (1 - late * 0.7);
-    const carry = st === "child" ? 2 : 5;
+    /* a basket carries half as much again as arms and a hide sling */
+    const basket = knows(p, Idea.Baskets), carry = st === "child" ? (basket ? 3 : 2) : basket ? 7.5 : 5;
     let bestPlant: KnownPlace | null = null, bp = 0, bestFish: KnownPlace | null = null, bf = 0, bestRab: KnownPlace | null = null, br = 0, bestGame: KnownPlace | null = null, bg = 0, bestCarc: KnownPlace | null = null, bc = 0;
     for (const pl of p.places) {
       const d = Math.hypot(pl.x - p.x, pl.y - p.y), dfromCamp = Math.hypot(pl.x - b.x, pl.y - b.y);
       if (dfromCamp > range) continue;
       const dF = 1 / (1 + (d + dfromCamp * 0.6) / 16), e = estimate(pl, s.time);
       if (pl.k === Place.Plants) { const E = Math.min(carry, e * 0.35) * (0.6 + p.skills[Skill.Gather] * 0.6), v = E / (E + 1.5) * dF; if (v > bp) { bp = v; bestPlant = pl; } }
-      else if (pl.k === Place.Fish && p.knows & Know.Fishing && st !== "child") { const E = Math.min(carry, e * 0.3) * (0.5 + p.skills[Skill.Fish] * 0.8), v = E / (E + 1.5) * dF; if (v > bf) { bf = v; bestFish = pl; } }
-      else if (pl.k === Place.Rabbits && p.knows & Know.Snares) { const E = Math.min(2, e * 0.4) * (0.5 + p.skills[Skill.Hunt] * 0.5), v = E / (E + 1.5) * dF; if (v > br) { br = v; bestRab = pl; } }
+      else if (pl.k === Place.Fish && knows(p, Idea.Fishing) && st !== "child") { const E = Math.min(carry, e * 0.3) * (0.5 + p.skills[Skill.Fish] * 0.8), v = E / (E + 1.5) * dF; if (v > bf) { bf = v; bestFish = pl; } }
+      else if (pl.k === Place.Rabbits && knows(p, Idea.Snares)) { const E = Math.min(2, e * 0.4) * (0.5 + p.skills[Skill.Hunt] * 0.5), v = E / (E + 1.5) * dF; if (v > br) { br = v; bestRab = pl; } }
       else if (pl.k === Place.Game && pl.sp !== undefined && canHunt(s, p, age) && s.time - pl.t < DAY_SECONDS * 1.5) {
         const sp = pl.sp, E = HUNT_P[sp] * (0.5 + p.skills[Skill.Hunt]) * Math.min(MEAT[sp], b.appetite * 3 + 12);
         const v = E / (E + 6) * dF * (0.5 + tr[0] * 0.5 + p.skills[Skill.Hunt] * 0.3) - DANGER[sp] * (1 - tr[0]) * 3;
@@ -151,7 +155,18 @@ export function decide(s: Society, p: Person, forced?: Goal): void {
         const E = Math.min(6, e - going * 6), v = E > 1 ? E / (E + 2) * dF : 0; if (v > bc) { bc = v; bestCarc = pl; }
       }
     }
+    /* a weir's trap to empty, and a household's ripe crop to bring in */
+    let weir: Work | null = null, bw = 0;
+    if (age >= 9) for (const w of s.works) {
+      if (w.kind !== Work.Weir || w.food < 1.5 || !weirFor(s, b, w)) continue;
+      const dfromCamp = Math.hypot(w.x - b.x, w.y - b.y); if (dfromCamp > range) continue;
+      const E = Math.min(carry, w.food), v = E / (E + 1.5) * (1 / (1 + (Math.hypot(w.x - p.x, w.y - p.y) + dfromCamp * 0.6) / 16));
+      if (v > bw) { bw = v; weir = w; }
+    }
+    const crop = ripePlot(s, p);
     const damp = (g: Goal, k: number) => 1 / (1 + busy(g) * k);
+    if (weir) { const w = weir; add({ g: Goal.Fish, v: foodDrive * bw * 2.4, plan: () => [step(St.Go, w.x, w.y), step(St.Fish, w.x, w.y, w.id, 3), step(St.Go, fx, fy), step(St.Drop, fx, fy)], why: () => `${p.name} is taking the fish out of ${w.band === b.id ? "the band's" : "an old"} weir ${where(s, p, w.wx, w.wy)}, because ${foodReason(s, p, hunger, kidsHungry, short)}.`, icon: Bubble.Fish }); }
+    if (crop) { const w = crop, E = Math.min(carry, w.food), v = E / (E + 1.5) / (1 + Math.hypot(w.x - p.x, w.y - p.y) / 16); add({ g: Goal.Gather, v: (foodDrive + 0.25) * v * 2.3, plan: () => [step(St.Go, w.x, w.y), step(St.Gather, w.x, w.y, w.id, 4.5, { a: carry }), step(St.Go, fx, fy), step(St.Drop, fx, fy)], why: () => `${p.name} is bringing in the ${w.crop} ${w.home === homeOf(p, s.byId, s.time) ? `${her(p)} household sowed` : "sown here"} in the spring, now that it is ripe.`, icon: Bubble.Berries }); }
     if (bestPlant) { const pl = bestPlant; add({ g: Goal.Gather, v: foodDrive * bp * 2.1 * damp(Goal.Gather, 0.03), plan: () => gatherPlan(s, p, pl, carry), why: () => workWhy(s, p, Goal.Gather, pl, hunger, kidsHungry, short), icon: Bubble.Berries }); }
     if (bestFish) { const pl = bestFish; add({ g: Goal.Fish, v: foodDrive * bf * 2.1 * damp(Goal.Fish, 0.05), plan: () => fishPlan(s, p, pl), why: () => workWhy(s, p, Goal.Fish, pl, hunger, kidsHungry, short), icon: Bubble.Fish }); }
     if (bestRab) { const pl = bestRab; add({ g: Goal.Snare, v: foodDrive * br * 1.7 * damp(Goal.Snare, 0.12), plan: () => snarePlan(s, p, pl), why: () => workWhy(s, p, Goal.Snare, pl, hunger, kidsHungry, short) }); }
@@ -162,10 +177,29 @@ export function decide(s: Society, p: Person, forced?: Goal): void {
   /* --- wood for the fire --- */
   if (worker && !night) {
     /* the fire needs feeding, and a woodpile for the night */
-    const need = clamp01((0.7 - b.fire) * 1.6 + (4 - b.store.wood) / 6) * (0.5 + clamp01((18 - s.tempC(b.x, b.y)) / 18) + (dusk ? 0.3 : 0));
+    /* nobody at camp could light it again if it died: so it must not die, whatever the weather */
+    const guard = b.fire > 0 && b.fire < 0.5 && b.store.wood < 3 && !s.fireMakerNear(b, 15) ? 0.4 : 0;
+    const need = clamp01((0.7 - b.fire) * 1.6 + (4 - b.store.wood) / 6) * (0.5 + clamp01((18 - s.tempC(b.x, b.y)) / 18) + (dusk ? 0.3 : 0)) + guard;
     if (need > 0.05) {
       const spot = woodSpot(s, b.x, b.y);
-      if (spot) add({ g: Goal.Wood, v: need * (0.6 + tr[7] * 0.5) / (1 + busy(Goal.Wood) * 1.3), plan: () => [step(St.Go, spot[0], spot[1]), step(St.Wood, spot[0], spot[1], 0, 6), step(St.Go, fx, fy), step(St.Drop, fx, fy)], why: () => `${p.name} is gathering firewood because ${b.fire < 0.25 ? "the fire is nearly out" : "the woodpile is low"}${s.tempC(b.x, b.y) < 8 ? ` and the nights are cold` : ""}.`, icon: Bubble.Fire });
+      if (spot) add({ g: Goal.Wood, v: need * (0.6 + tr[7] * 0.5) / (1 + busy(Goal.Wood) * 1.3), plan: () => [step(St.Go, spot[0], spot[1]), step(St.Wood, spot[0], spot[1], 0, knows(p, Idea.Axe) ? 5 : 6), step(St.Go, fx, fy), step(St.Drop, fx, fy)], why: () => `${p.name} is gathering firewood because ${b.fire <= 0 ? "a new fire will need it" : b.fire < 0.25 ? "the fire is nearly out" : "the woodpile is low"}${guard ? `, and nobody in the band could light it again if it died` : s.tempC(b.x, b.y) < 8 ? ` and the nights are cold` : ""}.`, icon: Bubble.Fire });
+    }
+  }
+
+  /* --- the fire is out: make a new one, fetch fire from another band, or try to work out how --- */
+  /* an ember carried home keeps a day or so in its bundle of moss */
+  if (p.ember && (s.time - p.ember > DAY_SECONDS * 1.6 || b.fire > 0)) p.ember = 0;
+  if (b.fire <= 0 && !b.moving && age >= 12 && dc < 30) {
+    const coldNow = clamp01((14 - s.tempC(b.x, b.y)) / 18);
+    if (p.ember) add({ g: Goal.Kindle, v: 2, plan: () => [step(St.Go, fx, fy), step(St.Kindle, fx, fy, 0, 2, { a: 1 })], why: () => `${p.name} is bringing home the ember ${she(p)} carried from another band's fire, to light the ${b.name}'s again.`, icon: Bubble.Fire });
+    else if (knows(p, Idea.MakeFire)) add({ g: Goal.Kindle, v: (0.75 + coldNow * 1.4 + (dusk ? 0.2 : 0)) / (1 + busy(Goal.Kindle) * 3), plan: () => [step(St.Go, fx, fy), step(St.Kindle, fx, fy, 0, 4)], why: () => `${p.name} is making a new fire, because the old one went out${coldNow > 0.5 ? " and it is cold" : ""}.`, icon: Bubble.Fire });
+    else if (worker && !s.fireMakerNear(b, 15)) {
+      const host = age >= 15 && age < 62 && p.injury < 0.3 && !(p.pregnantBy && s.time > p.due - DAY_SECONDS * 10) && !busy(Goal.Ember) && !p.ember ? emberSource(s, p, b) : null;
+      if (host) {
+        const [ex, ey] = s.dryNear(host.x + 1.4, host.y + 0.8);
+        add({ g: Goal.Ember, v: (0.55 + coldNow * 0.7) * (1 - hunger * 0.4) * (night ? 0.45 : 1) * (0.7 + tr[1] * 0.3 + tr[0] * 0.2), plan: () => [step(St.Go, ex, ey), step(St.Ember, ex, ey, host.id, 2.5), step(St.Go, fx, fy), step(St.Kindle, fx, fy, 0, 2, { a: 1 })], why: () => `${p.name} is walking to the ${host.name} to fetch fire, because the ${b.name}'s fire went out and ${bandKnows(b, Idea.MakeFire) ? "nobody who can make fire is at camp" : "none of them can make it"}.`, icon: Bubble.Fire });
+      }
+      add({ g: Goal.Kindle, v: (0.16 + tr[4] * 0.45) * (0.5 + coldNow) * (1 - foodDrive * 0.5) / (1 + busy(Goal.Kindle) * 0.7), plan: () => [step(St.Go, fx, fy), step(St.Kindle, fx, fy, 0, 9)], why: () => `${p.name} is trying to make fire, twirling a stick hard against dry wood and striking stones over tinder, because the band's fire went out and ${bandKnows(b, Idea.MakeFire) ? "nobody who could light it again is at camp" : "nobody knows how to light it again"}.`, icon: Bubble.Fire });
     }
   }
 
@@ -200,19 +234,52 @@ export function decide(s: Society, p: Person, forced?: Goal): void {
     if (sickOne) add({ g: Goal.Tend, v: sickOne.v / (1 + busy(Goal.Tend) * 1.2), plan: () => [step(St.Go, sickOne.q.x, sickOne.q.y, sickOne.q.id), step(St.Tend, 0, 0, sickOne.q.id, 14)], why: () => `${p.name} is looking after ${sickOne.q.name}, who is ${sickOne.q.sick > 0 ? "sick" : "hurt"}${sickOne.kin ? `, because family looks after family` : `, because ${she(p)} is kind-hearted`}.`, icon: Bubble.Heart });
   }
 
+  /* --- showing someone how a thing is done --- */
+  if (worker && age >= 14 && !night && dc < 12 && foodDrive < 0.65 && !busy(Goal.Show)) {
+    const t = showTarget(s, p);
+    if (t) {
+      const kin = t.q.id === p.partner || s.kin(p, t.q, 1), rel = kinWord(p, t.q.id, t.q);
+      /* evenings by the fire are when things are shown and tried */
+      add({ g: Goal.Show, v: t.v * (0.35 + tr[1] * 0.3 + tr[5] * 0.2) * (dusk ? 1.4 : 1) * (1 - foodDrive * 0.7) * (kin ? 1 : 1 - tr[2] * 0.35), plan: () => [step(St.Go, t.q.x, t.q.y, t.q.id), step(St.Talk, 0, 0, t.q.id, 8, { a: 16, o: t.id })], why: () => `${p.name} is showing ${rel ? `${her(p)} ${rel} ` : ""}${t.q.name} ${IDEAS[t.id].how}${(b.can[t.id] ?? 0) <= 2 ? `, because hardly anyone in the band knows it` : ""}.`, icon: Bubble.Star });
+    }
+  }
+
   /* --- children: play, and tag along to learn --- */
   if ((st === "child" || (st === "teen" && age < 14)) && !dark) {
     add({ g: Goal.Play, v: 0.48 + (1 - tr[7]) * 0.14 + tr[5] * 0.16, plan: () => [step(St.Play, b.x + Math.cos(p.id * 7 + s.time / 60) * 3, b.y + Math.sin(p.id * 7 + s.time / 60) * 2.2, 0, 9)], why: () => playWhy(s, p), icon: Bubble.Sun });
-    const parent = [s.byId.get(p.mother), s.byId.get(p.father)].find(q => q && q.band === p.band && (q.goal === Goal.Gather || q.goal === Goal.Fish || q.goal === Goal.Snare || q.goal === Goal.Wood || q.goal === Goal.Craft));
+    const parent = [s.byId.get(p.mother), s.byId.get(p.father)].find(q => q && q.band === p.band && (q.goal === Goal.Gather || q.goal === Goal.Fish || q.goal === Goal.Snare || q.goal === Goal.Wood || q.goal === Goal.Craft || q.goal === Goal.Dry || q.goal === Goal.Sow || q.goal === Goal.Build || q.goal === Goal.Kindle));
     if (parent && age >= 5) add({ g: Goal.Follow, v: 0.42 + tr[4] * 0.3, plan: () => [step(St.Follow, 0, 0, parent.id, 24)], why: () => `${p.name} is tagging along with ${her(p)} ${parent.id === p.mother ? "mother" : "father"} to learn ${LEARN[parent.goal] ?? "how things are done"}.` });
   }
 
   /* --- making things --- */
-  if (worker && !night && p.knows & Know.Hides && b.store.hides >= 1) {
+  /* meat and fish beyond what can be eaten before it rots go up on the drying racks */
+  if (worker && !night && dc < 10 && knows(p, Idea.Drying)) {
+    const T0 = s.tempC(b.x, b.y), keep = T0 > 20 ? 1.5 : T0 > 10 ? 3 : T0 > 0 ? 6 : 12;
+    const head = homeOf(p, s.byId, s.time), own = hh ? hh.meat + hh.fish - householdAppetite(s, b, head) * keep : 0, pot = b.store.meat + b.store.fish - b.appetite * keep;
+    const mine = own >= pot, excess = Math.max(own, pot);
+    if (excess > 3) add({ g: Goal.Dry, v: (0.3 + Math.min(0.45, excess / 30)) * (0.5 + tr[7] * 0.6) * (1 - hunger * 0.5) / (1 + busy(Goal.Dry) * 0.4), plan: () => mine ? [step(St.Go, hx, hy), step(St.Dry, hx, hy, 0, 10, { a: 1 })] : [step(St.Go, fx, fy), step(St.Dry, fx, fy, 0, 10)], why: () => `${p.name} is cutting ${mine ? "the family's" : "the band's"} ${(mine ? hh!.fish > hh!.meat : b.store.fish > b.store.meat) ? "fish" : "meat"} into strips and hanging them over the smoke to dry, because there is more than can be eaten before it spoils.`, icon: Bubble.Meat });
+  }
+  /* a fish weir in the river by camp, or mending one the floods have knocked about */
+  if (worker && !dark && age < 60 && knows(p, Idea.Weirs) && s.time - b.movedAt > DAY_SECONDS * 2 && !busy(Goal.Build)) {
+    let mend: Work | null = null, ok = false;
+    for (const w of s.works) if (w.kind === Work.Weir && weirFor(s, b, w) && Math.hypot(w.x - b.x, w.y - b.y) < 16) { if (w.state > 0.5) ok = true; else if (!mend || w.state > mend.state) mend = w; }
+    const site = ok ? null : mend ? { x: mend.x, y: mend.y, wx: mend.wx, wy: mend.wy } : weirSiteFor(s, b);
+    if (site) { const m = mend; add({ g: Goal.Build, v: (0.32 + tr[7] * 0.25) * (1 - foodDrive * 0.5) * (m ? 1.2 : 1), plan: () => [step(St.Go, site.x, site.y), step(St.Build, site.x, site.y, m?.id ?? 0, m ? 10 : 24, { a: site.wx, o: site.wy }), step(St.Go, fx, fy)], why: () => m ? `${p.name} is mending the fish weir ${where(s, p, site.wx, site.wy)}, which the water has knocked about.` : `${p.name} is building a fish weir ${where(s, p, site.wx, site.wy)}: a fence of stakes that will trap fish while everyone is busy with other things.`, icon: Bubble.Fish }); }
+  }
+  /* sowing, in spring: seed from the family's store pushed into good ground by camp */
+  const sowing = s.season === 0 || (s.season === 1 && s.day % 10 < 3);
+  if (sowing && worker && !dark && knows(p, Idea.Planting) && s.time - b.movedAt > DAY_SECONDS * 3 && hh && hh.plant >= 2 && foodDrive < 0.75 && !busy(Goal.Sow)) {
+    const head = homeOf(p, s.byId, s.time);
+    if (!sownThisYear(s, b, head)) {
+      const site = plotSite(s, b);
+      if (site) add({ g: Goal.Sow, v: (0.3 + tr[7] * 0.25 + tr[4] * 0.1) * (1 - foodDrive * 0.6), plan: () => [step(St.Go, site.x, site.y), step(St.Sow, site.x, site.y, 0, 14), step(St.Go, fx, fy)], why: () => `${p.name} is sowing ${site.crop} by camp with seed from the family's store, to harvest when it ripens if the band is still here.`, icon: Bubble.Berries });
+    }
+  }
+  if (worker && !night && knows(p, Idea.Hides) && b.store.hides >= 1) {
     const who = needsClothes(s, p);
     if (who) add({ g: Goal.Craft, v: 0.55 * (0.4 + tr[7] * 0.6), plan: () => [step(St.Go, fx, fy), step(St.Craft, fx, fy, who.id, 14)], why: () => `${p.name} is sewing ${s.tempC(b.x, b.y) < 0 ? "furs" : "hide clothes"} for ${who === p ? "${her}self".replace("${her}", her(p)) : who.name} because ${who === p ? `${her(p)} own are worn thin` : `${who.name} has nothing warm to wear`}.` });
   }
-  if (age >= 14 && age <= 62 && p.spear < 0.25 && p.knows & Know.Spear && !night && !p.pregnantBy) add({ g: Goal.Spear, v: 0.4 + tr[3] * 0.15 + tr[7] * 0.15, plan: () => [step(St.Go, fx, fy), step(St.Knap, fx, fy, 0, 10)], why: () => p.spear <= 0 && s.age(p) < 18 ? `${p.name} is knapping ${her(p)} first spear point, old enough now to hunt.` : `${p.name} is knapping a new spear point because ${her(p)} old spear ${p.spear <= 0 ? "broke" : "is falling apart"}.` });
+  if (age >= 14 && age <= 62 && p.spear < 0.25 && knows(p, Idea.Spear) && !night && !p.pregnantBy) add({ g: Goal.Spear, v: 0.4 + tr[3] * 0.15 + tr[7] * 0.15, plan: () => [step(St.Go, fx, fy), step(St.Knap, fx, fy, 0, knows(p, Idea.Blades) ? 7 : 10)], why: () => p.spear <= 0 && s.age(p) < 18 ? `${p.name} is knapping ${her(p)} first spear point, old enough now to hunt.` : `${p.name} is knapping a new spear point because ${her(p)} old spear ${p.spear <= 0 ? "broke" : "is falling apart"}.` });
 
   /* --- visiting kin and friends in another band, with a gift --- */
   /* nobody sets off on a day's walk with little ones at home who would trail after them */
@@ -287,7 +354,7 @@ function pick(s: Society, p: Person, opts: Option[]): void {
   const [fx, fy] = s.fireSpot(p);
   commit(s, p, { g: Goal.Rest, v: 0.1, plan: () => [step(St.Go, fx, fy), step(St.Sit, fx, fy, 0, 6)], why: () => restWhy(s, p) });
 }
-const TRIPS = new Set<Goal>([Goal.Gather, Goal.Fish, Goal.Snare, Goal.Hunt, Goal.Haul, Goal.Wood, Goal.Explore, Goal.Visit, Goal.Call]);
+const TRIPS = new Set<Goal>([Goal.Gather, Goal.Fish, Goal.Snare, Goal.Hunt, Goal.Haul, Goal.Wood, Goal.Explore, Goal.Visit, Goal.Call, Goal.Ember]);
 function commit(s: Society, p: Person, o: Option): boolean {
   const plan = o.plan(); if (!plan || !plan.length) return false;
   const b = s.band(p), dc = Math.hypot(p.x - b.x, p.y - b.y);
@@ -364,10 +431,10 @@ function explorePlan(s: Society, p: Person): Step[] | null {
 export const HUNT_P = [0.42, 0.24, 0.17, 0.32, 0, 0.12];
 export const DANGER = [0.004, 0.04, 0.05, 0.01, 0, 0.12];
 export const SPECIES_SHORT = ["deer", "aurochs", "mammoth", "horses", "wolves", "bear"];
-const LEARN: Partial<Record<number, string>> = { [Goal.Gather]: "which plants are good to eat", [Goal.Fish]: "how to fish", [Goal.Snare]: "how to set snares", [Goal.Wood]: "how to keep a fire", [Goal.Craft]: "how to work hides" };
+const LEARN: Partial<Record<number, string>> = { [Goal.Gather]: "which plants are good to eat", [Goal.Fish]: "how to fish", [Goal.Snare]: "how to set snares", [Goal.Wood]: "how to keep a fire", [Goal.Craft]: "how to work hides", [Goal.Dry]: "how to dry meat", [Goal.Sow]: "how to plant", [Goal.Build]: "how to build a weir", [Goal.Kindle]: "how to make fire" };
 
 function canHunt(s: Society, p: Person, age: number): boolean {
-  if (age < 15 || age > 62 || p.spear < 0.1 || !(p.knows & Know.Spear) || p.injury > 0.25) return false;
+  if (age < 15 || age > 62 || p.spear < 0.1 || !knows(p, Idea.Spear) || p.injury > 0.25) return false;
   if (p.pregnantBy && s.time > p.due - 2400 * 0.4) return false;
   if (p.baby) { const b = s.byId.get(p.baby); if (b && b.carrier === p.id) return false; }
   return true;
@@ -389,6 +456,30 @@ function nearestWater(s: Society, p: Person): [number, number] | null {
     if (w && cost(w[0], w[1]) < bc && s.walker.reach(p.x, p.y, w[0], w[1])) { s.learnPlace(p, Place.Water, w[0], w[1], 1, 0, 0); best = w; }
   }
   return best;
+}
+/** A camp they know of with a fire to borrow from: their own people's first, and near. */
+function emberSource(s: Society, p: Person, b: Band): Band | null {
+  let best: Band | null = null, bv = -1e9;
+  for (const pl of p.places) {
+    if (pl.k !== Place.Camp || pl.ref === b.id) continue;
+    /* a camp whose own fire is out has none to give (word of that travels between neighbors) */
+    const o = s.bandById.get(pl.ref); if (!o || o.moving || o.fire <= 0) continue;
+    const d = Math.hypot(o.x - b.x, o.y - b.y); if (d > 90 || !s.walkable(b.x, b.y, o.x, o.y)) continue;
+    const v = -d - (o.culture === b.culture ? 0 : 30) + s.op(p, o.respected) * 10;
+    if (v > bv) { bv = v; best = o; }
+  }
+  return best;
+}
+/** Where the band could put a weir, looked for once a day. */
+const siteCache = new WeakMap<Band, { day: number; site: ReturnType<typeof weirSite> }>();
+function weirSiteFor(s: Society, b: Band): ReturnType<typeof weirSite> {
+  const c = siteCache.get(b);
+  if (c && c.day === s.day) return c.site;
+  const site = weirSite(s, b); siteCache.set(b, { day: s.day, site }); return site;
+}
+function foodReason(s: Society, p: Person, hunger: number, kidsHungry: number, short: number): string {
+  const kids = p.children.map(id => s.byId.get(id)).filter((c): c is Person => !!c && s.age(c) < 14);
+  return kidsHungry > Math.max(hunger, short) && kids.length ? `${her(p)} ${kids.length > 1 ? "children are" : (kids[0].sex === "f" ? "daughter is" : "son is")} hungry` : hunger > short ? `${she(p)} is hungry` : short > 0.5 ? `there is little left to eat at camp` : `the band will need food tomorrow`;
 }
 export function woodSpot(s: Society, x: number, y: number): [number, number] | null {
   const W = s.w.w;

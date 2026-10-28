@@ -84,11 +84,11 @@ export class Ecology {
   cell(x: number, y: number): number { return this.cellOf(x, y); }
 
   /* ---- people's food, in food units (a day's food for one person) ---- */
-  /** What a gatherer could pick in the patch at (x, y), and picks `want` of it. Takes at most a share of what stands, so a patch is never stripped in one visit. */
-  gather(x: number, y: number, want: number): number { const c = this.cellOf(x, y), got = Math.min(want, this.plants[c] * PLANT_UNITS * 0.06); this.plants[c] -= got / PLANT_UNITS; return got; }
+  /** What a gatherer could pick in the patch at (x, y), and picks `want` of it. Takes at most a `share` of what stands (more with a digging stick), so a patch is never stripped in one visit. */
+  gather(x: number, y: number, want: number, share = 0.06): number { const c = this.cellOf(x, y), got = Math.min(want, this.plants[c] * PLANT_UNITS * share); this.plants[c] -= got / PLANT_UNITS; return got; }
   plantsAt(x: number, y: number): number { return this.plants[this.cellOf(x, y)] * PLANT_UNITS; }
-  /** Fishing from the shore: the catch depends on how many fish the water holds and the fisher's skill. */
-  catchFish(x: number, y: number, want: number): number { const c = this.cellOf(x, y), got = Math.min(want, this.fish[c] * FISH_UNITS * 0.03); this.fish[c] -= got / FISH_UNITS; return got; }
+  /** Fishing from the shore: the catch depends on how many fish the water holds and the fisher's skill; a net reaches a bigger `share` of them. */
+  catchFish(x: number, y: number, want: number, share = 0.03): number { const c = this.cellOf(x, y), got = Math.min(want, this.fish[c] * FISH_UNITS * share); this.fish[c] -= got / FISH_UNITS; return got; }
   fishAt(x: number, y: number): number { return this.fish[this.cellOf(x, y)] * FISH_UNITS; }
   /** Snaring rabbits and hares. */
   snare(x: number, y: number, want: number): number { const c = this.cellOf(x, y), got = Math.min(want, this.rabbits[c] * RABBIT_UNITS * 0.08); this.rabbits[c] -= got / RABBIT_UNITS; return got; }

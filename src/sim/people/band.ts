@@ -10,9 +10,12 @@ import { Place, type Person } from "./person.ts";
   and who they listen to.
 */
 
-export interface Store { plant: number; meat: number; fish: number; wood: number; hides: number; }
+/** Food by kind: fresh meat and fish spoil in days, plant food in weeks, meat and fish dried on racks keep for months. */
+export interface Foods { plant: number; meat: number; fish: number; dried: number; }
+export interface Store extends Foods { wood: number; hides: number; }
 /** The food a household keeps back for itself, at its own hearth. */
-export interface Hearth { plant: number; meat: number; fish: number; }
+export type Hearth = Foods;
+export const noFood = (): Foods => ({ plant: 0, meat: 0, fish: 0, dried: 0 });
 export interface Band {
   id: number; name: string; culture: number; color: string;
   /** the fire, center of camp */
@@ -49,12 +52,17 @@ export interface Band {
   /** food brought in and eaten today, and yesterday's totals (for the band card and for tuning) */
   today: Day;
   yesterday: Day;
+  /** how many of the band know each idea, and the one who knows it best (counted each morning) */
+  can: number[];
+  keeper: number[];
+  /** when the fire last went out */
+  outAt: number;
 }
-/** Food brought in, how much of it went into the pot, what was eaten, and what passed between hearths. */
-export interface Day { plant: number; meat: number; fish: number; eaten: number; shared: number; given: number; }
-export const newDay = (): Day => ({ plant: 0, meat: 0, fish: 0, eaten: 0, shared: 0, given: 0 });
+/** Food brought in, how much of it went into the pot, what was eaten, what passed between hearths, and fresh meat and fish lost to rot. */
+export interface Day { plant: number; meat: number; fish: number; eaten: number; shared: number; given: number; spoiled: number; }
+export const newDay = (): Day => ({ plant: 0, meat: 0, fish: 0, eaten: 0, shared: 0, given: 0, spoiled: 0 });
 
-export const storeFood = (s: { plant: number; meat: number; fish: number }) => s.plant + s.meat + s.fish;
+export const storeFood = (s: Foods) => s.plant + s.meat + s.fish + s.dried;
 /** All the food at the hearths of a band. */
 export function hearthFood(b: Band): number { let v = 0; for (const h of b.hearths.values()) v += storeFood(h); return v; }
 /** All the food in camp: the pot and every hearth. */

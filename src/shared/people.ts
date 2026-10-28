@@ -38,8 +38,10 @@ export interface Look {
   tall: number;
 }
 
-/** A band's camp, sent every tick. */
-export interface CampSnap { id: number; name: string; x: number; y: number; color: string; pop: number; fire: number; shelters: number[]; shelter: "tent" | "leanto" | "dome"; food: number; }
+/** A band's camp, sent every tick. `racks` are [x, y] pairs of drying racks hung with meat. */
+export interface CampSnap { id: number; name: string; x: number; y: number; color: string; pop: number; fire: number; shelters: number[]; shelter: "tent" | "leanto" | "dome"; food: number; racks: number[]; }
+/** A fish weir (kind 0) or a planted plot (kind 1): where it stands, how it is (repair, or growth to ripe at 1), and what it holds. */
+export interface WorkSnap { id: number; kind: number; x: number; y: number; wx: number; wy: number; state: number; food: number; crop: string; }
 
 /**
   Something that happened. `sig` (0..1) is how much it matters, weighed from what it was and how rare it is

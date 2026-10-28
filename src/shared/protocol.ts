@@ -1,6 +1,7 @@
 import type { MapMode, Season, SizeKey, WorldData } from "./types.ts";
-import type { CampSnap, ChronicleEvent, Look, Stage } from "./people.ts";
+import type { CampSnap, ChronicleEvent, Look, Stage, WorkSnap } from "./people.ts";
 import type { SearchItem } from "../sim/people/search.ts";
+import type { IdeaSummary } from "../sim/people/ideas.ts";
 
 /* Messages between the page and the simulation worker. */
 
@@ -14,19 +15,24 @@ export type ToWorker =
   /** look people up by name; answered with `results` carrying the same `seq` */
   | { type: "search"; q: string; seq: number }
   /** relationship threads for everyone in this stretch of map (off turns them off) */
-  | { type: "bonds"; on: boolean; view: { x0: number; y0: number; x1: number; y1: number } };
+  | { type: "bonds"; on: boolean; view: { x0: number; y0: number; x1: number; y1: number } }
+  /** what the world knows: answered with `ideas` */
+  | { type: "ideas" };
 
 export type FromWorker =
   | { type: "progress"; stage: number; pct: number }
   | { type: "world"; world: WorldData }
   | { type: "baked"; season: Season; mode: MapMode; pixels: Uint8ClampedArray }
   | { type: "tick"; time: number; speed: number; herds: Float32Array; herdCount: number; animals: number; birds: Float32Array; flockCount: number; birdCount: number;
-      people: Float32Array; peopleCount: number; camps: CampSnap[]; looks: Look[]; events: ChronicleEvent[]; pop: number }
+      people: Float32Array; peopleCount: number; camps: CampSnap[]; looks: Look[]; events: ChronicleEvent[]; pop: number;
+      /* weirs and plots, sent only when they have changed */
+      works?: WorkSnap[] }
   /* small game and fish per 16x16-tile patch, 0..255, sent once a game day */
   | { type: "fields"; gw: number; gh: number; cell: number; rabbits: Uint8Array; fish: Uint8Array; rabbitTotal: number; fishTotal: number }
   | { type: "results"; seq: number; items: SearchItem[] }
   /** triples of [person a, person b, bond] (see Bond) */
   | { type: "bonds"; edges: Int32Array }
+  | { type: "ideas"; list: IdeaSummary[] }
   | { type: "person"; detail: PersonDetail | null; id: number }
   | { type: "band"; detail: BandDetail | null; id: number };
 
@@ -49,7 +55,8 @@ export interface PersonDetail {
   mood: number; moodWord: string; feelings: string[];
   traits: { word: string; v: number; key: string }[];
   skills: { name: string; v: number }[];
-  knows: string[];
+  /** what they know how to do: how well (0..1), and how they came to know it ("worked it out", "from her mother, Ama") */
+  knows: { id: number; name: string; m: number; how: string; start: boolean }[];
   looks: string; look: Look;
   mother: Kin | null; father: Kin | null; partner: Kin | null;
   children: Kin[]; siblings: Kin[]; friends: Kin[]; rivals: Kin[];
@@ -84,7 +91,13 @@ export interface BandDetail {
   /** days of food in the pot, and the share of yesterday's food that went into it */
   pot: number; sharedYesterday: number;
   feuds: BandFeud[];
-  store: { plant: number; meat: number; fish: number; wood: number; hides: number };
+  store: { plant: number; meat: number; fish: number; dried: number; wood: number; hides: number };
+  /** dried meat and fish in camp, at the hearths and in the pot */
+  dried: number;
+  /** what the band knows how to do: how many know each thing, and the best at it */
+  ideas: { id: number; name: string; start: boolean; n: number; who: { id: number; name: string }[] }[];
+  /** the band's weirs and plots, in words */
+  works: { kind: "weir" | "plot"; text: string; x: number; y: number }[];
   days: number; fire: number; moves: number; camp: string;
   yesterday: { brought: number; eaten: number };
   shelter: string; sharing: number; cousins: boolean;

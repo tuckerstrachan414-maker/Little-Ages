@@ -1,6 +1,7 @@
 import type { Look } from "../../shared/people.ts";
 import type { Society } from "./society.ts";
 import type { Person } from "./person.ts";
+import { IDEAS } from "./ideas.ts";
 
 /*
   Finding things by name: the living and the dead, bands and their camps, whole peoples. The
@@ -8,7 +9,7 @@ import type { Person } from "./person.ts";
   languages' accented ones, so "kaelo" finds "Kaelo" however it is spelled.
 */
 
-export type SearchKind = "person" | "dead" | "band" | "people" | "place";
+export type SearchKind = "person" | "dead" | "band" | "people" | "place" | "idea";
 export interface SearchItem {
   kind: SearchKind; id: number;
   title: string; sub: string;
@@ -16,6 +17,8 @@ export interface SearchItem {
   x: number; y: number;
   band: number;
   look?: Look;
+  /** the picture for know-how */
+  icon?: number;
 }
 
 /** Lowercase, accents and apostrophes gone. Escapes, not literal characters, so the built page stays ASCII. */
@@ -57,7 +60,8 @@ export function searchWorld(s: Society, raw: string, limit = 6): SearchItem[] {
   }
   for (const b of s.bands) {
     const lang = s.cultures[b.culture].lang.name;
-    keep(score(b.name, q) + 5, { kind: "band", id: b.id, title: `The ${b.name}`, sub: `a band of the ${lang}, ${b.members.length} ${b.members.length === 1 ? "person" : "people"}`, x: b.x, y: b.y, band: b.id });
+    const bs = score(b.name, q);
+    if (bs) keep(bs + 5, { kind: "band", id: b.id, title: `The ${b.name}`, sub: `a band of the ${lang}, ${b.members.length} ${b.members.length === 1 ? "person" : "people"}`, x: b.x, y: b.y, band: b.id });
     keep(score(b.siteName, q), { kind: "place", id: b.id, title: b.siteName, sub: `camp of the ${b.name}`, x: b.x, y: b.y, band: b.id });
   }
   for (const c of s.cultures) {
@@ -65,7 +69,20 @@ export function searchWorld(s: Society, raw: string, limit = 6): SearchItem[] {
     if (!bs.length) continue;
     const big = bs.slice().sort((a, d) => d.members.length - a.members.length)[0];
     const pop = bs.reduce((a, b) => a + b.members.length, 0);
-    keep(score(c.lang.name, q) + 3, { kind: "people", id: big.id, title: `The ${c.lang.name}`, sub: `${bs.length} ${bs.length === 1 ? "band" : "bands"}, ${pop} people`, x: big.x, y: big.y, band: big.id });
+    const ps = score(c.lang.name, q);
+    if (ps) keep(ps + 3, { kind: "people", id: big.id, title: `The ${c.lang.name}`, sub: `${bs.length} ${bs.length === 1 ? "band" : "bands"}, ${pop} people`, x: big.x, y: big.y, band: big.id });
+  }
+  /* know-how: goes to the band where most know it, or where it was first worked out */
+  for (const d of IDEAS) {
+    const sc = Math.max(score(d.name, q), score(d.how.replace(/^how to /, ""), q) - 10); if (!sc) continue;
+    const log = s.ideas[d.id];
+    let best = null as (typeof s.bands)[number] | null;
+    for (const b of s.bands) if (b.can[d.id] && (!best || b.can[d.id] > best.can[d.id])) best = b;
+    const first = log.first;
+    const sub = log.knowers ? `${log.knowers} ${log.knowers === 1 ? "person knows" : "people know"} it, in ${log.bands} ${log.bands === 1 ? "band" : "bands"}${best ? `, most in the ${best.name}` : ""}${first ? `. First worked out by ${first.name} of the ${first.bandName}` : ""}` : first ? `lost: nobody alive knows it` : `nobody has worked it out yet`;
+    const at = best ?? (first ? s.bandById.get(first.band) : undefined);
+    if (!at && !first) continue;
+    keep(sc + 2, { kind: "idea", id: d.id, title: d.name.charAt(0).toUpperCase() + d.name.slice(1), sub, x: at?.x ?? first!.x, y: at?.y ?? first!.y, band: at?.id ?? 0, icon: d.icon });
   }
   hits.sort((a, b) => b.sc - a.sc || a.item.title.localeCompare(b.item.title));
   /* a few of each kind, so a common name does not bury the bands */

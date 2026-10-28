@@ -10,6 +10,7 @@ import { Ecology } from "../src/sim/ecology.ts";
 import { Birds, Bird } from "../src/sim/birds.ts";
 import { settle } from "../src/sim/settle.ts";
 import { Society } from "../src/sim/people/society.ts";
+import { IDEAS } from "../src/sim/people/ideas.ts";
 import { DAY_SECONDS, DAYS_PER_SEASON, SEASON_NAMES, SPECIES_NAMES, type SizeKey } from "../src/shared/types.ts";
 
 const arg = (k: string, d: string) => { const i = process.argv.indexOf(`--${k}`); return i >= 0 ? process.argv[i + 1] : d; };
@@ -44,6 +45,9 @@ const report = (label: string) => {
     const s = people.stats, ad = people.people.filter(p => people.age(p) >= 16);
     line += `\n${"".padEnd(16)} people ${people.people.length} (${ad.length} adults) in ${people.bands.length} bands | born ${s.births}, died ${s.deaths} [${[...s.causes].sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(", ")}] | couples ${s.couples}, moves ${s.moves}, splits ${s.splits}, merges ${s.merges}, contacts ${s.contacts} | mood ${mean(people.people.map(p => p.mood)).toFixed(2)}`;
     const o = s.social, led = people.bands.filter(b => b.respected).length;
+    const known = IDEAS.filter(d => !d.start && people.ideas[d.id].knowers > 0).map(d => `${d.name} ${people.ideas[d.id].knowers}`);
+    const f = people.stats.fire, ki = people.stats.ideas;
+    line += `\n${"".padEnd(16)} ideas: ${known.length ? known.join(", ") : "nothing new yet"} | worked out ${ki.found}, lost by a band ${ki.lost}, learned growing up ${ki.child}, watching ${ki.watch}, shown ${ki.shown}, on visits ${ki.told}, from things left ${ki.seen} | fires out ${f.out}, made ${f.kindled}, fetched ${f.embers} | ${people.works.length} weirs and plots, weir fish ${Math.round(people.stats.food.weir)}, harvest ${Math.round(people.stats.food.crop)}, dried ${Math.round(people.stats.food.dried)}`;
     line += `\n${"".padEnd(16)} shared ${(o.shared / Math.max(1, o.shared + o.kept) * 100).toFixed(0)}% into the pot | ${Math.round(o.given)} food passed between hearths (${Math.round(o.rounds)} in the evening rounds, ${Math.round(o.family)} eaten at family hearths), ${o.asks} asked for, ${o.refused} refused, ${Math.round(o.repaid)} paid back | feuds ${o.feuds} begun (${people.feuds.length} burning, ${o.peace} settled, ${o.cooled} cooled, ${o.inherited} passed down), fights ${o.fights}, families driven out ${o.driven}, feud/faction splits ${o.factionSplits} | ${led}/${people.bands.length} bands led, new leaders ${o.leaders}, two voices ${o.contests}, mocked ${o.mocked} | gifts ${o.gifts}, left for another ${o.leftFor}`;
   }
   console.log(line);
@@ -65,7 +69,8 @@ if (people) {
   const s = people.stats, k = s.kills;
   console.log(`\nAfter ${years} years: ${people.people.length} people in ${people.bands.length} bands (most ever ${s.maxPop}).`);
   console.log(`Food brought in: ${Math.round(s.food.plant)} plant, ${Math.round(s.food.meat)} meat, ${Math.round(s.food.fish)} fish, ${Math.round(s.food.small)} small game. Kills: ${SPECIES_NAMES.map((n, i) => k[i] ? `${k[i]} ${n.toLowerCase()}` : "").filter(Boolean).join(", ")}.`);
-  console.log(`Skills passed on by watching: ${s.learned}. Animal attacks on people: ${s.attacks}.`);
+  console.log(`Things learned from others: ${s.learned}. Animal attacks on people: ${s.attacks}.`);
+  for (const d of IDEAS) if (!d.start) { const log = people.ideas[d.id]; console.log(`  ${d.name}: ${log.first ? `first worked out by ${log.first.name} of the ${log.first.bandName} in year ${Math.floor(log.first.t / 2400) + 1}, ${log.knowers} know it now${log.times > 1 ? `, worked out ${log.times} times` : ""}${!log.knowers ? " (lost)" : ""}` : "not yet worked out"}`); }
   for (const c of people.cultures) {
     const ms = people.people.filter(p => people.cultures[people.bandById.get(p.band)!.culture] === c);
     if (ms.length) console.log(`  the ${c.lang.name}: ${ms.length} people in ${people.bands.filter(b => b.culture === c.id).length} bands, mean skin ${mean(ms.map(p => p.looks.mel)).toFixed(2)}, mean height gene ${mean(ms.map(p => p.looks.heightG)).toFixed(2)}`);

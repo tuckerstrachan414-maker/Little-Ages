@@ -1,7 +1,7 @@
 import { DAY_SECONDS } from "../../shared/types.ts";
 import { Bubble } from "../../shared/people.ts";
 import { Food, Goal, Mem, type Person } from "./person.ts";
-import { homeOf, storeFood, type Band, type Hearth } from "./band.ts";
+import { homeOf, storeFood, noFood, type Band, type Foods, type Hearth } from "./band.ts";
 import { FOOD_DAY, type Society } from "./society.ts";
 import { grievance, feudOf, feudBetween } from "./feuds.ts";
 
@@ -22,8 +22,8 @@ import { grievance, feudOf, feudBetween } from "./feuds.ts";
 */
 
 const clamp01 = (v: number) => Math.max(0, Math.min(1, v));
-/** The kinds of food in the order they spoil: meat and fish first, plant food last. */
-const SPOIL_ORDER = ["meat", "fish", "plant"] as const;
+/** The kinds of food in the order they spoil: fresh meat and fish first, then plant food, and dried meat last of all. */
+const SPOIL_ORDER = ["meat", "fish", "plant", "dried"] as const;
 
 /** The members of a band who share a household's hearth. */
 export function household(s: Society, b: Band, head: number): Person[] {
@@ -47,7 +47,7 @@ export function householdAppetite(s: Society, b: Band, head: number): number {
 export function hearthOf(s: Society, p: Person): Hearth {
   const b = s.band(p), h = homeOf(p, s.byId, s.time);
   let hh = b.hearths.get(h);
-  if (!hh) { hh = { plant: 0, meat: 0, fish: 0 }; b.hearths.set(h, hh); }
+  if (!hh) { hh = noFood(); b.hearths.set(h, hh); }
   return hh;
 }
 /** Days of food at someone's own hearth, for their whole household. */
@@ -88,13 +88,13 @@ function familySpare(s: Society, p: Person, b: Band, mine: number): number {
   return v;
 }
 
-function take(from: { plant: number; meat: number; fish: number }, want: number): number {
+function take(from: Foods, want: number): number {
   let left = want;
   for (const k of SPOIL_ORDER) { const t = Math.min(left, from[k]); from[k] -= t; left -= t; if (left <= 1e-9) break; }
   return want - left;
 }
 /** Moves `amt` of food between two stores, what spoils first going first; returns what moved. */
-export function pass(from: { plant: number; meat: number; fish: number }, to: { plant: number; meat: number; fish: number }, amt: number): number {
+export function pass(from: Foods, to: Foods, amt: number): number {
   let left = amt;
   for (const k of SPOIL_ORDER) { const t = Math.min(left, from[k]); from[k] -= t; to[k] += t; left -= t; if (left <= 1e-9) break; }
   return amt - left;
@@ -361,7 +361,7 @@ export function reconcileHearths(s: Society, b: Band): void {
       const heirs = a ? [a.partner, ...a.children].map(id => s.byId.get(id)).filter((o): o is Person => !!o && o.band === b.id) : [];
       if (heirs.length) to = homeOf(heirs[0], s.byId, s.time);
     }
-    if (to !== null && to !== k && heads.has(to)) { let t = b.hearths.get(to); if (!t) { t = { plant: 0, meat: 0, fish: 0 }; b.hearths.set(to, t); } pass(h, t, storeFood(h)); }
+    if (to !== null && to !== k && heads.has(to)) { let t = b.hearths.get(to); if (!t) { t = noFood(); b.hearths.set(to, t); } pass(h, t, storeFood(h)); }
     else pass(h, b.store, storeFood(h));
   }
 }
@@ -369,12 +369,19 @@ export function reconcileHearths(s: Society, b: Band): void {
 export function carryHearth(from: Band, to: Band, id: number): void {
   const h = from.hearths.get(id); if (!h) return;
   from.hearths.delete(id);
-  let t = to.hearths.get(id); if (!t) { t = { plant: 0, meat: 0, fish: 0 }; to.hearths.set(id, t); }
+  let t = to.hearths.get(id); if (!t) { t = noFood(); to.hearths.set(id, t); }
   pass(h, t, storeFood(h));
 }
-/** Food spoils at the hearths as it does in the pot. */
-export function spoilHearths(b: Band, meat: number, plant: number): void {
-  for (const h of b.hearths.values()) { h.meat *= 1 - meat; h.fish *= 1 - meat; h.plant *= plant; }
+/** Food spoils at the hearths as it does in the pot: fresh meat and fish fast, plant food slowly, dried meat hardly at all. Returns the fresh meat and fish lost. */
+export function spoil(f: Foods, meat: number, plant: number, dried: number): number {
+  const lost = (f.meat + f.fish) * meat;
+  f.meat *= 1 - meat; f.fish *= 1 - meat; f.plant *= plant; f.dried *= dried;
+  return lost;
+}
+export function spoilHearths(b: Band, meat: number, plant: number, dried: number): number {
+  let lost = 0;
+  for (const h of b.hearths.values()) lost += spoil(h, meat, plant, dried);
+  return lost;
 }
 /** Old debts are slowly forgotten; small ones sooner. */
 export function forgetDebts(p: Person): void {

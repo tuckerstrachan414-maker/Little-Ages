@@ -1,8 +1,10 @@
 import { DAY_SECONDS, SPECIES_NAMES } from "../../shared/types.ts";
 import type { BandDetail, BandFeud, Feuding, Kin, PersonDetail } from "../../shared/protocol.ts";
 import { TRAITS } from "./genetics.ts";
-import { Goal, KNOW_NAMES, Mem, SKILL_NAMES, kinWord, type Person } from "./person.ts";
+import { Goal, Mem, SKILL_NAMES, St, kinWord, type Person } from "./person.ts";
 import { storeFood, campFood } from "./band.ts";
+import { IDEAS, Idea, howKnown } from "./ideas.ts";
+import { Work } from "./works.ts";
 import { RIVAL_OP } from "./search.ts";
 import { hearthDays, household, appetiteOf } from "./sharing.ts";
 import { feudsWith, sideOf } from "./feuds.ts";
@@ -22,6 +24,8 @@ const GOAL_WORDS: Partial<Record<number, string>> = {
   [Goal.Craft]: "Sewing clothes", [Goal.Spear]: "Making a spear", [Goal.Tend]: "Caring for the sick", [Goal.Rest]: "Resting", [Goal.Flee]: "Fleeing",
   [Goal.Migrate]: "Moving camp", [Goal.Carried]: "Being carried", [Goal.Sick]: "Sick in bed", [Goal.Toddle]: "Toddling about", [Goal.Visit]: "Visiting",
   [Goal.Ask]: "Asking for food", [Goal.Fight]: "Fighting", [Goal.Mediate]: "Making peace", [Goal.Call]: "Visiting friends",
+  [Goal.Kindle]: "Lighting the fire", [Goal.Ember]: "Fetching fire", [Goal.Show]: "Showing how", [Goal.Learn]: "Learning", [Goal.Dry]: "Drying meat",
+  [Goal.Build]: "Building a weir", [Goal.Sow]: "Sowing",
 };
 const TRAIT_WORDS: [string, string][] = [
   ["timid", "brave"], ["cold", "kind"], ["generous", "greedy"], ["easygoing", "ambitious"],
@@ -65,8 +69,12 @@ function memoryText(s: Society, p: Person, m: Person["mem"][number]): string {
     case Mem.Parted: return `Parted from ${who}`;
     case Mem.Moved: return `Moved camp`;
     case Mem.Split: return `Left with ${who} to start a new band`;
-    case Mem.Learned: return `Learned ${KNOW_NAMES.find(([b]) => b === m.n)?.[1] ?? "something new"} from ${who}`;
-    case Mem.Found: return `Found good land while exploring`;
+    case Mem.Learned: return `Learned ${IDEAS[m.n]?.how ?? "something new"} from ${whoRel}`;
+    case Mem.Discovered: return `Worked out ${IDEAS[m.n]?.how ?? "something new"}`;
+    case Mem.Taught: return `Showed ${who} ${IDEAS[m.n]?.how ?? "how it is done"}`;
+    case Mem.FireOut: return `The fire went out`;
+    case Mem.Harvest: return `Brought in the harvest`;
+    case Mem.Found: return m.n ? `Saw how others had made a ${m.n === Idea.Weirs ? "fish weir" : "planted plot"}, and worked it out` : `Found good land while exploring`;
     case Mem.Rejected: return `Was turned down by ${who}`;
     case Mem.Freeloader: return `Noticed ${who} eats without bringing food`;
     case Mem.Helped: return `${who} looked after ${p.sex === "f" ? "her" : "him"}`;
@@ -98,12 +106,12 @@ export function personDetail(s: Society, id: number): PersonDetail | null {
   const carrying = p.carryAmt > 0.2 ? `${p.carryAmt.toFixed(0)} ${["", "plant food", "meat", "fish", "firewood"][p.carryKind] ?? "things"}` : "";
   return {
     id, name: p.name, sex: p.sex, age, stage: s.stage(p), band: { id: b.id, name: b.name }, people: cult.lang.name,
-    doing: GOAL_WORDS[p.goal] ?? "Idle", why: p.why || `${p.name} is looking around.`,
+    doing: doingWord(p), why: p.why || `${p.name} is looking around.`,
     needs: { food: Math.min(1, p.food / 1.6), water: p.water, rest: p.rest, warmth: p.warmth, company: p.company, safety: 1 - p.fear, health: p.health },
     mood: p.mood, moodWord, feelings,
     traits: traits.slice(0, 3).map(t => ({ word: t.word, v: t.v, key: t.key })),
     skills: p.skills.map((v, i) => ({ name: SKILL_NAMES[i], v })),
-    knows: KNOW_NAMES.filter(([bit]) => p.knows & bit).map(([, n]) => n),
+    knows: IDEAS.filter(d => p.know[d.id] > 0).map(d => ({ id: d.id, name: d.name, m: p.know[d.id], how: howKnown(s, p, d.id), start: d.start })),
     looks: s.describeLooks(p), look: s.look_(p),
     mother: kin(s, p, p.mother), father: kin(s, p, p.father), partner: kin(s, p, p.partner),
     children: p.children.map(c => kin(s, p, c)!).filter(Boolean), siblings, friends, rivals, memories,
@@ -114,6 +122,11 @@ export function personDetail(s: Society, id: number): PersonDetail | null {
     feuds: feudsOf(s, p), owes: debts(s, p),
     x: p.x, y: p.y,
   };
+}
+function doingWord(p: Person): string {
+  if (p.goal === Goal.Kindle) { const st = p.plan[p.si]; return st && st.k === St.Kindle && st.a === 1 ? "Lighting the fire" : p.know[Idea.MakeFire] > 0 ? "Making fire" : "Trying to make fire"; }
+  if (p.goal === Goal.Ember && p.ember) return "Carrying fire home";
+  return GOAL_WORDS[p.goal] ?? "Idle";
 }
 function feudsOf(s: Society, p: Person): Feuding[] {
   const out: Feuding[] = [];
@@ -130,6 +143,18 @@ function feudsOf(s: Society, p: Person): Feuding[] {
 }
 function debts(s: Society, p: Person): { id: number; name: string; amt: number }[] {
   return [...p.rel].filter(([id, r]) => Math.abs(r.owe) >= 0.5 && s.byId.has(id)).sort((a, c) => Math.abs(c[1].owe) - Math.abs(a[1].owe)).slice(0, 3).map(([id, r]) => ({ id, name: s.byId.get(id)!.name, amt: r.owe }));
+}
+
+function workText(s: Society, band: number, w: Work): string {
+  if (w.kind === Work.Weir) {
+    const state = w.state > 0.7 ? "in good repair" : w.state > 0.35 ? "knocked about by the water" : w.state > 0 ? "falling apart" : "washed out";
+    return `${w.band === band ? "A fish weir" : "An old fish weir others left"}, ${state}${w.food >= 1 ? `, with ${Math.round(w.food)} days of fish in its trap` : ""}.`;
+  }
+  const who = s.byId.get(w.by)?.name ?? s.archive.get(w.by)?.name ?? "someone";
+  if (w.ripe < 0) return `${who}'s patch of ${w.crop}, killed by the frost before it ripened.`;
+  if (w.state >= 1) return w.food >= 1 ? `${who}'s patch of ${w.crop}, ripe, with ${Math.round(w.food)} days of food standing.` : `${who}'s patch of ${w.crop}, harvested.`;
+  const days = Math.max(1, Math.round((1 - w.state) / 0.038));
+  return `${who}'s patch of ${w.crop}, ${w.state < 0.25 ? "just sprouting" : w.state < 0.6 ? "growing" : "nearly ripe"}: ripe in about ${days} days.`;
 }
 
 export function bandDetail(s: Society, id: number): BandDetail | null {
@@ -149,7 +174,13 @@ export function bandDetail(s: Society, id: number): BandDetail | null {
     pot: storeFood(b.store) / Math.max(1, b.appetite),
     sharedYesterday: b.yesterday.plant + b.yesterday.meat + b.yesterday.fish > 0 ? b.yesterday.shared / (b.yesterday.plant + b.yesterday.meat + b.yesterday.fish) : 0,
     feuds: s.feuds.filter(f => f.heat >= 0.1 && (s.byId.get(f.a)?.band === b.id || s.byId.get(f.b)?.band === b.id)).map(f => ({ a: { id: f.a, name: s.byId.get(f.a)?.name ?? "" }, b: { id: f.b, name: s.byId.get(f.b)?.name ?? "" }, heat: f.heat, cause: f.cause, days: (s.time - f.since) / 60 }) as BandFeud),
-    store: { plant: Math.round(b.store.plant), meat: Math.round(b.store.meat), fish: Math.round(b.store.fish), wood: Math.round(b.store.wood), hides: Math.round(b.store.hides) },
+    store: { plant: Math.round(b.store.plant), meat: Math.round(b.store.meat), fish: Math.round(b.store.fish), dried: Math.round(b.store.dried), wood: Math.round(b.store.wood), hides: Math.round(b.store.hides) },
+    dried: Math.round(b.store.dried + [...b.hearths.values()].reduce((a, h) => a + h.dried, 0)),
+    ideas: IDEAS.filter(d => b.can[d.id] > 0 || !d.start && ms.some(q => q.know[d.id] > 0)).map(d => {
+      const who = ms.filter(q => q.know[d.id] > 0).sort((a, c) => c.know[d.id] - a.know[d.id]);
+      return { id: d.id, name: d.name, start: d.start, n: who.length, who: who.slice(0, 3).map(q => ({ id: q.id, name: q.name })) };
+    }),
+    works: s.works.filter(w => Math.hypot(w.x - b.x, w.y - b.y) < 18 && (w.band === b.id || !s.bandById.has(w.band))).map(w => ({ kind: w.kind === Work.Weir ? "weir" as const : "plot" as const, text: workText(s, b.id, w), x: w.x, y: w.y })),
     days: campFood(b) / Math.max(1, b.appetite), fire: b.fire, moves: b.moves, camp: b.siteName,
     yesterday: { brought: Math.round(b.yesterday.plant + b.yesterday.meat + b.yesterday.fish), eaten: Math.round(b.yesterday.eaten) },
     shelter: cult.shelter, sharing: cult.sharing, cousins: cult.cousins,
