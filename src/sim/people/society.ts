@@ -12,7 +12,7 @@ import { Goal, Mem, Place, St, YEAR, ageOf, stageOf, type Archived, type KnownPl
 import { decide, isInterruptible } from "./mind.ts";
 import { doStep, abandon } from "./doing.ts";
 import { weigh } from "./chronicle.ts";
-import { eat, household, appetiteOf, reconcileHearths, carryHearth, spoil, spoilHearths, forgetDebts, shareRound } from "./sharing.ts";
+import { eat, household, appetiteOf, reconcileHearths, carryHearth, spoil, spoilHearths, forgetDebts, shareRound, reachFood } from "./sharing.ts";
 import { type Feud, feudDay, feudsOnDeath, feudLeave, feudOf, grievance, handDown, maybeFight, sideOf, fadeGrudges } from "./feuds.ts";
 import { chooseLeaders } from "./leaders.ts";
 import { IDEA_COUNT, Idea, type IdeaLog, newIdeaLog, founderKnow, growUp, ideasDay, countBand, watch, bandKnows } from "./ideas.ts";
@@ -578,6 +578,8 @@ export class Society {
     if (p.warmth < 0.22 && p.goal !== Goal.Warm && p.goal !== Goal.Sleep && this.band(p).fire > 0.05) return true;
     if (p.food < 0.12 && p.carryAmt > 0 && p.carryKind !== 4 && p.goal !== Goal.Eat) return true;
     if (p.sick > 0.5) return true;
+    /* nobody sleeps through starving with food at hand */
+    if (p.food < 0.08 && (p.goal === Goal.Sleep || p.goal === Goal.Rest || p.goal === Goal.Warm) && this.atCamp(p, 10) && reachFood(this, p) > 0.4) return true;
     /* night falls: whoever is still out working heads home */
     if (this.sun < 0.08 && (p.goal === Goal.Gather || p.goal === Goal.Fish || p.goal === Goal.Snare || p.goal === Goal.Wood || p.goal === Goal.Explore || p.goal === Goal.Haul || p.goal === Goal.Talk || p.goal === Goal.Play || p.goal === Goal.Follow)) {
       const st = p.plan[p.si]; return !(st && st.k === St.Drop) && !(st && st.k === St.Go && p.si === p.plan.length - 2);

@@ -58,13 +58,13 @@ export const IDEAS: IdeaDef[] = [
   { id: 4, name: "setting snares", how: "how to set snares", title: "", needs: [], age: 7, child: 0.05, watch: 0.004, show: 0.5, skill: Skill.Hunt, worth: 0.3, spark: 0, start: true, anim: Anim.Dig, icon: Bubble.Meat },
   { id: 5, name: "making fire", how: "how to make fire", title: "Fire from nothing", needs: [0], age: 10, child: 0.04, watch: 0.012, show: 0.35, skill: Skill.Craft, worth: 1, spark: 0.01, start: false, anim: Anim.Knap, icon: Bubble.Fire },
   { id: 6, name: "striking blades", how: "how to strike long blades from a flint core", title: "Long stone blades", needs: [1], age: 13, child: 0.03, watch: 0.008, show: 0.3, skill: Skill.Craft, worth: 0.6, spark: 0.0012, start: false, anim: Anim.Knap, icon: Bubble.Star },
-  { id: 7, name: "stone axes", how: "how to grind and haft a stone axe", title: "The stone axe", needs: [6], age: 13, child: 0.03, watch: 0.008, show: 0.4, skill: Skill.Craft, worth: 0.55, spark: 0.003, start: false, anim: Anim.Chop, icon: Bubble.Star },
+  { id: 7, name: "stone axes", how: "how to grind and haft a stone axe", title: "The stone axe", needs: [6], age: 13, child: 0.03, watch: 0.008, show: 0.4, skill: Skill.Craft, worth: 0.55, spark: 0.007, start: false, anim: Anim.Chop, icon: Bubble.Star },
   { id: 8, name: "digging sticks", how: "how to dig roots with a fire-hardened stick", title: "The digging stick", needs: [], age: 6, child: 0.06, watch: 0.012, show: 0.7, skill: Skill.Gather, worth: 0.7, spark: 0.00012, start: false, anim: Anim.Dig, icon: Bubble.Berries },
   { id: 9, name: "weaving baskets", how: "how to weave baskets", title: "The first baskets", needs: [], age: 8, child: 0.05, watch: 0.01, show: 0.5, skill: Skill.Craft, worth: 0.7, spark: 0.0002, start: false, anim: Anim.Sew, icon: Bubble.Berries },
-  { id: 10, name: "fishing nets", how: "how to knot a fishing net", title: "The fishing net", needs: [2, 4], age: 10, child: 0.04, watch: 0.01, show: 0.45, skill: Skill.Fish, worth: 0.8, spark: 0.0008, start: false, anim: Anim.Sew, icon: Bubble.Fish },
+  { id: 10, name: "fishing nets", how: "how to knot a fishing net", title: "The fishing net", needs: [2, 4], age: 10, child: 0.04, watch: 0.01, show: 0.45, skill: Skill.Fish, worth: 0.8, spark: 0.0018, start: false, anim: Anim.Sew, icon: Bubble.Fish },
   { id: 11, name: "fish weirs", how: "how to build a fish weir", title: "The fish weir", needs: [2], age: 12, child: 0.03, watch: 0.008, show: 0.45, skill: Skill.Fish, worth: 0.65, spark: 0.002, start: false, anim: Anim.Chop, icon: Bubble.Fish },
   { id: 12, name: "drying meat", how: "how to dry meat and fish on racks", title: "Meat that keeps", needs: [0], age: 9, child: 0.05, watch: 0.012, show: 0.6, skill: Skill.Craft, worth: 0.75, spark: 0.0003, start: false, anim: Anim.Butcher, icon: Bubble.Meat },
-  { id: 13, name: "planting", how: "how to plant", title: "The first planting", needs: [8], age: 8, child: 0.04, watch: 0.008, show: 0.5, skill: Skill.Gather, worth: 0.6, spark: 0.0015, start: false, anim: Anim.Dig, icon: Bubble.Berries },
+  { id: 13, name: "planting", how: "how to plant", title: "The first planting", needs: [8], age: 8, child: 0.04, watch: 0.008, show: 0.5, skill: Skill.Gather, worth: 0.6, spark: 0.0028, start: false, anim: Anim.Dig, icon: Bubble.Berries },
 ];
 export const IDEA_COUNT = IDEAS.length;
 
