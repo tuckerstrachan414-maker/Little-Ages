@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Little Ages: weirs, plots and racks</title>
+<style>body{margin:0;background:#7c9a4c;font:12px system-ui} canvas{image-rendering:pixelated;display:block}</style></head>
+<body><canvas id="c"></canvas>
+<script type="module">
+/* Every stage of the things people make in checkpoint 2B: plots from bare rows to ripe and stubble for each crop, weirs from new to falling apart, and drying racks. */
+import { rackSprite, weirSprite, plotSprite, fireSprite } from "/src/render/sprites/camp.ts";
+const K = 6, c = document.getElementById("c"), x = c.getContext("2d");
+c.width = 1300; c.height = 760; x.imageSmoothingEnabled = false;
+x.fillStyle = "#7c9a4c"; x.fillRect(0, 0, c.width, c.height);
+x.fillStyle = "#4d8fa3"; x.fillRect(0, 520, c.width, 240);
+const draw = (cv, px, py) => x.drawImage(cv, px, py, cv.width * K, cv.height * K);
+x.fillStyle = "#14110c"; x.font = "14px system-ui";
+["wild grain", "tubers", "gourds and beans"].forEach((crop, r) => {
+  x.fillText(crop, 10, 30 + r * 140);
+  [[0, 0], [0.3, 0], [0.6, 0], [0.9, 0], [1, 30], [1, 0]].forEach(([st, food], i) => draw(plotSprite(st, food, crop), 130 + i * 190, 10 + r * 140));
+});
+x.fillText("racks", 10, 450); draw(rackSprite(false), 130, 420); draw(rackSprite(true), 230, 420); draw(fireSprite(0, 0.8), 330, 420);
+x.fillText("weirs", 10, 560); [[1, true], [1, false], [0.45, false], [0.15, false]].forEach(([st, f], i) => draw(weirSprite(st, f), 130 + i * 190, 560));
+</script></body></html>

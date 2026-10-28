@@ -13,15 +13,13 @@ export const YEAR = DAY_SECONDS * DAYS_PER_YEAR;
 
 export const Skill = { Gather: 0, Hunt: 1, Fish: 2, Craft: 3 } as const;
 export const SKILL_NAMES = ["gathering", "hunting", "fishing", "handcraft"];
-/** Things a person knows how to do at all. Children pick them up by watching. */
-export const Know = { Fire: 1, Spear: 2, Fishing: 4, Hides: 8, Snares: 16 } as const;
-export const KNOW_NAMES: [number, string][] = [[1, "keeping fire"], [2, "spear hunting"], [4, "fishing"], [8, "working hides"], [16, "setting snares"]];
 
 /** What someone is trying to do. Each goal has its own plan and its own "why". */
 export const Goal = {
   None: 0, Sleep: 1, Drink: 2, Eat: 3, Gather: 4, Fish: 5, Snare: 6, Hunt: 7, Haul: 8, Wood: 9, Warm: 10, Talk: 11, Court: 12,
   Play: 13, Follow: 14, Explore: 15, Craft: 16, Spear: 17, Tend: 18, Rest: 19, Flee: 20, Migrate: 21, Carried: 22, Sick: 23, Cook: 24, Toddle: 25, Visit: 26,
   Ask: 27, Fight: 28, Mediate: 29, Call: 30,
+  Kindle: 31, Ember: 32, Show: 33, Learn: 34, Dry: 35, Build: 36, Sow: 37,
 } as const;
 export type Goal = (typeof Goal)[keyof typeof Goal];
 
@@ -29,6 +27,7 @@ export const St = {
   Go: 0, Gather: 1, Fish: 2, Snare: 3, Stalk: 4, Butcher: 5, Wood: 6, Drop: 7, Eat: 8, Drink: 9, Sleep: 10, Sit: 11, Talk: 12,
   Play: 13, Follow: 14, Look: 15, Craft: 16, Knap: 17, Tend: 18, Wait: 19, Cook: 20, Feed: 21,
   Ask: 22, Fight: 23,
+  Kindle: 24, Ember: 25, Dry: 26, Build: 27, Sow: 28,
 } as const;
 export type St = (typeof St)[keyof typeof St];
 
@@ -86,6 +85,7 @@ export const Mem = {
   Shared: 0, Fed: 1, Hungry: 2, Argued: 3, NiceTalk: 4, Stranger: 5, Kill: 6, Attacked: 7, Injured: 8, Birth: 9, Death: 10,
   Paired: 11, Parted: 12, Moved: 13, Split: 14, Learned: 15, Found: 16, Cold: 17, Rejected: 18, Freeloader: 19, Helped: 20, Feast: 21,
   Refused: 22, Fight: 23, Peace: 24, Gift: 25, Mocked: 26, Left: 27, Feud: 28, Repaid: 29, Stingy: 30,
+  Discovered: 31, FireOut: 32, Taught: 33, Harvest: 34,
 } as const;
 export interface Memory { t: number; k: number; who: number; v: number; x: number; y: number; n: number; }
 
@@ -95,7 +95,10 @@ export interface Person {
   /** bravery, kindness, greed, ambition, curiosity, sociability, temper, diligence */
   traits: number[];
   skills: number[];
-  knows: number;
+  /** how well they know each idea (see ideas.ts), 0 for not at all */
+  know: number[];
+  /** where each idea came from: whoever they learned it from, -1 if they worked it out, -2 if they worked it out from something others made, 0 if they grew up with it */
+  from: number[];
   mother: number; father: number; partner: number; children: number[];
   /** who looks after a child whose parents are gone */
   guardian: number;
@@ -149,6 +152,10 @@ export interface Person {
   askedAt: number;
   /** when they last went visiting kin or friends in another band */
   visitedAt: number;
+  /** when they were given a smoldering ember to carry home (0 when not carrying fire), and the band that gave it */
+  ember: number; emberFrom: number;
+  /** when they came to live in their band, and the band they came from (0 if born to it) */
+  joined: number; came: number;
 
   /* mind */
   goal: Goal; plan: Step[]; si: number; why: string; whyAt: number;

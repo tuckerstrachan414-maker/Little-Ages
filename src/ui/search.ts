@@ -22,8 +22,8 @@ export interface SearchCallbacks {
 }
 
 type Row = { item: SearchItem } | { event: ChronicleEvent };
-const HEADINGS: Record<SearchKind | "event" | "suggest", string> = { person: "People", dead: "Remembered", band: "Bands", people: "Peoples", place: "Places", event: "Moments", suggest: "Worth a look" };
-const ORDER: (SearchKind | "event")[] = ["person", "dead", "band", "people", "place", "event"];
+const HEADINGS: Record<SearchKind | "event" | "suggest", string> = { person: "People", dead: "Remembered", band: "Bands", people: "Peoples", place: "Places", idea: "Know-how", event: "Moments", suggest: "Worth a look" };
+const ORDER: (SearchKind | "event")[] = ["person", "dead", "band", "people", "place", "idea", "event"];
 
 export class SearchBox {
   readonly el: HTMLElement;
@@ -43,7 +43,7 @@ export class SearchBox {
     this.dock = dock; this.hist = hist; this.cb = cb;
     this.el = el("div", "paper"); this.el.id = "hud-search";
     this.el.style.borderImageSource = `url(${frameURL()})`;
-    this.el.innerHTML = `<input type="search" id="search-q" placeholder="Find a person, band, camp or moment" aria-label="Search" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="true" aria-controls="search-out"><div id="search-out" role="listbox" aria-label="Results"></div>`;
+    this.el.innerHTML = `<input type="search" id="search-q" placeholder="Find a person, band, camp, know-how or moment" aria-label="Search" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="true" aria-controls="search-out"><div id="search-out" role="listbox" aria-label="Results"></div>`;
     this.input = this.el.querySelector("input")!;
     this.out = this.el.querySelector("#search-out")!;
     this.input.addEventListener("input", () => this.type());
@@ -113,6 +113,7 @@ export class SearchBox {
       if ("item" in r) {
         const slot = this.out.querySelector(`[data-pic="${i}"]`)!;
         if (r.item.look) slot.append(portrait(r.item.look, 28));
+        else if (r.item.icon !== undefined) slot.append(eventIcon(r.item.icon));
         else slot.textContent = r.item.kind === "dead" ? "†" : r.item.kind === "band" ? "∴" : r.item.kind === "people" ? "✦" : "◆";
       } else this.out.querySelector(`[data-ev="${i}"]`)!.append(eventIcon(r.event.icon || Bubble.Sun));
     });

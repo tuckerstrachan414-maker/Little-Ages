@@ -1,5 +1,6 @@
 import { Species } from "../../shared/types.ts";
 import type { Society } from "./society.ts";
+import { IDEAS } from "./ideas.ts";
 
 /*
   How much an event matters, and a headline for it. Nothing is scripted: weight comes from
@@ -20,6 +21,8 @@ const BASE: Record<string, [number, string]> = {
   leader: [0.42, "A new leader"], contest: [0.38, "Two voices"],
   refused: [0.2, "Food refused"], feud: [0.43, "Bad blood"], fight: [0.36, "A fight"], peace: [0.3, "Peace is made"],
   leftfor: [0.4, "Left for another"], mocked: [0.18, "Taken down a peg"], gift: [0.14, "A gift between bands"],
+  discover: [0.36, "A discovery"], spread: [0.24, "Know-how spreads"], lost: [0.28, "Know-how lost"],
+  fireout: [0.2, "The fire goes out"], ember: [0.28, "Fire fetched from neighbors"], weir: [0.28, "A fish weir"], sow: [0.28, "Seed in the ground"], harvest: [0.42, "A first harvest"],
 };
 /** Every kind of event the simulation tells of. */
 export const KINDS = Object.keys(BASE);
@@ -30,7 +33,8 @@ const RARITY = 0.3;
   `hint` carries what only the caller knows: the animal for a hunt (a Species), 1 for strangers who speak
   another language or a move into unknown land, 2 for twins; 1 for a feud passed down, a fight where someone
   was hurt, peace made by a go-between, a family driven out by a feud, a split along a feud or a following,
-  gifts between two peoples.
+  gifts between two peoples. For know-how, `hint` is 100 times a level plus the idea: a discovery first in the
+  world (level 2) or first among a people (1); know-how crossing between peoples (1); lost to the world (1).
 */
 export function weigh(s: Society, kind: string, who: number[], band: number, hint: number): Weighed {
   const [base, name] = BASE[kind] ?? [0.2, "Something happened"];
@@ -73,6 +77,17 @@ export function weigh(s: Society, kind: string, who: number[], band: number, hin
     case "split": if (hint === 1) { sig += 0.05; title = "A band divides"; } break;
     case "gift": if (hint === 1) { sig += 0.2; title = "Gifts between peoples"; } break;
     case "refused": if (hint === 1) sig += 0.06; break;
+    case "discover": {
+      const level = Math.floor(hint / 100), d = IDEAS[hint % 100];
+      if (level === 2) { sig += 0.42; title = d?.title || title; }
+      else if (level === 1) { sig += 0.16; title = `New to a people: ${d?.name ?? "a way of doing things"}`; }
+      else title = `Worked out again: ${d?.name ?? "a way of doing things"}`;
+      break;
+    }
+    case "spread": { const d = IDEAS[hint % 100]; if (hint >= 100) { sig += 0.12; title = `Across peoples: ${d?.name ?? "know-how"}`; } else title = `Know-how spreads: ${d?.name ?? ""}`; break; }
+    case "lost": { const d = IDEAS[hint % 100]; if (hint >= 100) { sig += 0.42; title = `Lost to the world: ${d?.name ?? "know-how"}`; } else title = `Know-how lost: ${d?.name ?? ""}`; break; }
+    case "fireout": if (hint === 1) sig += 0.08; break;
+    case "harvest": if (hint === 1) { sig += 0.3; title = "The first harvest anywhere"; } break;
   }
   /* the first of anything counts for more; the thousandth for nothing extra */
   sig += RARITY / (1 + n);

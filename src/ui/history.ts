@@ -29,6 +29,7 @@ export const CATEGORIES = [
   { key: "hunt", label: "Hunts", kinds: ["kill"] },
   { key: "bands", label: "Bands and leaders", kinds: ["move", "split", "leave", "merge", "leader", "contest"] },
   { key: "ties", label: "Friends and feuds", kinds: ["refused", "feud", "fight", "peace", "mocked", "gift"] },
+  { key: "ideas", label: "Discoveries", kinds: ["discover", "spread", "lost", "fireout", "ember", "weir", "sow", "harvest"] },
   { key: "meet", label: "Meetings", kinds: ["contact"] },
 ] as const;
 export type CategoryKey = (typeof CATEGORIES)[number]["key"];
@@ -39,6 +40,7 @@ export const KIND_COLOR: Record<string, string> = {
   birth: "#e58aa0", couple: "#e0586c", parted: "#d0884a", death: "#9aa0b8", hurt: "#c8a46a", attack: "#d8584a", "band-end": "#c0392b",
   kill: "#d08a44", move: "#7fbf5a", split: "#f0c43c", leave: "#a4cf6a", merge: "#6fc2c0", leader: "#f6d77a", contest: "#e3ad2f", contact: "#7fa8e6",
   leftfor: "#c86a8a", refused: "#b0703a", feud: "#a8231c", fight: "#d0402a", peace: "#8fbf6a", mocked: "#c9b48c", gift: "#d9b45a",
+  discover: "#f2e266", spread: "#c7d96a", lost: "#8a7a9a", fireout: "#7a5a4a", ember: "#e8743a", weir: "#5aa8c8", sow: "#9ac25a", harvest: "#e8c25a",
 };
 
 export interface Filter {

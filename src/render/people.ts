@@ -1,7 +1,7 @@
 import type { Camera } from "./camera.ts";
-import { Anim, PERSON_STRIDE, PFlag, type CampSnap, type Look } from "../shared/people.ts";
+import { Anim, PERSON_STRIDE, PFlag, type CampSnap, type Look, type WorkSnap } from "../shared/people.ts";
 import { personSprite, tinySprite, animFrame, drawBubble, type View } from "./sprites/people.ts";
-import { fireSprite, shelterSprite, storeSprite, woodpileSprite, shelterVariant } from "./sprites/camp.ts";
+import { fireSprite, shelterSprite, storeSprite, woodpileSprite, shelterVariant, rackSprite, weirSprite, plotSprite } from "./sprites/camp.ts";
 import { isSnowy } from "../shared/seasonfx.ts";
 import type { Season, WorldData } from "../shared/types.ts";
 import type { DepthItem } from "./depth.ts";
@@ -25,6 +25,8 @@ export class PeopleLayer {
   prev: PeopleSnap | null = null;
   at = 0;
   camps: CampSnap[] = [];
+  /** fish weirs and planted plots */
+  works: WorkSnap[] = [];
   selected = 0;
   selectedBand = 0;
   /** interpolated position of everyone drawn this frame */
@@ -56,6 +58,12 @@ export class PeopleLayer {
       if (c.x < v.x0 - 8 || c.x > v.x1 + 8 || c.y < v.y0 - 8 || c.y > v.y1 + 8) continue;
       this.ground(ctx, cam, c);
     }
+    /* plots lie flat on the ground, and weirs stand in water, where nothing walks */
+    if (z >= 4) for (const w of this.works) {
+      if (w.wx < v.x0 - 4 || w.wx > v.x1 + 4 || w.wy < v.y0 - 4 || w.wy > v.y1 + 4) continue;
+      if (w.kind === 1) this.stamp(ctx, cam, plotSprite(w.state, w.food, w.crop), w.x, w.y + 0.7, z / 8, 1);
+      else if (w.state > 0) this.stamp(ctx, cam, weirSprite(w.state, w.food >= 2), w.wx, w.wy + 0.6, z / 8, 1);
+    }
     for (const c of this.camps) {
       if (c.x < v.x0 - 8 || c.x > v.x1 + 8 || c.y < v.y0 - 8 || c.y > v.y1 + 8) continue;
       if (z >= 4) {
@@ -67,6 +75,7 @@ export class PeopleLayer {
         out.push({ x: c.x, y: c.y, f: () => this.stamp(ctx, cam, fireSprite(Math.floor(now / 110 + c.id), c.fire), c.x, c.y + 0.35, z / 8, 1) });
         if (c.food > 0) out.push({ x: c.x + 1.6, y: c.y - 0.6, f: () => this.stamp(ctx, cam, storeSprite(c.food * 0.6, c.food * 0.4), c.x + 1.6, c.y - 0.6, z / 8, 1) });
         out.push({ x: c.x - 1.6, y: c.y - 0.9, f: () => this.stamp(ctx, cam, woodpileSprite(3), c.x - 1.6, c.y - 0.8, z / 8, 1) });
+        for (let k = 0; k < c.racks.length; k += 2) { const rx = c.racks[k], ry = c.racks[k + 1]; out.push({ x: rx, y: ry, f: () => this.stamp(ctx, cam, rackSprite(k === 0 || c.racks.length > 4), rx, ry, z / 8, 1) }); }
         if (z >= 8 && c.fire > 0.05 && Math.random() < dtReal * 6) this.parts.push({ x: c.x + (Math.random() - 0.5) * 0.3, y: c.y - 0.4, vx: (Math.random() - 0.5) * 0.3, vy: -0.9 - Math.random() * 0.6, life: 1.6, age: 0, c: Math.random() < 0.25 ? "#ffdf7e" : "#d9d8d0", g: 0 });
       }
     }

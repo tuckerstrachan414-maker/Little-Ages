@@ -1,13 +1,15 @@
 import { Species, Flag, DAY_SECONDS } from "../../shared/types.ts";
 import { Anim, Bubble } from "../../shared/people.ts";
-import { Food, Goal, Know, Mem, Place, St, Skill, YEAR, step, type Person, type Step } from "./person.ts";
+import { Food, Goal, Mem, Place, St, Skill, YEAR, step, type Person, type Step } from "./person.ts";
 import { MEAT, type Society } from "./society.ts";
 import { HUNT_P, DANGER, SPECIES_SHORT, attraction, she, unhappy } from "./mind.ts";
 import { deposit, answer, eat, hearthOf, pass } from "./sharing.ts";
 import { endFight, talkRound, grievance } from "./feuds.ts";
 import { mock } from "./leaders.ts";
 import { gift } from "./friends.ts";
-import { storeFood } from "./band.ts";
+import { storeFood, homeOf } from "./band.ts";
+import { IDEAS, Idea, knows, practice, inspire, inUse, learn, ready, shown, tellIdea, riverAt, rootsAt } from "./ideas.ts";
+import { Work, emptyWeir, buildWeir, sow, cropAt } from "./works.ts";
 
 /*
   Doing things. Each plan is a list of steps (walk there, gather, walk back, put it in the
@@ -67,6 +69,11 @@ export function doStep(s: Society, p: Person, dt: number): void {
     case St.Wait: case St.Feed: p.anim = Anim.Idle; st.t += dt; if (st.t >= st.dur) next(p); break;
     case St.Ask: ask(s, p, st, dt); break;
     case St.Fight: fight(s, p, st, dt); break;
+    case St.Kindle: work(s, p, st, dt, Anim.Knap); break;
+    case St.Ember: work(s, p, st, dt, Anim.Wave); break;
+    case St.Dry: work(s, p, st, dt, Anim.Butcher); break;
+    case St.Build: work(s, p, st, dt, Anim.Chop); break;
+    case St.Sow: work(s, p, st, dt, Anim.Dig); break;
   }
 }
 
@@ -160,29 +167,54 @@ function faceWater(s: Society, p: Person): void {
 
 function work(s: Society, p: Person, st: Step, dt: number, anim: number): void {
   p.anim = anim; st.t += dt;
-  if (st.k === St.Fish) faceWater(s, p);
-  if (st.k === St.Eat || st.k === St.Cook) faceFire(s, p);
+  if (st.k === St.Fish || st.k === St.Build) faceWater(s, p);
+  if (st.k === St.Eat || st.k === St.Cook || st.k === St.Kindle) faceFire(s, p);
   if (st.t < st.dur) return;
   const b = s.band(p);
   switch (st.k) {
     case St.Gather: {
-      const want = Math.max(0, (st.a ?? 5) - p.carryAmt) * (0.7 + p.skills[Skill.Gather] * 0.6);
-      const got = s.eco.gather(p.x, p.y, want);
+      /* a household's own crop, sown in the spring */
+      if (st.id) {
+        const w = s.works.find(k => k.id === st.id && k.kind === Work.Plot);
+        if (w && w.state >= 1 && w.food > 0) {
+          const got = Math.min(w.food, Math.max(0, (st.a ?? 5) - p.carryAmt));
+          w.food -= got; load(p, Food.Plant, got); s.stats.food.crop += got; s.stats.food.plant += got;
+          practice(p, Idea.Planting, 0.01);
+          harvest(s, p, w);
+        }
+        break;
+      }
+      /* roots and tubers come up for a digging stick that hands cannot reach */
+      const roots = rootsAt(s, p.x, p.y), dig = roots && knows(p, Idea.Digging);
+      const want = Math.max(0, (st.a ?? 5) - p.carryAmt) * (0.7 + p.skills[Skill.Gather] * 0.6) * (dig ? 1.25 : 1);
+      const got = s.eco.gather(p.x, p.y, want, dig ? 0.085 : 0.06);
       load(p, Food.Plant, got);
       p.skills[Skill.Gather] = Math.min(1, p.skills[Skill.Gather] + 0.004);
       s.stats.food.plant += got;
+      if (dig) practice(p, Idea.Digging, 0.005);
+      if (knows(p, Idea.Baskets)) practice(p, Idea.Baskets, 0.004);
       s.learnPlace(p, Place.Plants, st.x, st.y, s.eco.plantsAt(p.x, p.y) * 0.06, 0, 0);
+      inspire(s, p, St.Gather, { full: p.carryAmt >= (st.a ?? 5) - 0.2 && s.eco.plantsAt(p.x, p.y) * 0.06 > 1.5, poor: got < want * 0.4, roots });
       /* a bare patch is not worth a second try */
       if (got < 0.4 && p.plan[p.si + 1]?.k === St.Gather) p.si++;
       break;
     }
     case St.Fish: {
-      const got = s.eco.catchFish(p.x, p.y, 2.6 * (0.45 + p.skills[Skill.Fish] * 0.9));
+      /* a weir's trap: the fish are there for the taking */
+      if (st.id) {
+        const w = s.works.find(k => k.id === st.id && k.kind === Work.Weir);
+        if (w) { const got = emptyWeir(w, Math.max(0, 6 - (p.carryKind === Food.Fish ? p.carryAmt : 0))); load(p, Food.Fish, got); s.stats.food.fish += got; if (got > 1.5) s.bubble(p, Bubble.Fish, 2); }
+        break;
+      }
+      const nets = knows(p, Idea.Nets);
+      const got = s.eco.catchFish(p.x, p.y, 2.6 * (0.45 + p.skills[Skill.Fish] * 0.9) * (nets ? 1.45 + p.know[Idea.Nets] * 0.3 : 1), nets ? 0.045 : 0.03);
       load(p, Food.Fish, got);
       p.skills[Skill.Fish] = Math.min(1, p.skills[Skill.Fish] + 0.005);
+      if (nets) practice(p, Idea.Nets, 0.006);
       s.stats.food.fish += got;
       s.learnPlace(p, Place.Fish, st.x, st.y, Math.min(20, s.eco.fishAt(p.x, p.y) * 0.1), 0, 0);
       if (got > 1.5) s.bubble(p, Bubble.Fish, 2);
+      inspire(s, p, St.Fish, { poor: got < 1, river: riverAt(s, p.x, p.y) });
       break;
     }
     case St.Snare: {
@@ -196,7 +228,11 @@ function work(s: Society, p: Person, st: Step, dt: number, anim: number): void {
     case St.Butcher: {
       const c = s.carcasses.find(k => k.id === st.id);
       if (c && Math.hypot(c.x - p.x, c.y - p.y) < 4) {
-        const take = Math.min(c.meat, 6 - (p.carryKind === Food.Meat ? p.carryAmt : 0));
+        /* keen blades cut cleaner and faster: more meat off the bone in the time */
+        const blades = knows(p, Idea.Blades), big = c.meat > 40;
+        const take = Math.min(c.meat, (blades ? 7.5 : 6) - (p.carryKind === Food.Meat ? p.carryAmt : 0));
+        if (blades) practice(p, Idea.Blades, 0.005);
+        inspire(s, p, St.Butcher, { big });
         c.meat -= take; load(p, Food.Meat, take); s.stats.food.meat += take;
         if (c.hides > 0) { c.hides--; p.hides++; }
         /* tell yourself where the rest is, to come back for it or send others */
@@ -204,11 +240,25 @@ function work(s: Society, p: Person, st: Step, dt: number, anim: number): void {
       }
       break;
     }
-    case St.Wood: load(p, Food.Wood, 3); break;
+    case St.Wood: {
+      /* an axe brings down dead wood that hands can only break off a stick at a time */
+      const axe = knows(p, Idea.Axe);
+      load(p, Food.Wood, axe ? 5 : 3);
+      if (axe) practice(p, Idea.Axe, 0.005);
+      inspire(s, p, St.Wood);
+      break;
+    }
     case St.Eat: {
       const greedy = p.traits[2] > 0.65 ? 1.2 : 1;
       if (st.a === 1 && p.carryAmt > 0 && p.carryKind < Food.Wood) { const e = Math.min(p.carryAmt, Math.max(0.3, 1.6 - p.food)); p.carryAmt -= e; p.food = Math.min(2.5, p.food + e); if (p.carryAmt <= 0.01) { p.carryAmt = 0; p.carryKind = 0; } }
-      else s.eatFromStore(p, b, Math.min(1.6, Math.max(0.3, 2 - p.food)) * greedy);
+      else {
+        /* with the fire dead, meat and fish are eaten raw, and raw they go less far */
+        const raw = b.fire <= 0 && s.atCamp(p, 8);
+        let share = 0;
+        if (raw) { const h = b.hearths.get(homeOf(p, s.byId, s.time)); const mf = (h ? h.meat + h.fish : 0) + b.store.meat + b.store.fish, all = (h ? storeFood(h) : 0) + storeFood(b.store); share = all > 0 ? Math.min(1, mf / all * 1.5) : 0; }
+        const got = s.eatFromStore(p, b, Math.min(1.6, Math.max(0.3, 2 - p.food)) * greedy);
+        if (raw && got > 0) p.food = Math.max(0, p.food - got * 0.15 * share);
+      }
       /* feed a hungry small child at your side */
       for (const cid of p.children) { const c = s.byId.get(cid); if (c && s.age(c) >= 1 && s.age(c) < 7 && c.food < 1 && Math.hypot(c.x - p.x, c.y - p.y) < 3) s.eatFromStore(c, b, 0.8); }
       break;
@@ -226,16 +276,80 @@ function work(s: Society, p: Person, st: Step, dt: number, anim: number): void {
     }
     case St.Craft: {
       const who = s.byId.get(st.id);
+      inspire(s, p, St.Craft);
       if (who && b.store.hides >= 1) {
-        b.store.hides -= 1; who.clothes = Math.min(2, who.clothes + 1); who.clothesWear = 1; s.dirty.add(who.id);
+        /* hides scraped clean with good blades make clothes that last */
+        b.store.hides -= 1; who.clothes = Math.min(2, who.clothes + 1); who.clothesWear = knows(p, Idea.Blades) ? 1.3 : 1; s.dirty.add(who.id);
         p.skills[Skill.Craft] = Math.min(1, p.skills[Skill.Craft] + 0.01);
         if (who !== p) { s.rel(who, p.id).op += 0.12; s.remember(who, Mem.Helped, p.id, 0.4); p.prestige += 0.04; }
       }
       break;
     }
-    case St.Knap: p.spear = 1; p.skills[Skill.Craft] = Math.min(1, p.skills[Skill.Craft] + 0.005); break;
+    case St.Knap: inspire(s, p, St.Knap); p.spear = 1; p.skills[Skill.Craft] = Math.min(1, p.skills[Skill.Craft] + 0.005); if (knows(p, Idea.Blades)) practice(p, Idea.Blades, 0.01); break;
+    case St.Cook: inspire(s, p, St.Cook); break;
+    case St.Kindle: kindle(s, p, st); break;
+    case St.Ember: {
+      /* at the other band's fire: they give a smoldering ember to carry home */
+      const host = s.bandById.get(st.id);
+      if (!host || host.fire <= 0.03 || Math.hypot(host.x - p.x, host.y - p.y) > 6) { fail(s, p, `${p.name} went to fetch fire, but the fire there was out too.`); return; }
+      p.ember = s.time; p.emberFrom = host.id;
+      const lead = s.byId.get(host.respected); if (lead) { const r = s.rel(p, lead.id); r.op = Math.min(1, r.op + 0.08); r.fam = Math.max(r.fam, 0.2); }
+      s.bubble(p, Bubble.Fire, 2.5);
+      p.why = `${p.name} is carrying an ember home from the ${host.name}'s fire, wrapped in moss, to light the ${b.name}'s fire again.`; p.whyAt = s.time;
+      break;
+    }
+    case St.Dry: {
+      /* strips of meat and fish over the smoke: from the family's hearth, or the band's pot */
+      const src = st.a === 1 ? hearthOf(s, p) : b.store;
+      const amt = Math.min(src.meat + src.fish, 8 * (0.6 + p.know[Idea.Drying] * 0.6));
+      const m = Math.min(src.meat, amt), f = Math.min(src.fish, amt - m);
+      src.meat -= m; src.fish -= f; src.dried += (m + f) * 0.92;
+      s.stats.food.dried += (m + f) * 0.92;
+      practice(p, Idea.Drying, 0.01);
+      break;
+    }
+    case St.Build: {
+      const mend = st.id ? s.works.find(w => w.id === st.id) ?? null : null;
+      if (!mend && s.works.some(w => w.kind === Work.Weir && Math.hypot(w.wx - (st.a ?? 0), w.wy - (st.o ?? 0)) < 5)) break;
+      buildWeir(s, p, { x: st.x, y: st.y, wx: st.a ?? st.x, wy: st.o ?? st.y }, mend);
+      break;
+    }
+    case St.Sow: {
+      /* the seed comes from the household's own store of plant food */
+      const h = hearthOf(s, p), crop = cropAt(s, st.x, st.y);
+      if (h.plant < 1 || !crop) break;
+      h.plant -= Math.min(2, h.plant);
+      sow(s, p, { x: st.x, y: st.y, crop });
+      break;
+    }
   }
   next(p);
+}
+
+/** Lighting the fire: someone who can make fire makes it; someone carrying an ember blows it into flame; anyone else tries, and may work it out. */
+function kindle(s: Society, p: Person, st: Step): void {
+  const b = s.band(p);
+  if (b.fire > 0) { p.ember = 0; return; }
+  if (st.a === 1) {
+    if (!p.ember || s.time - p.ember > DAY_SECONDS * 1.6) { p.ember = 0; p.why = `${p.name} carried an ember home, but it died on the way.`; p.whyAt = s.time; return; }
+    const host = s.bandById.get(p.emberFrom);
+    p.ember = 0; s.relight(b); s.stats.fire.embers++;
+    s.bubble(p, Bubble.Fire, 3);
+    s.event("ember", Bubble.Fire, `The ${b.name}'s fire had gone out, and none of them could make fire. ${p.name} walked to ${host ? `the camp of the ${host.name}` : "another band's camp"} and carried fire home in a smoldering bundle of moss.`, p.x, p.y, [p.id], b.id);
+    return;
+  }
+  if (knows(p, Idea.MakeFire)) { s.relight(b); practice(p, Idea.MakeFire, 0.02); s.stats.fire.kindled++; s.bubble(p, Bubble.Fire, 2.5); return; }
+  if (inspire(s, p, St.Kindle)) { s.relight(b); s.stats.fire.kindled++; }
+}
+
+/** A household's first harvest, and the band's: a moment worth telling. */
+function harvest(s: Society, p: Person, w: { band: number; by: number; crop: string; x: number; y: number; id: number }): void {
+  const b = s.band(p);
+  s.remember(p, Mem.Harvest, w.by, 0.3);
+  if (s.harvested.has(b.id)) return;
+  s.harvested.add(b.id);
+  const first = s.harvested.size === 1, sower = s.byId.get(w.by)?.name ?? s.archive.get(w.by)?.name;
+  s.event("harvest", Bubble.Berries, `The ${b.name} brought in their first harvest: ${w.crop} from the patch ${sower ? `${sower} sowed` : "sown"} by camp in the spring.${first ? " Nobody anywhere has harvested what they planted before." : ""}`, w.x, w.y, [p.id, w.by].filter(id => s.byId.has(id)), b.id, first ? 1 : 0);
 }
 function load(p: Person, kind: number, amt: number): void {
   if (amt <= 0) return;
@@ -300,7 +414,8 @@ function stalk(s: Society, p: Person, st: Step, dt: number): void {
   const party = s.near(p.x, p.y, 6).filter(q => q.party === p.id);
   const cover = s.w.tree[(h.y | 0) * s.w.w + (h.x | 0)] ? 0.85 : 1;
   const chance = HUNT_P[h.sp] * (0.5 + p.skills[Skill.Hunt]) * (1 + 0.45 * (party.length - 1)) * (h.cond < 0.6 ? 1.3 : 1) * cover;
-  p.spear -= 0.12;
+  /* a point struck as a blade breaks less often */
+  p.spear -= knows(p, Idea.Blades) ? 0.075 : 0.12;
   /* the big ones fight back */
   const hurt = DANGER[h.sp] * Math.max(0.3, 1 - 0.25 * (party.length - 1));
   if (s.rng.chance(hurt)) {
@@ -377,16 +492,19 @@ function talk(s: Society, p: Person, st: Step, dt: number): void {
       fail(s, p); return;
     }
     const a = st.a ?? 0;
-    q.plan = [step(St.Talk, 0, 0, p.id, st.dur, { a: (a & 1) | 2 })]; q.si = 0; q.path = null;
-    q.goal = a & 1 ? Goal.Court : Goal.Talk; q.whyAt = s.time;
+    q.plan = [step(St.Talk, 0, 0, p.id, st.dur, { a: (a & 1) | 2 | (a & 16), o: st.o })]; q.si = 0; q.path = null;
+    q.goal = a & 1 ? Goal.Court : a & 16 ? Goal.Learn : Goal.Talk; q.whyAt = s.time;
     const other = a & 8 ? s.byId.get(st.o ?? 0) : undefined;
     q.why = a & 1 ? `${q.name} is talking with ${p.name}, who has been seeking ${q.sex === "f" ? "her" : "him"} out.`
+      : a & 16 ? `${q.name} is learning ${IDEAS[st.o ?? 0].how} from ${p.name}, watching closely and trying it.`
       : other ? `${q.name} is listening to ${p.name}, who is trying to make peace between ${q.sex === "f" ? "her" : "him"} and ${other.name}.`
       : a & 4 ? `${q.name} is welcoming ${p.name} of the ${s.band(p).name}, who has come visiting.`
       : `${q.name} is talking with ${p.name}, who came over to chat.`;
   }
   st.t += dt;
-  p.anim = Anim.Talk; face(p, q.x, q.y);
+  /* showing how: the one who knows works at it, the one learning watches and tries */
+  const lesson = ((st.a ?? 0) & 16) !== 0;
+  p.anim = lesson ? (listener ? (Math.floor(st.t / 2) % 2 ? IDEAS[st.o ?? 0].anim : Anim.Sit) : IDEAS[st.o ?? 0].anim) : Anim.Talk; face(p, q.x, q.y);
   p.company = Math.min(1, p.company + 0.1 * dt);
   if (listener) { if (st.t > st.dur + 4) next(p); return; }
   /* topics come up as they talk */
@@ -396,6 +514,7 @@ function talk(s: Society, p: Person, st: Step, dt: number): void {
 function topicIcon(s: Society, p: Person, q: Person, st: Step): number {
   if ((st.a ?? 0) & 1) return Bubble.Heart;
   if ((st.a ?? 0) & 8) return Bubble.Peace;
+  if ((st.a ?? 0) & 16) return IDEAS[st.o ?? 0]?.icon ?? Bubble.Star;
   if ((st.a ?? 0) & 4 && st.t < 3) return Bubble.Gift;
   if (p.moveWish > 0.5) return Bubble.Move;
   const r = s.rng.next();
@@ -417,8 +536,10 @@ function converse(s: Society, a: Person, b: Person, st: Step): void {
   a.company = Math.min(1, a.company + 0.3); b.company = Math.min(1, b.company + 0.3);
   /* a go-between talking one side of a feud round */
   if (flags & 8) { talkRound(s, a, b, st.o ?? 0); share(s, a, b); return; }
-  /* a visit: a gift handed over, then the news */
-  if (flags & 4) { gift(s, a, b); share(s, a, b); share(s, b, a); share(s, a, b); return; }
+  /* a lesson: whether it took */
+  if (flags & 16) { shown(s, a, b, st.o ?? 0); return; }
+  /* a visit: a gift handed over, then the news, and now and then a new way of doing things */
+  if (flags & 4) { gift(s, a, b); share(s, a, b); share(s, b, a); share(s, a, b); tellIdea(s, a, b); return; }
   const stress = (a.food < 0.4 ? 0.1 : 0) + (b.food < 0.4 ? 0.1 : 0);
   const quarrel = 0.025 + a.traits[6] * b.traits[6] * 0.22 + (ra.op < -0.1 ? 0.15 : 0) + stress - (a.traits[1] + b.traits[1]) * 0.03;
   if (s.rng.chance(quarrel)) {
@@ -490,15 +611,11 @@ function follow(s: Society, p: Person, st: Step, dt: number): void {
   p.anim = q.anim === Anim.Sit || q.anim === Anim.HoldBaby ? Anim.Sit : q.anim === Anim.Gather || q.anim === Anim.Dig ? Anim.Gather : Anim.Idle;
   face(p, q.x, q.y);
   /* watching and copying is how children learn */
-  const g = q.goal, sk = g === Goal.Gather ? Skill.Gather : g === Goal.Fish ? Skill.Fish : g === Goal.Snare || g === Goal.Hunt ? Skill.Hunt : g === Goal.Craft ? Skill.Craft : -1;
-  if (sk >= 0 && q.plan[q.si]?.k !== St.Go) {
-    p.skills[sk] = Math.min(q.skills[sk], p.skills[sk] + 0.0012 * (0.5 + p.traits[4]) * dt);
-    const bit = sk === Skill.Fish ? Know.Fishing : sk === Skill.Hunt ? Know.Snares : sk === Skill.Craft ? Know.Hides : 0;
-    if (bit && q.knows & bit && !(p.knows & bit) && s.age(p) >= 6 && s.rng.chance(0.004 * dt * (0.5 + p.traits[4]))) {
-      p.knows |= bit; s.stats.learned++;
-      s.remember(p, Mem.Learned, q.id, 0.4, bit);
-      s.rel(p, q.id).op = Math.min(1, s.rel(p, q.id).op + 0.05);
-    }
+  const g = q.goal, sk = g === Goal.Gather || g === Goal.Sow ? Skill.Gather : g === Goal.Fish || g === Goal.Build ? Skill.Fish : g === Goal.Snare || g === Goal.Hunt ? Skill.Hunt : g === Goal.Craft || g === Goal.Dry || g === Goal.Kindle ? Skill.Craft : -1;
+  if (sk >= 0 && q.plan[q.si]?.k !== St.Go) p.skills[sk] = Math.min(q.skills[sk], p.skills[sk] + 0.0012 * (0.5 + p.traits[4]) * dt);
+  if (q.plan[q.si]?.k !== St.Go && s.age(p) >= 5) for (const id of inUse(q)) {
+    if (p.know[id] > 0 || s.age(p) < IDEAS[id].age || !ready(p, id)) continue;
+    if (s.rng.chance(0.004 * dt * (0.5 + p.traits[4]))) { learn(s, p, id, q, "watch"); break; }
   }
 }
 /** At another household's hearth, asking for food. `id` is the household, `o` the one asked. */

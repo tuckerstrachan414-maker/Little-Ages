@@ -111,7 +111,9 @@ export function mock(s: Society, p: Person, c: Carcass): void {
   s.stats.social.mocked++;
   s.bubble(wag, Bubble.Sun, 2.5);
   const what = SPECIES_SHORT[c.sp] === "horses" ? "horse" : SPECIES_SHORT[c.sp];
-  s.event("mocked", Bubble.Sun, `When ${p.name} carried in the ${what}, ${wag.name} called it a bag of bones and the others laughed, as the ${b.name} do, so that no hunter grows too proud. They ate it all the same.`, p.x, p.y, [p.id, wag.id], b.id);
+  /* names run in families, so two of a band can share one */
+  const wn = wag.name === p.name ? `the other ${wag.name}` : wag.name;
+  s.event("mocked", Bubble.Sun, `When ${p.name} carried in the ${what}, ${wn} called it a bag of bones and the others laughed, as the ${b.name} do, so that no hunter grows too proud. They ate it all the same.`, p.x, p.y, [p.id, wag.id], b.id);
 }
 
 /** Whether someone is leading a band now, and for how long, in days. */
