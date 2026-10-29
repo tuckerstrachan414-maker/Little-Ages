@@ -347,12 +347,13 @@ function work(s: Society, p: Person, st: Step, dt: number, anim: number): void {
       /* a hut of poles goes up the old way; anything else, and a rebuild in place, by the building's def */
       const w = st.id ? workById(s, st.id) : undefined;
       if ((st.a ?? 0) >= RAISE.Household || (w && (w.kind >= 4 || w.up))) buildSpell(s, p, st); else raise(s, p, st);
+      inspire(s, p, St.Raise, { clayNear: s.resources.knownNear(b.culture, b.x, b.y, 20, "clay") });
       break;
     }
     case St.Quarry: quarry(s, p, st); break;
     case St.Pit: { digPit(s, p, st); const i = (st.y | 0) * s.w.w + (st.x | 0); inspire(s, p, St.Pit, { clayNear: s.resources.knownNear(b.culture, b.x, b.y, 20, "clay"), damp: s.w.biome[i] === Biome.Swamp || s.w.rain[i] > 160 }); break; }
     case St.Store: { const w = workById(s, st.id); const overflow = !!w && w.foods ? pitRoom(w) - pitFood(w) < 4 : false; storeInPit(s, p, st); inspire(s, p, St.Store, { overflow, clayNear: s.resources.knownNear(b.culture, b.x, b.y, 20, "clay") }); break; }
-    case St.Fetch: fetchFromPit(s, p, st); break;
+    case St.Fetch: fetchFromPit(s, p, st); inspire(s, p, St.Fetch); break;
     case St.Sow: {
       /* the seed comes from the household's own store of plant food, or what it put by in its pit */
       const h = hearthOf(s, p), pit = pitOf(s, b, homeOf(p, s.byId, s.time)), field = st.id ? workById(s, st.id) : undefined;

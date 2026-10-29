@@ -73,7 +73,10 @@ export function wants(s: Society, p: Person, b: Band): Want[] {
     const mine = (w.owner ?? 0) === 0 ? w.home === home : w.band === b.id || s.bandById.get(w.band)?.culture === b.culture;
     if (!mine || (!w.up && (w.prog ?? 1) >= 1)) continue;
     const def = targetDef(w), left = undelivered(w.up ? w.up.needs : w.needs);
-    out.push({ def, x: w.x, y: w.y, help: w, v: 0.4 + ((w.owner ?? 0) >= 1 ? 0.05 : 0.1), owner: (["household", "band", "settlement"] as Owner[])[w.owner ?? 0], home, why: left > 0 ? `${p.name} is bringing ${MATS[nextMaterial(w.up ? w.up.needs : w.needs)]?.name ?? "materials"} for the ${def.name} ${w.owner ? "the band is" : `${her} family is`} ${w.up ? "rebuilding" : "raising"} at ${b.siteName}.` : `${p.name} is working on the ${def.name} ${w.owner ? "the band is" : `${her} family is`} ${w.up ? "rebuilding" : "raising"} at ${b.siteName}.` });
+    /* a work the village's chief called for: those who go along with the chief come readily, those who cannot stand the chief mostly stay away */
+    let v = 0.4 + ((w.owner ?? 0) >= 1 ? 0.05 : 0.1);
+    if ((w.owner ?? 0) === 2) { const vil = s.villages.find(o => o.call?.work === w.id || o.communal.includes(w.id)); const chief = vil ? s.byId.get(vil.chief) : undefined; if (chief && chief !== p) v = 0.35 * (p.follows === chief.id ? 1.4 : 0.8 + Math.max(0, s.op(p, chief.id)) * 0.4); }
+    out.push({ def, x: w.x, y: w.y, help: w, v, owner: (["household", "band", "settlement"] as Owner[])[w.owner ?? 0], home, why: left > 0 ? `${p.name} is bringing ${MATS[nextMaterial(w.up ? w.up.needs : w.needs)]?.name ?? "materials"} for the ${def.name} ${w.owner ? "the band is" : `${her} family is`} ${w.up ? "rebuilding" : "raising"} at ${b.siteName}.` : `${p.name} is working on the ${def.name} ${w.owner ? "the band is" : `${her} family is`} ${w.up ? "rebuilding" : "raising"} at ${b.siteName}.` });
   }
   /* storage: more food put by than the pit can hold, and a granary known */
   const pit = buildingOf(s, b, Line.Store, home);

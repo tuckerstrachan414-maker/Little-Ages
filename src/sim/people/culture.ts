@@ -34,6 +34,8 @@ export interface Culture {
   cousins: boolean;
   /** how a people builds once it builds to last: how steep its roofs, how many windows a wall gets, how much it decorates */
   build: { pitch: number; windows: number; decor: number };
+  /** the age the people is in, from what enough of them know (see tech/tree.ts Era) */
+  age: number;
 }
 
 /* buckskin, tan, bleached and smoked hides; dyes from ochre, clay, charcoal, plants and bark */
@@ -61,6 +63,7 @@ export function makeCulture(id: number, seed: number): Culture {
     namesake: rng.range(0, 0.35),
     cousins: rng.chance(0.45),
     build: { pitch: 1, windows: 1, decor: 1 },
+    age: 0,
   };
   c.hut = hutStyleOf(c.shelter);
   /* drawn after everything above, so the peoples of old seeds keep their looks */

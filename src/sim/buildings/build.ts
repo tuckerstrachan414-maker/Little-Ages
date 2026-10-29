@@ -153,6 +153,8 @@ function finishBuilding(s: Society, p: Person, b: Band, w: Work): void {
   const firstEver = !s.stats.buildings.firstOf[def.line]; if (firstEver) s.stats.buildings.firstOf[def.line] = s.time;
   const first = !worksAround(s, b.x, b.y, 16).some(o => o !== w && o.kind === w.kind && o.band === b.id && standing(o));
   if (first) s.event(EVENT_KIND[def.line] ?? "built", Bubble.Home, builtText(p, b, w, firstEver), w.x, w.y, [p.id], b.id, firstEver ? 1 : 0);
+  /* a work the village was called to, finished: the one who called for it is thought the more of */
+  if ((w.owner ?? 0) === OWNER.settlement) for (const v of s.villages) if (v.call?.work === w.id) { v.call = null; const chief = s.byId.get(v.chief); if (chief) chief.prestige += 0.3; }
 }
 function finishUpgrade(s: Society, p: Person, b: Band, w: Work): void {
   if (!w.up) return;

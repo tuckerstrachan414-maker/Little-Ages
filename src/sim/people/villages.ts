@@ -33,6 +33,10 @@ export interface Village {
   pop: number; peak: number; huts: number;
   /** since when no band has lived there (0 while lived in), and when it was given up for good (0 if not) */
   empty: number; abandoned: number;
+  /** a hamlet (0), village (1), town (2) or city (3) */
+  tier: number;
+  /** the one most of its grown-ups listen to (0 for nobody), since when, the buildings the whole place shares, and the work the chief has called everyone to */
+  chief: number; chiefSince: number; communal: number[]; call: { work: number; since: number } | null;
 }
 export interface Gathering {
   id: number; bands: number[]; x: number; y: number; since: number; peak: number; name: string;
@@ -272,6 +276,7 @@ function found(s: Society, b: Band, huts: Work[]): void {
   const v: Village = {
     id: s.nextId++, name, gloss, why, x: b.x, y: b.y, culture: b.culture, founded: s.time, founder: first.by, founderName, story,
     bands: [b.id, ...with_.map(o => o.id)], ever: [b.id, ...with_.map(o => o.id)], pop: b.members.length + with_.reduce((n, o) => n + o.members.length, 0), peak: 0, huts: huts.length, empty: 0, abandoned: 0,
+    tier: 0, chief: 0, chiefSince: 0, communal: [], call: null,
   };
   v.peak = v.pop;
   s.villages.push(v); s.villagesVersion++;
@@ -290,12 +295,12 @@ export function villageSnaps(s: Society): VillageSnap[] {
   for (const v of s.villages) {
     const bs = bandsOf(v.bands);
     if (v.abandoned && !v.huts && !worksAround(s, v.x, v.y, VILLAGE_R).some(w => w.kind === Work.Hut)) continue;
-    out.push({ id: v.id, kind: v.abandoned ? "ruins" : "village", name: v.name, gloss: v.gloss, x: v.x, y: v.y, pop: v.pop, bands: bs.map(b => b.name), color: bs[0]?.color ?? "#9a8a6a", band: bs[0]?.id ?? 0 });
+    out.push({ id: v.id, kind: v.abandoned ? "ruins" : "village", name: v.name, gloss: v.gloss, x: v.x, y: v.y, pop: v.pop, bands: bs.map(b => b.name), color: bs[0]?.color ?? "#9a8a6a", band: bs[0]?.id ?? 0, tier: v.tier });
   }
   for (const g of s.gatherings) {
     if (!g.told || s.villages.some(v => !v.abandoned && Math.hypot(v.x - g.x, v.y - g.y) < VILLAGE_R)) continue;
     const bs = bandsOf(g.bands);
-    out.push({ id: g.id, kind: "gathering", name: g.name, gloss: "", x: g.x, y: g.y, pop: bs.reduce((n, b) => n + b.members.length, 0), bands: bs.map(b => b.name), color: bs[0]?.color ?? "#9a8a6a", band: bs.slice().sort((a, b) => b.members.length - a.members.length)[0]?.id ?? 0 });
+    out.push({ id: g.id, kind: "gathering", name: g.name, gloss: "", x: g.x, y: g.y, pop: bs.reduce((n, b) => n + b.members.length, 0), bands: bs.map(b => b.name), color: bs[0]?.color ?? "#9a8a6a", band: bs.slice().sort((a, b) => b.members.length - a.members.length)[0]?.id ?? 0, tier: 0 });
   }
   return out;
 }

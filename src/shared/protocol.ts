@@ -102,8 +102,13 @@ export interface VillageDetail {
   id: number; name: string; gloss: string; why: string; story: string; people: string;
   founded: number; founder: { id: number; name: string; alive: boolean };
   bands: { id: number; name: string; pop: number; color: string; leader: { id: number; name: string } | null }[];
-  /** whom most of the grown-ups in the village listen to, across its bands, and how many */
+  /** whom most of the grown-ups in the village listen to, across its bands, and how many; and whether that one is its chief */
   listened: { id: number; name: string; n: number } | null;
+  chief: { id: number; name: string; n: number; since: number } | null;
+  /** hamlet (0), village (1), town (2), city (3) */
+  tier: number;
+  /** the work the chief has called everyone to, if any */
+  call: string;
   pop: number; peak: number; huts: number; building: number; ruins: number; pits: number; pitDays: number;
   fields: { crop: string; n: number; tame: number }[]; weirs: number;
   /** empty since (0 if lived in) and given up (0 if not) */
@@ -114,6 +119,8 @@ export interface VillageDetail {
 
 export interface BandDetail {
   id: number; name: string; people: string; pop: number; adults: number; children: number; couples: number;
+  /** the age the band's people is in ("New Stone Age") */
+  age: string;
   respected: { id: number; name: string } | null;
   /** how many listen to the leader and for how many days they have led; a second voice with a following of their own */
   followers: number; ledDays: number;

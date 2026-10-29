@@ -1,5 +1,6 @@
 import { defOf } from "../buildings/build.ts";
 import { dietWords } from "../economy/diet.ts";
+import { ERA_NAMES } from "../tech/tree.ts";
 import { Mat } from "../economy/goods.ts";
 import { WALL_WORDS } from "../buildings/defs.ts";
 import { DAY_SECONDS, DAYS_PER_SEASON, DAYS_PER_YEAR, SEASON_NAMES, SPECIES_NAMES } from "../../shared/types.ts";
@@ -225,6 +226,8 @@ export function villageDetail(s: Society, id: number): VillageDetail | null {
     founded: v.founded, founder: { id: v.founder, name: v.founderName, alive: !!founder },
     bands: bands.map(b => { const l = s.byId.get(b.respected); return { id: b.id, name: b.name, pop: b.members.length, color: b.color, leader: l ? { id: l.id, name: l.name } : null }; }),
     listened: top && s.byId.get(top[0]) ? { id: top[0], name: s.byId.get(top[0])!.name, n: top[1] } : null,
+    chief: v.chief && s.byId.get(v.chief) ? { id: v.chief, name: s.byId.get(v.chief)!.name, n: count.get(v.chief) ?? 0, since: v.chiefSince } : null,
+    tier: v.tier, call: v.call ? (s.works.find(w => w.id === v.call!.work) ? defOf(s.works.find(w => w.id === v.call!.work)!).name : "") : "",
     pop: v.pop, peak: v.peak, huts, building, ruins, pits, pitDays: appetite ? food / appetite : 0,
     fields: [...fields].map(([crop, f]) => ({ crop, n: f.n, tame: f.tame })), weirs,
     empty: v.empty, abandoned: v.abandoned,
@@ -241,7 +244,7 @@ export function bandDetail(s: Society, id: number): BandDetail | null {
   const resp = s.byId.get(b.respected);
   const couples = ms.filter(q => q.sex === "f" && q.partner && s.byId.get(q.partner)?.band === b.id).length;
   return {
-    id, name: b.name, people: cult.lang.name, pop: ms.length,
+    id, name: b.name, people: cult.lang.name, age: ERA_NAMES[cult.age], pop: ms.length,
     adults: ms.filter(q => s.age(q) >= 16).length, children: ms.filter(q => s.age(q) < 16).length, couples,
     respected: resp ? { id: resp.id, name: resp.name } : null,
     followers: b.followers, ledDays: (s.time - b.ledSince) / 60,

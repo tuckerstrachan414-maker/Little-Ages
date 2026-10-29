@@ -39,8 +39,14 @@ export const pitRoom = (w: Work) => w.size ?? 40;
 export const pitFood = (w: Work) => (w.foods ? storeFood(w.foods) : 0);
 /** A household's own pit at its band's camp. */
 export function pitOf(s: Society, b: Band, home: number): Work | null {
-  for (const w of worksAround(s, b.x, b.y, 12)) if (w.kind === Work.Pit && w.home === home && w.band === b.id) return w;
-  return null;
+  let shared: Work | null = null;
+  for (const w of worksAround(s, b.x, b.y, 12)) {
+    if (w.kind !== Work.Pit) continue;
+    if (w.home === home && w.band === b.id) return w;
+    /* a granary the band or the village shares, standing, is everyone's to put by in */
+    if ((w.owner ?? 0) >= 1 && (w.prog ?? 1) >= 1 && w.state > 0.2 && w.foods && !shared) shared = w;
+  }
+  return shared;
 }
 /** Counts the food in a band's pits at its camp again (for the days of food the band has). */
 export function recountPits(s: Society, b: Band): void {

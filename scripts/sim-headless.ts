@@ -10,7 +10,7 @@ import { Ecology } from "../src/sim/ecology.ts";
 import { Birds, Bird } from "../src/sim/birds.ts";
 import { settle } from "../src/sim/settle.ts";
 import { Society } from "../src/sim/people/society.ts";
-import { TECHS as IDEAS } from "../src/sim/tech/tree.ts";
+import { TECHS as IDEAS, ERA_NAMES } from "../src/sim/tech/tree.ts";
 import { MATS } from "../src/sim/economy/goods.ts";
 import { defOf } from "../src/sim/buildings/build.ts";
 import { dietScore } from "../src/sim/economy/diet.ts";
@@ -61,6 +61,11 @@ const report = (label: string) => {
       line += `\n${"".padEnd(16)} places: ${people.gatherings.length} gatherings now (${pl.gatherings} in all), ${live.length} villages lived in${live.length ? ` (${live.map(v => `${v.name} "${v.gloss}" ${v.pop}`).join(", ")})` : ""}, ${pl.villages} founded, ${pl.abandoned} given up, ${pl.returns} returned to | fields ${people.works.filter(w => w.kind === 1 && (w.sown ?? 1) > 1).length} sown again, ${people.works.filter(w => w.kind === 1 && w.fallow).length} resting, best seed line ${Math.max(0, ...people.bands.flatMap(b => Object.values(b.seed))).toFixed(2)}`;
       const r = people.resources, rs = r.stats, known = new Set<number>(); for (const set of r.known.values()) for (const id of set) known.add(id);
       const byKind = new Map<number, number>(); for (const id of known) { const d = r.byId(id)!; byKind.set(d.kind, (byKind.get(d.kind) ?? 0) + 1); }
+      {
+        const vs = people.villages.filter(v => !v.abandoned), tiers = [0, 0, 0, 0]; for (const v of vs) tiers[v.tier]++;
+        const chiefs = vs.filter(v => v.chief).length, communal = vs.reduce((n, v) => n + v.communal.length, 0), calls = vs.filter(v => v.call).length;
+        line += `\n${"".padEnd(16)} settlements: ${tiers[0]} hamlets, ${tiers[1]} villages, ${tiers[2]} towns, ${tiers[3]} cities | ${chiefs} chiefs, ${communal} shared buildings, ${calls} works called for | ages: ${people.cultures.map(c => `${c.lang.name} ${ERA_NAMES[c.age].replace(" Age", "")}`).join(", ")}`;
+      }
       const wsum = people.weather.summary(), wells = people.works.filter(w => w.kind === 4 && (w.prog ?? 1) >= 1 && w.state > 0.2).length;
       line += `\n${"".padEnd(16)} weather: soil ${wsum.mean.toFixed(2)} wet, ${wsum.drought} patches in drought (${people.weather.stats.droughtDays} patch-days so far), ${wells} wells standing`;
       line += `\n${"".padEnd(16)} land: ${known.size} of ${r.deposits.length} deposits found${byKind.size ? ` (${[...byKind].sort((a, b) => a[0] - b[0]).map(([k, n]) => `${MATS[k].name.replace(/ ore$/, "")} ${n}`).join(", ")})` : ""}, ${rs.exhausted} dug out | wood cut ${Math.round(rs.cut)} loads, ${rs.felled} trees felled, ${rs.regrown} grown back | forest left around camps ${mean(people.bands.map(b => r.forestLeft(b.x, b.y, 16))).toFixed(2)}`;
@@ -130,6 +135,7 @@ if (people && summary) {
     ideas: IDEAS.filter(d => !d.start && people.ideas[d.id].knowers > 0).map(d => d.name).join("|"),
     buildings: people.stats.buildings.built, upgrades: people.stats.buildings.upgrades,
     pots: people.stats.pots.made, dietMean: +mean(people.people.filter(p => people.age(p) >= 5).map(p => dietScore(p))).toFixed(3), illnessDeaths: people.stats.causes.get("illness") ?? 0,
+    towns: people.villages.filter(v => !v.abandoned && v.tier >= 2).length, maxSettlement: Math.max(0, ...people.villages.filter(v => !v.abandoned).map(v => v.pop)), maxEra: Math.max(0, ...people.cultures.map(c => c.age)), chiefs: people.villages.filter(v => !v.abandoned && v.chief).length,
     droughtDays: people.weather.stats.droughtDays, wells: people.works.filter(w => w.kind === 4 && (w.prog ?? 1) >= 1 && w.state > 0.2).length,
     felled: people.resources.stats.felled, regrown: people.resources.stats.regrown, found: people.resources.stats.found, exhausted: people.resources.stats.exhausted,
     secs: +((performance.now() - tr) / 1000).toFixed(1),

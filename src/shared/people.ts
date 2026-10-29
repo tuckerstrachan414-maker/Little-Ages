@@ -20,7 +20,7 @@ export type Bubble = (typeof Bubble)[keyof typeof Bubble];
 
 /** Per person in each tick: id, x, y, dir (0 south, 1 east, 2 north, 3 west), anim, flags, bubble, mood, carrier id. */
 export const PERSON_STRIDE = 9;
-export const PFlag = { Carrying: 1, Spear: 2, Sling: 4, Wood: 8, Injured: 16, Sad: 32, Happy: 64, Selected: 128, Pregnant: 256, Meat: 512, Leader: 1024 } as const;
+export const PFlag = { Carrying: 1, Spear: 2, Sling: 4, Wood: 8, Injured: 16, Sad: 32, Happy: 64, Selected: 128, Pregnant: 256, Meat: 512, Leader: 1024, Chief: 2048 } as const;
 
 export type Stage = "baby" | "toddler" | "child" | "teen" | "adult" | "elder";
 export type Wear = "loin" | "wrap" | "tunic" | "dress" | "furs";
@@ -64,7 +64,7 @@ export interface WorkSnap {
   A village, a gathering of bands camped together, or the ruins of a village nobody lives in, for the map's labels.
   `bands` are the names of the bands living or camped there; `color` is the first band's.
 */
-export interface VillageSnap { id: number; kind: "village" | "gathering" | "ruins"; name: string; gloss: string; x: number; y: number; pop: number; bands: string[]; color: string; band: number; }
+export interface VillageSnap { id: number; kind: "village" | "gathering" | "ruins"; name: string; gloss: string; x: number; y: number; pop: number; bands: string[]; color: string; band: number; /** hamlet 0, village 1, town 2, city 3 */ tier: number; }
 
 /**
   Something that happened. `sig` (0..1) is how much it matters, weighed from what it was and how rare it is

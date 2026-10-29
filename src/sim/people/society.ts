@@ -23,6 +23,7 @@ import { layoutCamp, recountPits, hutStands, stakeDays, leaveBehind, pitFood, hu
 import { villagesDay, noteSite, friendly, roomFor, tiesTo, VILLAGE_R, type Village, type Gathering, type Notable } from "./villages.ts";
 import { Resources, type Deposit } from "../resources.ts";
 import { Weather } from "../weather.ts";
+import { settlementsDay, isChief } from "./settlements.ts";
 import { buildingsNear, standing } from "../buildings/build.ts";
 import { WELLS } from "../buildings/wants.ts";
 import { Mat, MATS, MAT_COUNT, isFood } from "../economy/goods.ts";
@@ -938,6 +939,7 @@ export class Society {
     for (const b of this.bands) problemsDay(this, b);
     for (const b of this.bands.slice()) this.bandDay(b);
     villagesDay(this);
+    settlementsDay(this);
     /* carcasses spoil, and scavengers find them */
     for (const c of this.carcasses) { const T = this.tempC(c.x, c.y); c.meat *= T > 15 ? 0.6 : T > 5 ? 0.75 : T > -5 ? 0.92 : 0.98; for (const h of this.herdsNear(c.x, c.y, 20)) if (h.sp === Species.Wolf || h.sp === Species.Bear) { const eat = Math.min(c.meat, 6 * h.n); c.meat -= eat; h.hunger = Math.max(0, h.hunger - 0.3); } }
     this.carcasses = this.carcasses.filter(c => c.meat > 1);
@@ -1190,7 +1192,8 @@ export class Society {
       const danger = q.mem.some(m => m.k === Mem.Attacked && this.time - m.t < DAY_SECONDS * 4) ? 0.3 : 0;
       const push = Math.min(1, 0.65 * thin + 0.35 * short + danger), pull = mine.length ? Math.min(1, bestV / Math.max(4, here + 4)) : 0;
       q.moveWish = Math.min(1, q.moveWish * 0.35 + 0.65 * push * (0.55 + 0.45 * pull) * (0.8 + q.traits[4] * 0.4) * hold);
-      const wt = 0.5 + q.prestige + q.traits[3] * 0.4;
+      /* the one a village listens to weighs more in whether it stays or goes */
+      const wt = (0.5 + q.prestige + q.traits[3] * 0.4) * (isChief(this, q) ? 1.5 : 1);
       wAll += wt;
       if (q.moveWish > 0.4 && pull > 0.35) {
         wFor += wt; if (wt > leadW) { leadW = wt; lead = q; }
@@ -1455,6 +1458,7 @@ export class Society {
       if (p.mood < -0.25) flags |= PFlag.Sad; else if (p.mood > 0.45) flags |= PFlag.Happy;
       if (p.id === this.selected) flags |= PFlag.Selected;
       if (this.bandById.get(p.band)?.respected === p.id) flags |= PFlag.Leader;
+      if (isChief(this, p)) flags |= PFlag.Chief;
       if (p.pregnantBy && this.time > p.due - YEAR * 0.45) flags |= PFlag.Pregnant;
       out[o] = p.id; out[o + 1] = p.x; out[o + 2] = p.y; out[o + 3] = p.dir; out[o + 4] = p.anim; out[o + 5] = flags;
       out[o + 6] = this.time < p.bubbleUntil ? p.bubble : 0; out[o + 7] = p.mood; out[o + 8] = p.carrier;

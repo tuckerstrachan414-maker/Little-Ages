@@ -280,8 +280,9 @@ export class PeopleLayer {
       const [sx, sy] = cam.toScreen(v.x, v.y);
       if (sx < -120 || sy < -30 || sx > cam.vw + 120 || sy > cam.vh + 60) continue;
       const village = v.kind === "village", ruins = v.kind === "ruins";
-      const label = ruins ? `ruins of ${v.name}` : village ? (z >= 1.5 ? `${v.name} \u00b7 ${v.pop}` : v.name) : `gathering at ${v.name}`;
-      ctx.font = `${village ? 700 : 600} ${village ? vfs : fs}px "Pixelify Sans", "Silkscreen", monospace`;
+      const town = village && (v.tier ?? 0) >= 2, hamlet = village && (v.tier ?? 0) === 0;
+      const label = ruins ? `ruins of ${v.name}` : village ? (z >= 1.5 ? `${hamlet ? "" : town ? "\u2302\u2302\u2302 " : ""}${v.name} \u00b7 ${v.pop}` : v.name) : `gathering at ${v.name}`;
+      ctx.font = `${village && !hamlet ? 700 : 600} ${village && !hamlet ? (town ? vfs + Math.round(2 * dpr) : vfs) : fs}px "Pixelify Sans", "Silkscreen", monospace`;
       const w = ctx.measureText(label).width, pad = 6 * dpr, h = (village ? vfs : fs) + 5 * dpr;
       const bw = Math.round(w + pad * 2), bh = Math.round(h), bx = Math.round(sx - w / 2 - pad);
       /* signs close together at world zoom: lift the later one clear, and leave out a tag or a ruin that still will not fit */

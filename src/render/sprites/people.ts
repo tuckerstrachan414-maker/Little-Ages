@@ -52,7 +52,7 @@ const MAX = 6000;
 
 /** A person sprite: feet at the bottom center of the canvas (one transparent pixel row for the outline). */
 export function personSprite(l: Look, anim: number, frame: number, view: View, flags: number, load: number): Drawn {
-  const key = `${l.id}|${l.stage}|${l.wear}|${l.style}|${(l.gray * 6) | 0}|${anim}|${frame}|${view}|${flags & (PFlag.Sling | PFlag.Spear | PFlag.Pregnant | PFlag.Sad | PFlag.Happy | PFlag.Wood | PFlag.Carrying | PFlag.Meat | PFlag.Injured | PFlag.Leader)}|${load}`;
+  const key = `${l.id}|${l.stage}|${l.wear}|${l.style}|${(l.gray * 6) | 0}|${anim}|${frame}|${view}|${flags & (PFlag.Sling | PFlag.Spear | PFlag.Pregnant | PFlag.Sad | PFlag.Happy | PFlag.Wood | PFlag.Carrying | PFlag.Meat | PFlag.Injured | PFlag.Leader | PFlag.Chief)}|${load}`;
   let d = cache.get(key);
   if (d) return d;
   if (cache.size > MAX) { let n = 0; for (const k of cache.keys()) { cache.delete(k); if (++n > MAX / 4) break; } }
@@ -332,10 +332,15 @@ function personGrid(l: Look, anim: number, f: number, view: View, flags: number,
   }
 
   /* the one the band listens to wears a feather in the hair, set at the back of the head */
-  if (flags & PFlag.Leader && (st === "adult" || st === "elder")) {
+  if (flags & (PFlag.Leader | PFlag.Chief) && (st === "adult" || st === "elder")) {
     const quill = "#8a6a3a", vane = "#f2ead6", tipC = "#b5502a";
     if (side) { put(g, hx, hY - 1, quill); put(g, hx - 1, hY - 2, vane); put(g, hx - 1, hY - 3, vane); put(g, hx - 2, hY - 4, tipC); }
     else { const fx = hx + hw - (back ? 2 : 1); put(g, fx, hY - 1, quill); put(g, fx, hY - 2, vane); put(g, fx + 1, hY - 3, vane); put(g, fx + 1, hY - 4, tipC); }
+    /* the one a whole village listens to wears a second, taller feather */
+    if (flags & PFlag.Chief) {
+      if (side) { put(g, hx + 1, hY - 2, quill); put(g, hx, hY - 3, vane); put(g, hx, hY - 4, vane); put(g, hx, hY - 5, vane); put(g, hx - 1, hY - 6, tipC); }
+      else { const fx = hx + hw - (back ? 3 : 2); put(g, fx, hY - 2, quill); put(g, fx, hY - 3, vane); put(g, fx, hY - 4, vane); put(g, fx + 1, hY - 5, vane); put(g, fx + 1, hY - 6, tipC); }
+    }
   }
 
   /* loads: a basket on the head (berries, roots, fish), meat over the shoulder, a bundle of firewood */

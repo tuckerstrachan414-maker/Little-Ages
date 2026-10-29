@@ -29,9 +29,9 @@ export const CATEGORIES = [
   { key: "hunt", label: "Hunts", kinds: ["kill"] },
   { key: "bands", label: "Bands and leaders", kinds: ["move", "split", "leave", "merge", "leader", "contest"] },
   { key: "ties", label: "Friends and feuds", kinds: ["refused", "feud", "fight", "peace", "mocked", "gift"] },
-  { key: "ideas", label: "Discoveries", kinds: ["discover", "spread", "lost", "fireout", "ember", "weir", "sow", "harvest", "pots"] },
+  { key: "ideas", label: "Discoveries", kinds: ["discover", "spread", "lost", "fireout", "ember", "weir", "sow", "harvest", "pots", "age"] },
   { key: "meet", label: "Meetings", kinds: ["contact"] },
-  { key: "villages", label: "Villages and gatherings", kinds: ["hut", "pit", "field", "seed", "gather", "disperse", "village", "villagegrow", "abandon", "return", "well", "granary", "kiln", "pen", "upgrade", "built"] },
+  { key: "villages", label: "Villages and gatherings", kinds: ["hut", "pit", "field", "seed", "gather", "disperse", "village", "villagegrow", "abandon", "return", "well", "granary", "kiln", "pen", "upgrade", "built", "communal", "chief", "tier"] },
   { key: "land", label: "Herds and the land", kinds: ["found", "exhausted", "regrown", "drought"] },
 ] as const;
 export type CategoryKey = (typeof CATEGORIES)[number]["key"];
@@ -45,7 +45,7 @@ export const KIND_COLOR: Record<string, string> = {
   discover: "#f2e266", spread: "#c7d96a", lost: "#8a7a9a", fireout: "#7a5a4a", ember: "#e8743a", weir: "#5aa8c8", sow: "#9ac25a", harvest: "#e8c25a",
   hut: "#c6a25c", pit: "#9a7650", field: "#b8c25a", seed: "#e0b84a", gather: "#e89a6a", disperse: "#c8a090", village: "#ffd08a", villagegrow: "#e8bc78", abandon: "#8a7a6a", return: "#d0b07a",
   found: "#b5704a", exhausted: "#7a6a5a", regrown: "#6fae5a", drought: "#d8b25a",
-  pots: "#c87a4a", well: "#5a9ac8", granary: "#d2a860", kiln: "#c06a3a", pen: "#a8905a", upgrade: "#c8a070", built: "#b89a6a",
+  pots: "#c87a4a", communal: "#e0b060", chief: "#f2c84a", tier: "#ffd08a", age: "#f6e27a", well: "#5a9ac8", granary: "#d2a860", kiln: "#c06a3a", pen: "#a8905a", upgrade: "#c8a070", built: "#b89a6a",
 };
 
 export interface Filter {

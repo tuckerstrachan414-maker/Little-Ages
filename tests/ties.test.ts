@@ -372,7 +372,8 @@ describe("a few years of sharing, quarrels and leading", () => {
     expect(lead.leads).toBeGreaterThanOrEqual(0);
     for (const f of s.feuds) {
       const p = personDetail(s, f.a);
-      if (p) expect(p.feuds.some(x => x.id === f.b)).toBe(true);
+      /* a feud that has cooled, or whose other side died today, is dropped at the day's pass; until then the card leaves it out */
+      if (p && s.byId.has(f.b) && f.heat >= 0.1) expect(p.feuds.some(x => x.id === f.b)).toBe(true);
     }
   });
   it("draws the gold threads of whom people listen to", () => {

@@ -319,7 +319,7 @@ export class PeopleUI {
     if (key !== this.renderedKey) {
       this.renderedKey = key;
       t.innerHTML = `${this.chrome()}
-        <div class="nm">The ${esc(d.name)}</div><div class="sub">A band of the ${esc(d.people)} people, ${d.village ? `living in the village of ${esc(d.village)}` : `camped at ${esc(d.camp)}`}</div>
+        <div class="nm">The ${esc(d.name)}</div><div class="sub">A band of the ${esc(d.people)} people, in the ${esc(d.age)}, ${d.village ? `living in the village of ${esc(d.village)}` : `camped at ${esc(d.camp)}`}</div>
         <p class="stats"></p><p class="voices"></p>${d.needs ? `<p class="needs-b"><b>Short of:</b> ${esc(d.needs)}.</p>` : ""}${d.homes ? `<h4>Homes and stores</h4><p class="homes"></p>` : ""}<div class="needs"></div><h4>Hearths</h4><div class="hearths"></div><p class="sharing"></p>${d.feuds.length ? `<h4>Bad blood</h4><ul class="mem feuds-b"></ul>` : ""}<h4>Know-how</h4><ul class="mem ideas-b"></ul>${d.works.length ? `<h4>Weirs and plots</h4><ul class="mem works-b"></ul>` : ""}<h4>People</h4><div class="members"></div><div class="chips"><button type="button" data-act="journal">Journal</button></div>${d.events.length ? `<h4>Lately</h4><ul class="mem">${d.events.map(e => `<li>${esc(e.text)} <em>${when(e.t, this.time)}</em></li>`).join("")}</ul>` : ""}`;
       this.bindChrome(t);
       t.querySelector<HTMLButtonElement>("[data-act=journal]")!.onclick = () => this.cb.journal({ band: d.id, name: `The ${d.name}`, note: "their story" });
@@ -356,7 +356,7 @@ export class PeopleUI {
   }
 
   private renderVillage(t: HTMLElement, d: VillageDetail): void {
-    const key = `v${d.id}|${d.pop}|${d.events.length}|${d.bands.map(b => b.id + ":" + (b.leader?.id ?? 0)).join()}|${d.huts}|${d.building}|${d.ruins}|${d.pits}|${d.fields.map(f => f.crop + f.n).join()}|${d.listened?.id}|${d.abandoned}|${d.empty}`;
+    const key = `v${d.id}|${d.pop}|${d.events.length}|${d.bands.map(b => b.id + ":" + (b.leader?.id ?? 0)).join()}|${d.huts}|${d.building}|${d.ruins}|${d.pits}|${d.fields.map(f => f.crop + f.n).join()}|${d.listened?.id}|${d.chief?.id}|${d.tier}|${d.call}|${d.abandoned}|${d.empty}`;
     if (key === this.renderedKey) return;
     this.renderedKey = key;
     const founder = d.founder.alive ? `<button type="button" class="lnk" data-pin="${d.founder.id}">${esc(d.founder.name)}</button>` : esc(d.founder.name);
@@ -364,9 +364,9 @@ export class PeopleUI {
     const fields = d.fields.map(f => `${f.n} ${f.n === 1 ? "field" : "fields"} of ${esc(f.crop)}${f.tame >= 0.25 ? `, the seed grown ${f.tame >= 0.5 ? "tame" : "plump"} from years of sowing` : ""}`);
     const built = [`${d.huts} ${d.huts === 1 ? "hut" : "huts"}${d.building ? `, ${d.building} going up` : ""}${d.ruins ? `, ${d.ruins} fallen in` : ""}`, d.pits ? `${d.pits} storage ${d.pits === 1 ? "pit" : "pits"} ${pitWords(d.pitDays)}` : "", ...fields, d.weirs ? `${d.weirs} fish ${d.weirs === 1 ? "weir" : "weirs"}` : ""].filter(Boolean);
     t.innerHTML = `${this.chrome()}
-      <div class="nm">${esc(d.name)}</div><div class="sub">"${esc(d.gloss)}": a village of the ${esc(d.people)}, named ${esc(d.why)}</div>
+      <div class="nm">${esc(d.name)}</div><div class="sub">"${esc(d.gloss)}": a ${["hamlet", "village", "town", "city"][d.tier] ?? "village"} of the ${esc(d.people)}, named ${esc(d.why)}</div>
       <p class="stats">${state} It began in ${dateOf(d.founded)}, when ${esc(d.story)}; ${founder} raised the first hut.</p>
-      ${d.bands.length ? `<h4>${d.bands.length === 1 ? "The band" : "The bands"} living here</h4><ul class="mem vbands">${d.bands.map(b => `<li><i class="sw" style="background:${b.color}"></i><button type="button" class="lnk" data-band="${b.id}">The ${esc(b.name)}</button>, ${b.pop} people${b.leader ? `, led by <button type="button" class="lnk" data-pin="${b.leader.id}">${esc(b.leader.name)}</button>` : ""}</li>`).join("")}</ul>${d.bands.length > 1 && d.listened ? `<p class="voices">Of all the grown-ups here, the most listen to <button type="button" class="lnk" data-pin="${d.listened.id}">${esc(d.listened.name)}</button> (${d.listened.n}).</p>` : ""}` : ""}
+      ${d.bands.length ? `<h4>${d.bands.length === 1 ? "The band" : "The bands"} living here</h4><ul class="mem vbands">${d.bands.map(b => `<li><i class="sw" style="background:${b.color}"></i><button type="button" class="lnk" data-band="${b.id}">The ${esc(b.name)}</button>, ${b.pop} people${b.leader ? `, led by <button type="button" class="lnk" data-pin="${b.leader.id}">${esc(b.leader.name)}</button>` : ""}</li>`).join("")}</ul>${d.chief ? `<p class="voices">Its chief is <button type="button" class="lnk" data-pin="${d.chief.id}">${esc(d.chief.name)}</button>: ${d.chief.n} of the grown-ups here go along with ${esc(d.chief.name)}'s word${d.call ? `, and the ${esc(d.call)} ${esc(d.chief.name)} called for is going up` : ""}.</p>` : d.bands.length > 1 && d.listened ? `<p class="voices">Of all the grown-ups here, the most listen to <button type="button" class="lnk" data-pin="${d.listened.id}">${esc(d.listened.name)}</button> (${d.listened.n}), though not enough of them to call ${esc(d.listened.name)} chief.</p>` : ""}` : ""}
       <h4>What they have built and put by</h4><ul class="mem">${built.map(x => `<li>${x}</li>`).join("")}</ul>
       <div class="chips"><button type="button" data-act="journal">Journal</button></div>
       ${d.events.length ? `<h4>Lately</h4><ul class="mem">${d.events.map(e => `<li>${esc(e.text)} <em>${when(e.t, this.time)}</em></li>`).join("")}</ul>` : ""}`;
