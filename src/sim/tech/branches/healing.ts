@@ -1,9 +1,13 @@
 import { Branch, Era, branch } from "../defs.ts";
+import { St, Skill } from "../../people/person.ts";
+import { Anim, Bubble } from "../../../shared/people.ts";
 
 const E = Era, n = branch(Branch.Healing);
 /** Healing: what people do for the sick and hurt, from herbs to surgery. */
 export const HEALING = [
-  n("herb-lore", "herb lore", "which herbs ease fever, pain and wounds", E.OldStone, []),
+  n("herb-lore", "herb lore", "which herbs ease fever, pain and wounds", E.OldStone, [], { title: "Herbs that heal", during: [{ step: St.Tend, rank: 1 }, { step: St.Gather, rank: 5 }], problems: { Illness: 0.8 },
+    story: "{name} of the {band}, {context}, tried a bitter root the old people spoke of on a fever that would not break; by morning it had. {She} is learning which plants heal.",
+    age: 14, child: 0.03, watch: 0.006, show: 0.4, skill: Skill.Gather, worth: 0.7, spark: 0.003, anim: Anim.Sit, icon: Bubble.Heart, place: [["bitter", "root"], "Bitter Root"], active: true }),
   n("bone-setting", "setting bones", "how to set a broken bone", E.NewStone, ["herb-lore"]),
   n("midwifery", "midwifery", "how to help a birth", E.NewStone, ["herb-lore"]),
   n("wound-binding", "binding wounds", "how to bind a wound", E.NewStone, ["hides"]),

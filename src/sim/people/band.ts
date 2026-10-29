@@ -64,6 +64,8 @@ export interface Band {
   goods: Float32Array;
   /** when pots last broke at the fire (0 if never) */
   broke: number;
+  /** each household's own things, by Mat: its pots, wool, herbs */
+  hgoods: Map<number, Float32Array>;
   /** the band's own seed for each crop it sows: how tame the line has grown, from 0 (wild) up */
   seed: Record<string, number>;
   /** what the band is short of, 0..1 by Problem, worked out each morning (see tech/problems.ts) */

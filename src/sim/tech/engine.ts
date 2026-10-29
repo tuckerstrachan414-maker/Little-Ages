@@ -30,6 +30,10 @@ export function genericPressure(s: Society, p: Person, d: TechDef, c: Ctx): numb
 const CTX_WORDS: [keyof Ctx, string][] = [
   ["full", "with more in the patch than {she} could carry"], ["poor", "with little to show for the day"], ["roots", "digging for roots in hard ground"],
   ["river", "at the river's shallows"], ["big", "with more meat from the kill than anyone could eat"],
+  ["clayNear", "where the bank was all clay"], ["damp", "in ground that sweated damp"], ["overflow", "with more to put by than the pit would take"], ["broke", "with half the batch cracked in the ashes"],
+  ["grain", "with hard grain to cook"], ["pots", "with a pot on the fire"], ["sick", "sitting with the sick"],
+  ["young", "with the kid of the animal {she} had killed bleating at {her} feet"], ["kept", "with animals kept so long they came when called"], ["wolves", "with wolves howling close"], ["lost", "after an animal had wandered off in the night"],
+  ["missed", "after a throw that fell short"], ["farWater", "with the water a long walk off"], ["slow", "with the harvest going slowly"],
 ];
 const SEASON_WORDS = ["in spring", "in the heat of summer", "in autumn", "in the dead of winter"];
 
@@ -44,7 +48,7 @@ export function fillStory(s: Society, p: Person, d: TechDef, c: Ctx, template: s
   const b = s.band(p), she = p.sex === "f" ? "she" : "he";
   const key = d.problems ? strongest(b, d.problems) : null;
   const problem = key ? PROBLEM_WORDS[key] : "";
-  const ctx = CTX_WORDS.filter(([k]) => c[k]).map(([, w]) => w.replace("{she}", she)).join(", ");
+  const ctx = CTX_WORDS.filter(([k]) => c[k]).map(([, w]) => w.replace("{she}", she).replace("{her}", p.sex === "f" ? "her" : "his")).join(", ");
   const vars: Record<string, string> = {
     name: p.name, band: b.name, she, She: she === "she" ? "She" : "He", her: p.sex === "f" ? "her" : "his", herObj: p.sex === "f" ? "her" : "him",
     problem, context: ctx, season: SEASON_WORDS[s.season], where: whereWord(s, p.x, p.y), how: d.how, dir: compass(p.x - b.x, p.y - b.y),

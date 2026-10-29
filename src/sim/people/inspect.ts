@@ -1,4 +1,6 @@
 import { defOf } from "../buildings/build.ts";
+import { dietWords } from "../economy/diet.ts";
+import { Mat } from "../economy/goods.ts";
 import { WALL_WORDS } from "../buildings/defs.ts";
 import { DAY_SECONDS, DAYS_PER_SEASON, DAYS_PER_YEAR, SEASON_NAMES, SPECIES_NAMES } from "../../shared/types.ts";
 import type { BandDetail, BandFeud, Feuding, Kin, PersonDetail, VillageDetail } from "../../shared/protocol.ts";
@@ -33,7 +35,7 @@ const GOAL_WORDS: Partial<Record<number, string>> = {
   [Goal.Kindle]: "Lighting the fire", [Goal.Ember]: "Fetching fire", [Goal.Show]: "Showing how", [Goal.Learn]: "Learning", [Goal.Dry]: "Drying meat",
   [Goal.Build]: "Building a weir", [Goal.Sow]: "Sowing",
   [Goal.Hut]: "Raising a hut", [Goal.Pit]: "Digging a storage pit", [Goal.Store]: "Putting food by", [Goal.Fetch]: "Fetching food from the pit",
-  [Goal.Quarry]: "Fetching clay and stone", [Goal.Construct]: "Building",
+  [Goal.Quarry]: "Fetching clay and stone", [Goal.Construct]: "Building", [Goal.Pot]: "Making pots",
 };
 const TRAIT_WORDS: [string, string][] = [
   ["timid", "brave"], ["cold", "kind"], ["generous", "greedy"], ["easygoing", "ambitious"],
@@ -120,7 +122,7 @@ export function personDetail(s: Society, id: number): PersonDetail | null {
     traits: traits.slice(0, 3).map(t => ({ word: t.word, v: t.v, key: t.key })),
     skills: p.skills.map((v, i) => ({ name: SKILL_NAMES[i], v })),
     knows: IDEAS.filter(d => p.know[d.id] > 0).map(d => ({ id: d.id, name: d.name, m: p.know[d.id], how: howKnown(s, p, d.id), start: d.start })),
-    looks: s.describeLooks(p), look: s.look_(p),
+    looks: s.describeLooks(p), look: s.look_(p), diet: age < 2 ? "" : dietWords(p),
     mother: kin(s, p, p.mother), father: kin(s, p, p.father), partner: kin(s, p, p.partner),
     children: p.children.map(c => kin(s, p, c)!).filter(Boolean), siblings, friends, rivals, memories,
     pregnant: !!p.pregnantBy, carrying, prestige: p.prestige, respected: b.respected === p.id,
@@ -171,8 +173,9 @@ function workText(s: Society, band: number, w: Work): string {
 /** Where someone's household lives, in words, and the days of food in its pit. */
 function homeOfPerson(s: Society, p: Person, b: Band): { home: string; pit: number } {
   const head = homeOf(p, s.byId, s.time), hut = hutOf(s, b, head), pit = pitOf(s, b, head);
-  const home = b.moving ? "on the move" : !hut ? `a ${s.cultures[b.culture].shelter === "leanto" ? "lean-to" : s.cultures[b.culture].shelter === "tent" ? "hide tent" : "dome of grass"}` : (hut.prog ?? 1) < 1 ? `a ${hutWords(hut)} going up, ${Math.round((hut.prog ?? 0) * 100)}% done` : hut.state < 0.2 ? `a fallen-in ${hutWords(hut)}` : `a ${hutWords(hut)}${(hut.size ?? 1) > 1 ? ` of ${hut.size} bays` : ""}`;
-  return { home, pit: pit ? pitFood(pit) / householdAppetite(s, b, head) : -1 };
+  const home = b.moving ? "on the move" : !hut ? `a ${s.cultures[b.culture].shelter === "leanto" ? "lean-to" : s.cultures[b.culture].shelter === "tent" ? "hide tent" : "dome of grass"}` : (hut.prog ?? 1) < 1 ? `a ${hutWords(hut)} going up, ${Math.round((hut.prog ?? 0) * 100)}% done` : hut.state < 0.2 ? `a fallen-in ${hutWords(hut)}` : `a ${hutWords(hut)}${(hut.size ?? 1) > 1 ? ` of ${hut.size} bays` : ""}${hut.up ? ", being rebuilt" : ""}`;
+  const pots = Math.floor(b.hgoods.get(head)?.[Mat.Pots] ?? 0);
+  return { home: pots > 0 ? `${home}, with ${pots} ${pots === 1 ? "pot" : "pots"}` : home, pit: pit ? pitFood(pit) / householdAppetite(s, b, head) : -1 };
 }
 /** "spring of year 4" */
 export const seasonYear = (t: number) => `${SEASON_NAMES[Math.floor(t / DAY_SECONDS / DAYS_PER_SEASON) % 4].toLowerCase()} of year ${Math.floor(t / DAY_SECONDS / DAYS_PER_YEAR) + 1}`;

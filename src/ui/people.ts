@@ -255,7 +255,7 @@ export class PeopleUI {
   }
   private familyView(d: PersonDetail): HTMLElement {
     const box = el("div", "family");
-    box.append(el("p", "looks", esc(d.looks)));
+    box.append(el("p", "looks", esc(d.looks) + (d.diet ? ` ${esc(d.name)} ${esc(d.diet)}.` : "")));
     const sec = (title: string, list: (Kin | null)[]) => { const l = list.filter(Boolean); if (!l.length) return; box.append(el("h4", "", title)); box.append(this.kinRow(l)); };
     sec("Parents", [d.mother, d.father]);
     sec(d.partner ? (d.sex === "f" ? "Husband" : "Wife") : "Partner", [d.partner]);

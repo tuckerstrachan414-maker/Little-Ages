@@ -22,7 +22,7 @@ export const Goal = {
   Ask: 27, Fight: 28, Mediate: 29, Call: 30,
   Kindle: 31, Ember: 32, Show: 33, Learn: 34, Dry: 35, Build: 36, Sow: 37,
   Hut: 38, Pit: 39, Store: 40, Fetch: 41,
-  Quarry: 42, Construct: 43,
+  Quarry: 42, Construct: 43, Pot: 44,
 } as const;
 export type Goal = (typeof Goal)[keyof typeof Goal];
 
@@ -32,7 +32,7 @@ export const St = {
   Ask: 22, Fight: 23,
   Kindle: 24, Ember: 25, Dry: 26, Build: 27, Sow: 28,
   Raise: 29, Pit: 30, Store: 31, Fetch: 32,
-  Quarry: 33,
+  Quarry: 33, Shape: 34, Bake: 35,
 } as const;
 export type St = (typeof St)[keyof typeof St];
 
@@ -127,6 +127,12 @@ export interface Person {
   mood: number;
   /** how hungry childhood has been, 0..1 (stunts growth) */
   childHunger: number;
+  /** what they have been eating, as running shares of plant food, meat and fish, milk; and today's meals by kind, in days of food */
+  diet: Float32Array; dayDiet: Float32Array;
+  /** pots shaped and not yet fired, in hand */
+  raw: number;
+  /** when someone last sat with them while they were sick, and when that someone knew which herbs help */
+  tendedAt: number; herbsAt: number;
   injury: number; sick: number;
   /** what has been wearing their health down lately: hunger, thirst, cold, illness, injury */
   harm: number[];

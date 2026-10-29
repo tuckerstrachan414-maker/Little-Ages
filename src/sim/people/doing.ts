@@ -14,6 +14,13 @@ import { Work, emptyWeir, buildWeir, sow, resow, seedLine, cropAt, workById, wor
 import { raise, digPit, storeInPit, fetchFromPit, pitOf } from "./homes.ts";
 import { buildSpell, RAISE } from "../buildings/build.ts";
 import { Mat, MATS, isFood } from "../economy/goods.ts";
+import { hgoodsOf } from "./sharing.ts";
+import { Problem } from "../tech/problems.ts";
+import { techIx } from "../tech/tree.ts";
+import { Line } from "../buildings/defs.ts";
+import { standing } from "../buildings/build.ts";
+import { pitRoom, pitFood } from "./homes.ts";
+import { Biome } from "../../shared/types.ts";
 
 /*
   Doing things. Each plan is a list of steps (walk there, gather, walk back, put it in the
@@ -80,6 +87,8 @@ export function doStep(s: Society, p: Person, dt: number): void {
     case St.Sow: work(s, p, st, dt, Anim.Dig); break;
     case St.Raise: work(s, p, st, dt, Anim.Build); break;
     case St.Quarry: work(s, p, st, dt, Anim.Dig); break;
+    case St.Shape: work(s, p, st, dt, Anim.Shape); break;
+    case St.Bake: work(s, p, st, dt, Anim.Cook); break;
     case St.Pit: work(s, p, st, dt, Anim.Dig); break;
     case St.Store: work(s, p, st, dt, Anim.Gather); break;
     case St.Fetch: work(s, p, st, dt, Anim.Dig); break;
@@ -299,7 +308,9 @@ function work(s: Society, p: Person, st: Step, dt: number, anim: number): void {
       break;
     }
     case St.Knap: inspire(s, p, St.Knap); p.spear = 1; p.skills[Skill.Craft] = Math.min(1, p.skills[Skill.Craft] + 0.005); if (knows(p, Idea.Blades)) practice(p, Idea.Blades, 0.01); break;
-    case St.Cook: inspire(s, p, St.Cook); break;
+    case St.Cook: { const h = hearthOf(s, p), hg = hgoodsOf(s, p); inspire(s, p, St.Cook, { clayNear: s.resources.knownNear(b.culture, b.x, b.y, 20, "clay"), grain: h.plant > 0 && b.problems[Problem.Grain] > 0, pots: hg[Mat.Pots] >= 1 }); break; }
+    case St.Shape: shapePots(s, p, st); break;
+    case St.Bake: bakePots(s, p, st); break;
     case St.Kindle: kindle(s, p, st); break;
     case St.Ember: {
       /* at the other band's fire: they give a smoldering ember to carry home */
@@ -334,8 +345,8 @@ function work(s: Society, p: Person, st: Step, dt: number, anim: number): void {
       break;
     }
     case St.Quarry: quarry(s, p, st); break;
-    case St.Pit: digPit(s, p, st); break;
-    case St.Store: storeInPit(s, p, st); break;
+    case St.Pit: { digPit(s, p, st); const i = (st.y | 0) * s.w.w + (st.x | 0); inspire(s, p, St.Pit, { clayNear: s.resources.knownNear(b.culture, b.x, b.y, 20, "clay"), damp: s.w.biome[i] === Biome.Swamp || s.w.rain[i] > 160 }); break; }
+    case St.Store: { const w = workById(s, st.id); const overflow = !!w && w.foods ? pitRoom(w) - pitFood(w) < 4 : false; storeInPit(s, p, st); inspire(s, p, St.Store, { overflow, clayNear: s.resources.knownNear(b.culture, b.x, b.y, 20, "clay") }); break; }
     case St.Fetch: fetchFromPit(s, p, st); break;
     case St.Sow: {
       /* the seed comes from the household's own store of plant food, or what it put by in its pit */
@@ -691,6 +702,7 @@ function tend(s: Society, p: Person, st: Step, dt: number): void {
   if (Math.hypot(q.x - p.x, q.y - p.y) > 1.6) { moveToward(s, p, q.x + 0.9, q.y, speedOf(s, p, false) * dt, 0.6); p.anim = Anim.Walk; return; }
   p.anim = Anim.Sit; face(p, q.x, q.y);
   q.injury = Math.max(0, q.injury - 0.0008 * dt);
+  q.tendedAt = s.time; if (knows(p, HERBS())) q.herbsAt = s.time;
   /* carers bring water and food to the sick */
   q.water = Math.max(q.water, 0.7);
   if (q.food < 0.8 && s.eatFromStore(q, s.band(q), 0.02 * dt) <= 0 && q.band === p.band) {
@@ -699,5 +711,36 @@ function tend(s: Society, p: Person, st: Step, dt: number): void {
     if (mine !== theirs && storeFood(mine) > 0.5 && pass(mine, theirs, 0.02 * dt) > 0) eat(s, q, s.band(q), 0.02 * dt);
   }
   const r = s.rel(q, p.id); r.op = Math.min(1, r.op + 0.004 * dt);
-  if (st.t + dt >= st.dur) s.remember(q, Mem.Helped, p.id, 0.35);
+  if (st.t + dt >= st.dur) { s.remember(q, Mem.Helped, p.id, 0.35); if (q.sick > 0) inspire(s, p, St.Tend, { sick: true }); }
 }
+/** Clay shaped into pots at the hearth: three lumps to a pot, as many as the clay in hand and at camp allows. */
+function shapePots(s: Society, p: Person, st: Step): void {
+  const b = s.band(p);
+  let clay = p.carryKind === Mat.Clay ? p.carryAmt : 0;
+  const want = Math.min(st.a || 4, Math.floor((clay + b.goods[Mat.Clay]) / 3));
+  if (want <= 0) return;
+  let need = want * 3;
+  const fromHand = Math.min(clay, need); if (fromHand > 0) { p.carryAmt -= fromHand; need -= fromHand; if (p.carryAmt <= 1e-6) { p.carryAmt = 0; p.carryKind = Food.None; } }
+  b.goods[Mat.Clay] = Math.max(0, b.goods[Mat.Clay] - need);
+  p.raw += want;
+  practice(p, POTTERY(), 0.02);
+  p.skills[Skill.Craft] = Math.min(1, p.skills[Skill.Craft] + 0.003);
+}
+/** Shaped pots baked in the ashes of the fire, or in a kiln: some crack, many more in the open fire. */
+function bakePots(s: Society, p: Person, st: Step): void {
+  const b = s.band(p);
+  if (p.raw <= 0) return;
+  const kiln = st.id ? workById(s, st.id) : undefined, inKiln = !!kiln && kiln.kind === Line.Kiln && standing(kiln);
+  let broke = 0;
+  for (let k = 0; k < p.raw; k++) if (s.rng.chance(inKiln ? 0.15 : 0.4)) broke++;
+  const whole = p.raw - broke;
+  p.raw = 0;
+  const hg = hgoodsOf(s, p), first = hg[Mat.Pots] < 1 && !b.members.some(id => { const g = b.hgoods.get(id); return !!g && g[Mat.Pots] >= 1; });
+  hg[Mat.Pots] += whole;
+  s.stats.pots.made += whole; s.stats.pots.broke += broke; if (inKiln) s.stats.pots.kiln += whole;
+  if (broke > 0) b.broke = s.time;
+  if (inKiln && kiln) { kiln.opened = s.time; practice(p, KILN(), 0.02); } else practice(p, POTTERY(), 0.01);
+  if (first && whole > 0) s.event("pots", Bubble.Pot, `${p.name} of the ${b.name} drew the first pots from the ${inKiln ? "kiln" : "ashes of the fire"} at ${b.siteName}: ${whole} came out whole${broke ? `, ${broke} cracked` : ""}. Food will boil now, and keep.`, p.x, p.y, [p.id], b.id, s.stats.pots.made === whole ? 1 : 0);
+  inspire(s, p, St.Bake, { broke: broke > 0, clayNear: s.resources.knownNear(b.culture, b.x, b.y, 20, "clay") });
+}
+const POTTERY = () => techIx("pottery"), KILN = () => techIx("kiln-firing"), HERBS = () => techIx("herb-lore");

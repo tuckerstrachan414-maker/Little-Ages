@@ -71,6 +71,8 @@ export interface PersonDetail {
   /** what they know how to do: how well (0..1), and how they came to know it ("worked it out", "from her mother, Ama") */
   knows: { id: number; name: string; m: number; how: string; start: boolean }[];
   looks: string; look: Look;
+  /** what they have been eating ("eats mostly meat and fish; little plant food") */
+  diet: string;
   mother: Kin | null; father: Kin | null; partner: Kin | null;
   children: Kin[]; siblings: Kin[]; friends: Kin[]; rivals: Kin[];
   memories: { text: string; ago: number; v: number }[];

@@ -14,6 +14,12 @@ import { wants, nextMaterial, type Want } from "../buildings/wants.ts";
 import { needsOf, RAISE, OWNER } from "../buildings/build.ts";
 import { defIndex } from "../buildings/defs.ts";
 import { Mat, isFood } from "../economy/goods.ts";
+import { hgoodsOf } from "./sharing.ts";
+import { Problem } from "../tech/problems.ts";
+import { techIx } from "../tech/tree.ts";
+import { Line } from "../buildings/defs.ts";
+import { standing } from "../buildings/build.ts";
+const POTTERY = () => techIx("pottery"), HERBS = () => techIx("herb-lore");
 import type { Band } from "./band.ts";
 
 /*
@@ -238,7 +244,7 @@ export function decide(s: Society, p: Person, forced?: Goal): void {
       add({ g: Goal.Mediate, v: (0.55 + pm.f.heat * 0.5) * (0.6 + tr[1] * 0.6) * (1 - foodDrive * 0.4) / (1 + busy(Goal.Mediate) * 2), plan: () => [step(St.Go, 0, 0, pm.a.id), step(St.Talk, 0, 0, pm.a.id, 6, { a: 8, o: pm.b.id }), step(St.Go, 0, 0, pm.b.id), step(St.Talk, 0, 0, pm.b.id, 6, { a: 8, o: pm.a.id })], why: () => `${p.name} is trying to make peace between ${pm.a.name} and ${pm.b.name}, ${leader ? `as the one the ${b.name} listen to` : "as an elder they both respect"}. The feud began when ${pm.b.name} ${pm.f.cause}.`, icon: Bubble.Peace });
     }
     const sickOne = tendTarget(s, p);
-    if (sickOne) add({ g: Goal.Tend, v: sickOne.v / (1 + busy(Goal.Tend) * 1.2), plan: () => [step(St.Go, sickOne.q.x, sickOne.q.y, sickOne.q.id), step(St.Tend, 0, 0, sickOne.q.id, 14)], why: () => `${p.name} is looking after ${sickOne.q.name}, who is ${sickOne.q.sick > 0 ? "sick" : "hurt"}${sickOne.kin ? `, because family looks after family` : `, because ${she(p)} is kind-hearted`}.`, icon: Bubble.Heart });
+    if (sickOne) add({ g: Goal.Tend, v: sickOne.v * (knows(p, HERBS()) ? 1.3 : 1) / (1 + busy(Goal.Tend) * 1.2), plan: () => [step(St.Go, sickOne.q.x, sickOne.q.y, sickOne.q.id), step(St.Tend, 0, 0, sickOne.q.id, 14)], why: () => `${p.name} is looking after ${sickOne.q.name}, who is ${sickOne.q.sick > 0 ? "sick" : "hurt"}${sickOne.kin ? `, because family looks after family` : `, because ${she(p)} is kind-hearted`}.`, icon: Bubble.Heart });
   }
 
   /* --- showing someone how a thing is done --- */
@@ -254,7 +260,7 @@ export function decide(s: Society, p: Person, forced?: Goal): void {
   /* --- children: play, and tag along to learn --- */
   if ((st === "child" || (st === "teen" && age < 14)) && !dark) {
     add({ g: Goal.Play, v: 0.48 + (1 - tr[7]) * 0.14 + tr[5] * 0.16, plan: () => [step(St.Play, b.x + Math.cos(p.id * 7 + s.time / 60) * 3, b.y + Math.sin(p.id * 7 + s.time / 60) * 2.2, 0, 9)], why: () => playWhy(s, p), icon: Bubble.Sun });
-    const parent = [s.byId.get(p.mother), s.byId.get(p.father)].find(q => q && q.band === p.band && (q.goal === Goal.Gather || q.goal === Goal.Fish || q.goal === Goal.Snare || q.goal === Goal.Wood || q.goal === Goal.Craft || q.goal === Goal.Dry || q.goal === Goal.Sow || q.goal === Goal.Build || q.goal === Goal.Kindle || q.goal === Goal.Hut || q.goal === Goal.Pit || q.goal === Goal.Construct));
+    const parent = [s.byId.get(p.mother), s.byId.get(p.father)].find(q => q && q.band === p.band && (q.goal === Goal.Gather || q.goal === Goal.Fish || q.goal === Goal.Snare || q.goal === Goal.Wood || q.goal === Goal.Craft || q.goal === Goal.Dry || q.goal === Goal.Sow || q.goal === Goal.Build || q.goal === Goal.Kindle || q.goal === Goal.Hut || q.goal === Goal.Pit || q.goal === Goal.Construct || q.goal === Goal.Pot));
     if (parent && age >= 5) add({ g: Goal.Follow, v: 0.42 + tr[4] * 0.3, plan: () => [step(St.Follow, 0, 0, parent.id, 24)], why: () => `${p.name} is tagging along with ${her(p)} ${parent.id === p.mother ? "mother" : "father"} to learn ${LEARN[parent.goal] ?? "how things are done"}.` });
   }
 
@@ -323,6 +329,21 @@ export function decide(s: Society, p: Person, forced?: Goal): void {
               : `${p.name} is starting a ${word} for ${her(p)} family, because the ${b.name} have been at ${b.siteName} a while and mean to stay${s.season >= 2 ? " the winter" : ""}.`,
             icon: Bubble.Home });
         }
+      }
+    }
+  }
+  /* --- pots: clay shaped at the hearth and baked in the fire or the kiln, when the family has none or too few for the food put by --- */
+  if (worker && !dark && !b.moving && age >= 12 && age < 70 && knows(p, POTTERY()) && foodDrive < 0.75 && !busy(Goal.Pot) && s.time - b.movedAt > DAY_SECONDS * 2) {
+    const head = homeOf(p, s.byId, s.time), hg = hgoodsOf(s, p), want = 2 + Math.ceil(householdAppetite(s, b, head) * 0.7);
+    if (hg[Mat.Pots] < want && (hg[Mat.Pots] < 1 || b.problems[Problem.Storage] > 0.2 || b.problems[Problem.Spoilage] > 0.2)) {
+      const clayHave = (p.carryKind === Mat.Clay ? p.carryAmt : 0) + b.goods[Mat.Clay];
+      const dep = clayHave >= 3 ? null : s.resources.knownDeposit(b.culture, b.x, b.y, 16, Mat.Clay);
+      if (clayHave >= 3 || dep) {
+        const kiln = worksAround(s, b.x, b.y, 12).find(w => w.kind === Line.Kiln && standing(w) && (w.band === b.id || (w.owner ?? 0) >= 1)) ?? null;
+        const [hx2, hy2] = s.homeSpot(p), q = dep ? s.dryNear(dep.x, dep.y, 4) : null;
+        add({ g: Goal.Pot, v: (0.3 + tr[7] * 0.25) * (hg[Mat.Pots] < 1 ? 1.2 : 0.8) * (1 - foodDrive * 0.6), icon: Bubble.Pot,
+          plan: () => [...(q && dep ? [step(St.Go, q[0], q[1]), step(St.Quarry, q[0], q[1], dep.id, 8, { a: Mat.Clay })] : []), step(St.Go, hx2, hy2), step(St.Shape, hx2, hy2, 0, 12, { a: kiln ? 8 : 4 }), ...(kiln ? [step(St.Go, kiln.x, kiln.y + 1), step(St.Bake, kiln.x, kiln.y + 1, kiln.id, 10)] : [step(St.Go, fx, fy), step(St.Bake, fx, fy, 0, 10)])],
+          why: () => `${p.name} is ${dep ? "fetching clay from the bank and " : ""}shaping pots to bake ${kiln ? "in the kiln" : "in the fire"}, because ${hg[Mat.Pots] < 1 ? `${her(p)} family has nothing to boil food in or keep it from the mice` : "the family's pots are too few for all the food put by"}.` });
       }
     }
   }
@@ -509,7 +530,7 @@ function explorePlan(s: Society, p: Person): Step[] | null {
 export const HUNT_P = [0.42, 0.24, 0.17, 0.32, 0, 0.12];
 export const DANGER = [0.004, 0.04, 0.05, 0.01, 0, 0.12];
 export const SPECIES_SHORT = ["deer", "aurochs", "mammoth", "horses", "wolves", "bear"];
-const LEARN: Partial<Record<number, string>> = { [Goal.Gather]: "which plants are good to eat", [Goal.Fish]: "how to fish", [Goal.Snare]: "how to set snares", [Goal.Wood]: "how to keep a fire", [Goal.Craft]: "how to work hides", [Goal.Dry]: "how to dry meat", [Goal.Sow]: "how to plant", [Goal.Build]: "how to build a weir", [Goal.Kindle]: "how to make fire", [Goal.Hut]: "how to raise a hut", [Goal.Pit]: "how to dig a storage pit", [Goal.Construct]: "how to build", [Goal.Quarry]: "where the good clay and stone are" };
+const LEARN: Partial<Record<number, string>> = { [Goal.Gather]: "which plants are good to eat", [Goal.Fish]: "how to fish", [Goal.Snare]: "how to set snares", [Goal.Wood]: "how to keep a fire", [Goal.Craft]: "how to work hides", [Goal.Dry]: "how to dry meat", [Goal.Sow]: "how to plant", [Goal.Build]: "how to build a weir", [Goal.Kindle]: "how to make fire", [Goal.Hut]: "how to raise a hut", [Goal.Pit]: "how to dig a storage pit", [Goal.Construct]: "how to build", [Goal.Quarry]: "where the good clay and stone are", [Goal.Pot]: "how to shape a pot" };
 
 function canHunt(s: Society, p: Person, age: number): boolean {
   if (age < 15 || age > 62 || p.spear < 0.1 || !knows(p, Idea.Spear) || p.injury > 0.25) return false;

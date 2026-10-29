@@ -13,6 +13,7 @@ import { Society } from "../src/sim/people/society.ts";
 import { TECHS as IDEAS } from "../src/sim/tech/tree.ts";
 import { MATS } from "../src/sim/economy/goods.ts";
 import { defOf } from "../src/sim/buildings/build.ts";
+import { dietScore } from "../src/sim/economy/diet.ts";
 import { DAY_SECONDS, DAYS_PER_SEASON, SEASON_NAMES, SPECIES_NAMES, type SizeKey } from "../src/shared/types.ts";
 
 const arg = (k: string, d: string) => { const i = process.argv.indexOf(`--${k}`); return i >= 0 ? process.argv[i + 1] : d; };
@@ -65,6 +66,11 @@ const report = (label: string) => {
         const bl = people.stats.buildings, byName = new Map<string, number>(), goingUp = new Map<string, number>();
         for (const w of people.works) { if (w.kind < 2 || (w.kind <= 3 && !(w.tier ?? 0))) continue; const name = defOf(w).name; if ((w.prog ?? 1) < 1) goingUp.set(name, (goingUp.get(name) ?? 0) + 1); else if (w.state > 0.2) byName.set(name, (byName.get(name) ?? 0) + 1); }
         line += `\n${"".padEnd(16)} buildings: ${byName.size ? [...byName].map(([n, k]) => `${k} ${n}`).join(", ") : "none beyond huts and pits"}${goingUp.size ? ` | going up: ${[...goingUp].map(([n, k]) => `${k} ${n}`).join(", ")}` : ""} | ${bl.built} finished, ${bl.upgrades} rebuilt, ${Math.round(bl.delivered)} loads delivered, ${Math.round(bl.quarried)} quarried`;
+      }
+      {
+        const adults = people.people.filter(p => people.age(p) >= 5), hs = people.stats.health, ps = people.stats.pots;
+        let pots = 0; for (const b of people.bands) for (const g of b.hgoods.values()) pots += g[11];
+        line += `\n${"".padEnd(16)} health: diet ${mean(adults.map(p => dietScore(p))).toFixed(2)} (plant share ${mean(adults.map(p => p.diet[0])).toFixed(2)}), illness deaths ${people.stats.causes.get("illness") ?? 0}, tended with herbs ${hs.tended} | pots: ${Math.round(pots)} in use, ${ps.made} made (${ps.kiln} in kilns), ${ps.broke} cracked`;
       }
       line += `\n${"".padEnd(16)} homes: ${huts} huts standing, ${going} going up, ${ruins} fallen in (${h.huts} raised) | ${pits} pits holding ${Math.round(inPits)} (${h.pits} dug; ${Math.round(h.stored)} put by, ${Math.round(h.fetched)} fetched, ${Math.round(h.eaten)} eaten from them) | ${Math.round(c.left)} food left behind on moves, ${c.home} moves home`;
     }
@@ -121,6 +127,7 @@ if (people && summary) {
     gatherings: s.places.gatherings, villages: s.places.villages, liveVillages: people.villages.filter(v => !v.abandoned).length, firstVillage: s.places.firstVillage ? +(s.places.firstVillage / 2400 + 1).toFixed(1) : 0,
     ideas: IDEAS.filter(d => !d.start && people.ideas[d.id].knowers > 0).map(d => d.name).join("|"),
     buildings: people.stats.buildings.built, upgrades: people.stats.buildings.upgrades,
+    pots: people.stats.pots.made, dietMean: +mean(people.people.filter(p => people.age(p) >= 5).map(p => dietScore(p))).toFixed(3), illnessDeaths: people.stats.causes.get("illness") ?? 0,
     felled: people.resources.stats.felled, regrown: people.resources.stats.regrown, found: people.resources.stats.found, exhausted: people.resources.stats.exhausted,
     secs: +((performance.now() - tr) / 1000).toFixed(1),
   };

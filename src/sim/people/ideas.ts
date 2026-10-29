@@ -90,11 +90,16 @@ export function pressure(s: Society, p: Person, id: number, k: number, c: Ctx): 
 }
 
 /** A piece of work done: someone in the middle of it may see a better way. */
+/** How far from camp a known deposit counts as at hand: a few hours' walk there and back with a load. */
+export const NEAR_REACH = 20;
 export function inspire(s: Society, p: Person, k: number, c: Ctx = {}): boolean {
   const list = DURING[k]; if (!list) return false;
   const age = s.age(p); if (age < 12) return false;
   for (const id of list) {
     if (p.know[id] > 0 || !ready(p, id)) continue;
+    /* some things cannot come to mind without the stuff of them within reach: no pots where no clay is known */
+    const near = TECHS[id].near;
+    if (near) { const b = s.band(p); if (!near.every(m => s.resources.knownNear(b.culture, b.x, b.y, NEAR_REACH, m))) continue; }
     const pr = pressure(s, p, id, k, c); if (pr <= 0) continue;
     const odds = pr * aptitude(p, id, age);
     s.stats.inspire.tries[id]++; s.stats.inspire.odds[id] += odds;

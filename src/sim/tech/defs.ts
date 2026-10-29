@@ -17,6 +17,12 @@ export interface Ctx {
   river?: boolean;
   /** butchering a kill too big to eat before it spoils */
   big?: boolean;
+  /** cooking or digging where the bank is clay; a pit dug in damp ground; more to put by than the pit holds; pots cracked in the fire */
+  clayNear?: boolean; damp?: boolean; overflow?: boolean; broke?: boolean;
+  /** cooking grain, or with a pot on the fire; tending someone sick */
+  grain?: boolean; pots?: boolean; sick?: boolean;
+  /** herding: young animals nursing, animals kept a long while, wolves about, an animal lost; hunting: a throw that missed; water far off; a slow harvest */
+  young?: boolean; kept?: boolean; wolves?: boolean; lost?: boolean; missed?: boolean; farWater?: boolean; slow?: boolean;
 }
 
 /** A node as it is written in the branch files. */
@@ -40,6 +46,8 @@ export interface TechSrc {
   problems?: Partial<Record<string, number>>;
   /** the story of its finding, a template with slots: {name} {band} {she} {her} {problem} {context} {season} {where} {how} */
   story?: string;
+  /** deposits (by material name) the band's people must know within reach of camp before it can come to anyone */
+  near?: string[];
   /** the age a child can start to pick it up, and how readily they do in a day with someone to learn from */
   age?: number; child?: number;
   /** how readily it is picked up by watching someone at it, and how readily someone who is shown takes it in */
@@ -70,6 +78,7 @@ export interface TechDef {
   during: { step: number; rank: number }[];
   problems?: Partial<Record<string, number>>;
   story?: string;
+  near?: string[];
   age: number; child: number; watch: number; show: number; skill: number; worth: number; spark: number;
   start: boolean;
   anim: number; icon: number;

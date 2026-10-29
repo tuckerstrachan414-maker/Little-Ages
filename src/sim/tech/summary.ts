@@ -76,7 +76,7 @@ export function techPanel(s: Society, g: TechGroup): TechPanelData {
 
 const PROBLEM_ANSWERS: Record<ProblemKey, string> = {
   Hunger: "hunger", Spoilage: "food going bad", Cold: "the cold", Wet: "the wet", Water: "water far from camp", Storage: "food that will not keep", Wood: "firewood running short", Crowding: "a crowded camp",
-  Carry: "more than can be carried", Illness: "sickness", Far: "food far from camp", Fire: "a dead fire", Meat: "no meat", HerdLoss: "animals lost", Dry: "dry ground", Clay: "clay at hand", Stone: "stone at hand", Flint: "flint at hand",
+  Carry: "more than can be carried", Illness: "sickness", Far: "food far from camp", Fire: "a dead fire", Meat: "no meat", HerdLoss: "animals lost", Dry: "dry ground", Clay: "clay at hand", Stone: "stone at hand", Flint: "flint at hand", Broke: "pots cracking in the fire", Grain: "hard grain", Pots: "a pot on the fire",
 };
 
 export function techNode(s: Society, id: number, g: TechGroup): TechNodeDetail | null {

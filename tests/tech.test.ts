@@ -34,7 +34,9 @@ describe("the tree", () => {
     expect(Idea).toEqual({ KeepFire: 0, Spear: 1, Fishing: 2, Hides: 3, Snares: 4, MakeFire: 5, Blades: 6, Axe: 7, Digging: 8, Baskets: 9, Nets: 10, Weirs: 11, Drying: 12, Planting: 13, Pits: 14, Huts: 15 });
     /* the old ways are the only things known at the start; nothing new is */
     expect(TECHS.filter(d => d.start).map(d => d.id)).toEqual([0, 1, 2, 3, 4]);
-    for (const d of TECHS) { expect(d.active).toBe(d.id < 16); if (!d.active) expect(d.spark).toBe(0); }
+    /* the sixteen old ways and the nodes this checkpoint brings to life are active; everything else is only listed, and can never come to anyone */
+    const ACTIVE = new Set(["pottery", "kiln-firing", "grinding-grain", "porridge", "herb-lore"]);
+    for (const d of TECHS) { expect(d.active, d.key).toBe(d.id < 16 || ACTIVE.has(d.key)); if (!d.active) expect(d.spark).toBe(0); else if (!d.start) expect(d.spark).toBeGreaterThan(0); }
     /* what they build on, as before */
     expect(TECHS[Idea.MakeFire].needs).toEqual([Idea.KeepFire]); expect(TECHS[Idea.Blades].needs).toEqual([Idea.Spear]); expect(TECHS[Idea.Axe].needs).toEqual([Idea.Blades]);
     expect(TECHS[Idea.Nets].needs).toEqual([Idea.Fishing, Idea.Snares]); expect(TECHS[Idea.Weirs].needs).toEqual([Idea.Fishing]); expect(TECHS[Idea.Drying].needs).toEqual([Idea.KeepFire]);
@@ -46,7 +48,13 @@ describe("the tree", () => {
       [St.Wood]: [Idea.Axe, Idea.Huts], [St.Gather]: [Idea.Digging, Idea.Baskets, Idea.Planting, Idea.Pits], [St.Fish]: [Idea.Nets, Idea.Weirs],
       [St.Butcher]: [Idea.Drying, Idea.Blades], [St.Cook]: [Idea.Drying],
     };
-    expect(DURING).toEqual(old);
+    /* the old ways come first in each list, in their old order; what is new to this checkpoint comes after them */
+    for (const k of Object.keys(DURING).map(Number)) {
+      const list = DURING[k] ?? [], legacy = list.filter(id => id < 16);
+      expect(legacy, `step ${k}`).toEqual(old[k] ?? []);
+      expect(list.slice(0, legacy.length), `step ${k}: the old ways first`).toEqual(legacy);
+    }
+    for (const k of Object.keys(old).map(Number)) expect((DURING[k] ?? []).filter(id => id < 16)).toEqual(old[k]);
   });
   it("packs a level and a node into one hint whatever the size of the tree", () => {
     expect(HINT_BASE).toBeGreaterThan(TECH_COUNT);

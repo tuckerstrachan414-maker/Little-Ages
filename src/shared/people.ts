@@ -4,17 +4,17 @@
 export const Anim = {
   Idle: 0, Walk: 1, Run: 2, Carry: 3, Gather: 4, Dig: 5, Fish: 6, Throw: 7, Butcher: 8, Chop: 9, Knap: 10,
   Sew: 11, Talk: 12, Sit: 13, Sleep: 14, Cook: 15, HoldBaby: 16, Cane: 17, CaneWalk: 18, Play: 19, Wave: 20, Drink: 21, Eat: 22, Sick: 23,
-  Build: 24,
+  Build: 24, Shape: 25,
 } as const;
 export type Anim = (typeof Anim)[keyof typeof Anim];
-export const ANIM_NAMES = ["idle", "walk", "run", "carry", "gather", "dig", "fish", "throw", "butcher", "chop", "knap", "sew", "talk", "sit", "sleep", "cook", "holdbaby", "cane", "canewalk", "play", "wave", "drink", "eat", "sick", "build"] as const;
+export const ANIM_NAMES = ["idle", "walk", "run", "carry", "gather", "dig", "fish", "throw", "butcher", "chop", "knap", "sew", "talk", "sit", "sleep", "cook", "holdbaby", "cane", "canewalk", "play", "wave", "drink", "eat", "sick", "build", "shape"] as const;
 export type AnimName = (typeof ANIM_NAMES)[number];
 
 /** Picture bubbles over heads: what a conversation is about, or what someone badly needs. */
 export const Bubble = {
   None: 0, Berries: 1, Fish: 2, Deer: 3, Heart: 4, Angry: 5, Sun: 6, Baby: 7, Fire: 8, Drop: 9, Meat: 10, Cold: 11,
   Sad: 12, Move: 13, Fear: 14, Zzz: 15, Star: 16, Question: 17, Wolf: 18, Mammoth: 19, Home: 20,
-  Gift: 21, Peace: 22, Ask: 23,
+  Gift: 21, Peace: 22, Ask: 23, Pot: 24,
 } as const;
 export type Bubble = (typeof Bubble)[keyof typeof Bubble];
 
@@ -56,6 +56,8 @@ export interface WorkSnap {
   open?: boolean; fallow?: boolean; tame?: number;
   /** buildings beyond the first huts and pits: tier and def, what they are built of, whose they are, a rebuild in progress (0..1), and the people's way of building */
   tier?: number; def?: string; walls?: string; roof?: string; owner?: number; up?: number; pitch?: number; windows?: number; decor?: number;
+  /** a kiln lit */
+  firing?: boolean;
 }
 
 /**

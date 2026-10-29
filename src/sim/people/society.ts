@@ -3,7 +3,7 @@ import { Rng } from "../../shared/rng.ts";
 import { Anim, Bubble, PERSON_STRIDE, PFlag, type CampSnap, type ChronicleEvent, type Look, type Stage, type Wear, type WorkSnap } from "../../shared/people.ts";
 import { PLANT_UNITS, type Ecology } from "../ecology.ts";
 import type { Wildlife, Herd } from "../wildlife.ts";
-import { ancestryFor, founderGenome, inherit, looksOf, temperament, hairAt, idealMel, skinWord, hairWord, curlWord, heightCm, heightWord, buildWord, skinHex, type Ancestry, type Genome } from "./genetics.ts";
+import { ancestryFor, founderGenome, inherit, looksOf, temperament, hairAt, skinWord, hairWord, curlWord, heightCm, heightWord, buildWord, skinHex, type Ancestry, type Genome } from "./genetics.ts";
 import { makeCulture, pickStyle, type Culture } from "./culture.ts";
 import { personName, placeName } from "./language.ts";
 import { Walker } from "./walk.ts";
@@ -22,7 +22,10 @@ import { Work, worksDay, lookAtWorks, plotHope, workById, worksAround } from "./
 import { layoutCamp, recountPits, hutStands, stakeDays, leaveBehind, pitFood, hutHomes } from "./homes.ts";
 import { villagesDay, noteSite, friendly, roomFor, tiesTo, VILLAGE_R, type Village, type Gathering, type Notable } from "./villages.ts";
 import { Resources, type Deposit } from "../resources.ts";
-import { MATS, MAT_COUNT, isFood } from "../economy/goods.ts";
+import { Mat, MATS, MAT_COUNT, isFood } from "../economy/goods.ts";
+import { newDiet, dietDay, dietScore, recoveryFactor } from "../economy/diet.ts";
+import { illness } from "./health.ts";
+import { Line } from "../buildings/defs.ts";
 
 /*
   Everyone alive, and the bands they live in. Each step every person's body changes (they
@@ -75,6 +78,7 @@ export class Society {
     /* storage pits dug and huts raised, food put by in pits, taken back out, and eaten straight from them */
     homes: { pits: 0, huts: 0, stored: 0, fetched: 0, eaten: 0, firstHut: 0, firstPit: 0 },
     buildings: { started: 0, built: 0, upgrades: 0, delivered: 0, quarried: 0, firstOf: {} as Record<number, number> },
+    health: { tended: 0 }, pots: { made: 0, broke: 0, kiln: 0 },
     /* gatherings told of, villages founded, and when the first one was */
     places: { gatherings: 0, villages: 0, firstVillage: 0, abandoned: 0, returns: 0 },
     /* each chance someone had to see a new way at work: how many, and the odds before the idea's rarity (expected finds = spark x odds) */
@@ -274,7 +278,7 @@ export class Society {
     const id = this.bands.length ? Math.max(...this.bands.map(b => b.id)) + 1 : 1;
     const name = placeName(this.cultures[culture].lang, this.rng);
     const b: Band = { id, name, culture, color: BAND_COLORS[(id - 1) % BAND_COLORS.length], x, y, fire: 0.8, store: { ...noFood(), wood: 2, hides: 0 }, hearths: new Map(),
-      members: [], founded: this.time, movedAt: this.time, moves: 0, homes: new Map(), busy: new Map(), respected: 0, followers: 0, ledSince: this.time, contender: 0, parent, met: new Set(), appetite: 1, moving: null, siteName: placeName(this.cultures[culture].lang, this.rng), water: [x, y], past: [], today: newDay(), yesterday: newDay(), can: new Int32Array(IDEA_COUNT), keeper: new Int32Array(IDEA_COUNT), outAt: 0, pit: 0, seed: {}, problems: newProblems(), meatAt: this.time, regrownAt: 0, goods: new Float32Array(MAT_COUNT), broke: 0 };
+      members: [], founded: this.time, movedAt: this.time, moves: 0, homes: new Map(), busy: new Map(), respected: 0, followers: 0, ledSince: this.time, contender: 0, parent, met: new Set(), appetite: 1, moving: null, siteName: placeName(this.cultures[culture].lang, this.rng), water: [x, y], past: [], today: newDay(), yesterday: newDay(), can: new Int32Array(IDEA_COUNT), keeper: new Int32Array(IDEA_COUNT), outAt: 0, pit: 0, seed: {}, problems: newProblems(), meatAt: this.time, regrownAt: 0, goods: new Float32Array(MAT_COUNT), broke: 0, hgoods: new Map() };
     this.bands.push(b); this.bandById.set(id, b);
     return b;
   }
@@ -341,7 +345,7 @@ export class Society {
       mother, father, partner: 0, children: [], guardian: 0, band: b.id,
       x: b.x, y: b.y, dir: 0,
       food: 1.3 + rng.next() * 0.4, condition: 1.2, dayFood: 0, water: 0.7 + rng.next() * 0.3, rest: 0.7 + rng.next() * 0.3, warmth: 0.9, company: 0.7, fear: 0, health: 1, mood: 0.3, skin: age >= 6 ? 1 : 0,
-      childHunger: 0, injury: 0, sick: 0, harm: [0, 0, 0, 0, 0], pregnantBy: 0, due: 0, fatherGenome: null, baby: 0, carrier: 0,
+      childHunger: 0, diet: newDiet(), dayDiet: new Float32Array(3), raw: 0, tendedAt: 0, herbsAt: 0, injury: 0, sick: 0, harm: [0, 0, 0, 0, 0], pregnantBy: 0, due: 0, fatherGenome: null, baby: 0, carrier: 0,
       carryKind: 0, carryAmt: 0, hides: 0,
       spear: age >= 15 ? rng.range(0.5, 1) : 0,
       clothes: winterC < -2 ? 2 : winterC < 12 ? 1 : 0, clothesWear: rng.range(0.6, 1),
@@ -708,7 +712,7 @@ export class Society {
     if (p.water < 0.04) hurt(1, 0.5 * days);
     if (p.warmth < 0.25) hurt(2, (0.25 - p.warmth) * (st === "baby" || st === "toddler" || st === "elder" ? 2.4 : 1.6) * days);
     if (p.sick > 0) hurt(3, (p.sick > 1 ? 0.22 : 0.02) * days);
-    if (dh === 0 && p.food > 0.5 && p.water > 0.3) dh = (0.06 + (asleep ? 0.06 : 0)) * days;
+    if (dh === 0 && p.food > 0.5 && p.water > 0.3) dh = (0.06 + (asleep ? 0.06 : 0)) * days * recoveryFactor(p);
     p.health = Math.max(0, Math.min(1 - p.injury * 0.5, p.health + dh));
     p.injury = Math.max(0, p.injury - 0.03 * days * (p.food > 0.4 ? 1 : 0.3));
     if (p.health <= 0) {
@@ -886,8 +890,9 @@ export class Society {
       /* a two-year-old walks on their own feet */
       if (age >= 2 && p.carrier) { const c = this.byId.get(p.carrier); if (c && c.baby === p.id) c.baby = this.youngestBaby(c); p.carrier = 0; abandon(this, p); }
       p.condition = p.condition * 0.8 + p.dayFood * 0.2; p.dayFood = 0;
-      /* childhood hunger is remembered in the body */
-      if (age < 16) p.childHunger = p.childHunger * 0.97 + (p.food < 0.4 ? 0.03 : 0);
+      /* childhood hunger is remembered in the body, and a poor diet makes it bite harder */
+      dietDay(p);
+      if (age < 16) p.childHunger = p.childHunger * 0.97 + (p.food < 0.4 ? 0.03 * (dietScore(p) < 0.4 ? 1.3 : 1) : 0);
       p.prestige *= 0.99; p.gave *= 0.97; p.took *= 0.97; p.gaveToday = 0;
       for (let j = 0; j < 5; j++) p.harm[j] *= 0.85;
       if (st === "adult" && age < 55 && (!p.partner || this.op(p, p.partner) < -0.05)) p.longing = Math.min(1, p.longing + (p.partner ? 0.02 : 0.035) * (0.6 + p.traits[5] * 0.6));
@@ -899,7 +904,7 @@ export class Society {
       /* forget old trivial memories; strong ones last */
       p.mem = p.mem.filter(m => Math.abs(m.v) * Math.exp(-(this.time - m.t) / (YEAR * 0.8)) > 0.04);
       p.places = p.places.filter(pl => !((pl.k === Place.Game || pl.k === Place.Carcass || pl.k === Place.Danger) && this.time - pl.t > DAY_SECONDS * 5));
-      this.illness(p, age, st);
+      illness(this, p, age, st);
       if (!this.byId.has(p.id)) continue;
       if (age >= 5 && age < 18) growUp(this, p, age);
       this.fertility(p, age);
@@ -930,31 +935,6 @@ export class Society {
       const b = this.campNear(x, y, 14); if (!b || this.time - b.regrownAt < YEAR * 3 || res.forestLeft(b.x, b.y, 16) < 0.3) continue;
       b.regrownAt = this.time;
       this.event("regrown", Bubble.Home, `Around ${b.siteName}, where the ${b.name} have cut their firewood for years, young trees are growing back.`, x, y, [], b.id, 0);
-    }
-  }
-
-  /**
-    Illness and the ordinary dangers of life. The chance of falling seriously ill each day
-    follows the age pattern of forager life (high for infants, low for young adults,
-    rising steeply in old age), raised by hunger and cold. About a third of serious
-    illnesses turn deadly, fewer when someone looks after the sick person.
-  */
-  private illness(p: Person, age: number, st: Stage): void {
-    const rng = this.rng;
-    if (p.sick > 0) {
-      const tended = this.near(p.x, p.y, 2.5).some(q => q !== p && q.goal === Goal.Tend);
-      if (p.sick > 1) { if (tended && rng.chance(0.3)) p.sick = 0.8; }
-      else { p.sick = Math.max(0, p.sick - (0.2 + (p.food > 0.6 ? 0.1 : 0) + (tended ? 0.1 : 0))); }
-      return;
-    }
-    const hazard = 0.15 * Math.exp(-0.9 * age) + 0.006 + 0.00011 * Math.exp(0.088 * age);
-    let stress = 1 + (p.food < 0.4 ? 1.2 : 0) + (p.warmth < 0.4 ? 0.8 : 0);
-    /* the sun at home favors the skin tone suited to it, very slowly, through children's health */
-    if (age < 5) { const uv = this.climateAt(p.x, p.y).uv; stress += Math.pow(Math.abs(p.looks.mel - idealMel(uv)), 2) * 0.6; }
-    if (rng.chance(hazard * stress * 3 / DAYS_PER_YEAR)) {
-      const deadly = rng.chance(0.33 + (st === "elder" ? 0.2 : 0));
-      p.sick = deadly ? 1.5 : 0.8;
-      if (st !== "baby" && st !== "toddler") abandon(this, p);
     }
   }
 
@@ -1075,8 +1055,13 @@ export class Society {
     const T = this.tempC(b.x, b.y), rot = T > 20 ? 0.35 : T > 10 ? 0.2 : T > 5 ? 0.1 : T > 0 ? 0.04 : 0.015;
     const plantKeep = T < 5 ? 0.99 : bandKnows(b, Idea.Baskets) ? 0.985 : 0.97, driedKeep = T > 22 ? 0.99 : 0.996;
     b.yesterday.spoiled += spoil(b.store, rot, plantKeep, driedKeep);
-    /* a hearth under a hut's roof keeps its plant food dry */
-    for (const [head, h] of b.hearths) { const at = b.homes.get(head); b.yesterday.spoiled += spoil(h, rot, at && at[2] && hutStands(workById(this, at[2])) ? Math.max(plantKeep, 0.99) : plantKeep, driedKeep); }
+    /* a hearth under a hut's roof keeps its plant food dry; in sealed pots it keeps better still; and pots wear with use */
+    for (const [head, h] of b.hearths) {
+      const at = b.homes.get(head), hg = b.hgoods.get(head), pots = hg ? hg[Mat.Pots] : 0;
+      const keep = Math.max(at && at[2] && hutStands(workById(this, at[2])) ? 0.99 : 0, pots >= 1 ? 0.993 : 0, plantKeep);
+      b.yesterday.spoiled += spoil(h, rot, keep, driedKeep);
+      if (hg && pots > 0) hg[Mat.Pots] = Math.max(0, pots - 0.015);
+    }
     /* households come and go (a child grows up, a couple forms): they get a place to live */
     const heads = this.heads(b);
     if (heads.length !== b.homes.size || heads.some(h => !b.homes.has(h))) this.layoutHomes(b);
@@ -1468,6 +1453,7 @@ export class Society {
       if (w.kind === Work.Pit) { o.food = Math.round(pitFood(w)); o.open = this.time - (w.opened ?? 0) < DAY_SECONDS * 0.3; }
       else if (w.kind === Work.Plot) { o.fallow = !!w.fallow; o.tame = Math.round((w.tame ?? 0) * 20) / 20; }
       if (w.tier) o.tier = w.tier; if (w.def) o.def = w.def; if (w.walls) o.walls = w.walls; if (w.roof) o.roof = w.roof; if (w.owner) o.owner = w.owner; if (w.up) o.up = Math.round(w.up.prog * 20) / 20;
+      if (w.kind === Line.Kiln) o.firing = this.time - (w.opened ?? 0) < DAY_SECONDS * 0.3;
       return o;
     });
   }

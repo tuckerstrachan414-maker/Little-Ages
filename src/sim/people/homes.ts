@@ -101,10 +101,10 @@ export function fetchFromPit(s: Society, p: Person, st: Step): void {
   w.opened = s.time; b.pit = Math.max(0, b.pit - got); s.stats.homes.fetched += got;
 }
 /** Eating straight from the family's pit at this camp, when the hearth and the pot are bare. */
-export function eatFromPit(s: Society, p: Person, b: Band, home: number, want: number): number {
+export function eatFromPit(s: Society, p: Person, b: Band, home: number, want: number, took?: Foods): number {
   if (Math.hypot(p.x - b.x, p.y - b.y) > 8) return 0;
   const w = pitOf(s, b, home); if (!w || !w.foods) return 0;
-  const got = take(w.foods, want);
+  const got = take(w.foods, want, took);
   if (got > 0) { w.opened = s.time; b.pit = Math.max(0, b.pit - got); s.stats.homes.eaten += got; }
   return got;
 }

@@ -38,7 +38,7 @@ function load(): TechDef[] {
     return {
       key: n.key, id: i, name: n.name, how: n.how, title: n.title ?? "", branch: n.branch, era: n.era,
       needs: n.needs.map(k => ix.get(k)!), needKeys: n.needs.slice(), any: (n.any ?? []).map(k => ix.get(k)!), anyKeys: (n.any ?? []).slice(),
-      during: (n.during ?? []).map(d => ({ step: d.step, rank: d.rank ?? 0 })), problems: n.problems, story: n.story,
+      during: (n.during ?? []).map(d => ({ step: d.step, rank: d.rank ?? 0 })), problems: n.problems, story: n.story, near: n.near,
       age: n.age ?? 12, child: n.child ?? 0.03, watch: n.watch ?? 0.006, show: n.show ?? 0.4, skill: n.skill ?? 3, worth: n.worth ?? 0.5,
       spark: active ? (n.spark ?? 0) : 0, start: n.start ?? false, anim: n.anim ?? 10, icon: n.icon ?? 16, place: n.place, active,
     };
