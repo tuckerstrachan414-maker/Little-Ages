@@ -23,6 +23,9 @@ const BASE: Record<string, [number, string]> = {
   leftfor: [0.4, "Left for another"], mocked: [0.18, "Taken down a peg"], gift: [0.14, "A gift between bands"],
   discover: [0.36, "A discovery"], spread: [0.24, "Know-how spreads"], lost: [0.28, "Know-how lost"],
   fireout: [0.2, "The fire goes out"], ember: [0.28, "Fire fetched from neighbors"], weir: [0.28, "A fish weir"], sow: [0.28, "Seed in the ground"], harvest: [0.42, "A first harvest"],
+  hut: [0.34, "A first hut"], pit: [0.3, "Food put by"], field: [0.3, "A field sown again"], seed: [0.36, "The grain grows tame"],
+  gather: [0.48, "Bands gather"], disperse: [0.32, "A gathering breaks up"],
+  village: [0.84, "A village is born"], villagegrow: [0.45, "A village grows"], abandon: [0.6, "A village abandoned"], return: [0.5, "Back to the old village"],
 };
 /** Every kind of event the simulation tells of. */
 export const KINDS = Object.keys(BASE);
@@ -69,7 +72,11 @@ export function weigh(s: Society, kind: string, who: number[], band: number, hin
       break;
     }
     case "contact": if (hint === 1) { sig += 0.2; title = "Strangers meet"; } else title = "Kin found"; break;
-    case "move": if (hint === 1) { sig += 0.08; title = "A band sets off into the unknown"; } break;
+    case "move": if (hint === 1) { sig += 0.08; title = "A band sets off into the unknown"; } else if (hint === 2) { sig += 0.12; title = "Going home"; } break;
+    case "hut": if (hint === 1) { sig += 0.1; title = "Huts go up"; } else if (n === 0) title = "The first hut anywhere"; break;
+    case "pit": if (n === 0) title = "Food put by in the ground"; break;
+    case "gather": sig += Math.min(0.25, Math.max(0, hint - 40) / 200); break;
+    case "village": if (n === 0) title = "The first village"; break;
     case "feud": if (hint === 1) { sig += 0.04; title = "A feud passes down"; } break;
     case "fight": if (hint === 1) { sig += 0.08; title = "Hurt in a fight"; } break;
     case "peace": if (hint === 1) { sig += 0.12; title = "A feud is settled"; } else title = "A feud cools"; break;

@@ -16,6 +16,8 @@ import { DAY_SECONDS, DAYS_PER_SEASON, SEASON_NAMES, SPECIES_NAMES, type SizeKey
 const arg = (k: string, d: string) => { const i = process.argv.indexOf(`--${k}`); return i >= 0 ? process.argv[i + 1] : d; };
 const size = arg("size", "medium") as SizeKey, seed = +arg("seed", "7"), years = +arg("years", "2");
 const start = arg("start", "bands") as "bands" | "cradle", nBands = +arg("bands", "12"), wildOnly = process.argv.includes("--wild");
+/* --summary ends with one JSON line of the numbers a balance sweep compares (see scripts/sweep.ts) */
+const summary = process.argv.includes("--summary");
 
 const t0 = performance.now();
 const world = generateWorld(size, seed, () => {});
@@ -48,6 +50,14 @@ const report = (label: string) => {
     const known = IDEAS.filter(d => !d.start && people.ideas[d.id].knowers > 0).map(d => `${d.name} ${people.ideas[d.id].knowers}`);
     const f = people.stats.fire, ki = people.stats.ideas;
     line += `\n${"".padEnd(16)} ideas: ${known.length ? known.join(", ") : "nothing new yet"} | worked out ${ki.found}, lost by a band ${ki.lost}, learned growing up ${ki.child}, watching ${ki.watch}, shown ${ki.shown}, on visits ${ki.told}, from things left ${ki.seen} | fires out ${f.out}, made ${f.kindled}, fetched ${f.embers} | ${people.works.length} weirs and plots, weir fish ${Math.round(people.stats.food.weir)}, harvest ${Math.round(people.stats.food.crop)}, dried ${Math.round(people.stats.food.dried)}`;
+    {
+      let huts = 0, going = 0, ruins = 0, pits = 0, inPits = 0;
+      for (const w of people.works) { if (w.kind === 2) { if ((w.prog ?? 1) < 1) going++; else if (w.state < 0.2) ruins++; else huts++; } else if (w.kind === 3) { pits++; inPits += w.foods ? w.foods.plant + w.foods.meat + w.foods.fish + w.foods.dried : 0; } }
+      const h = people.stats.homes, c = people.stats.camp;
+      const pl = people.stats.places, live = people.villages.filter(v => !v.abandoned);
+      line += `\n${"".padEnd(16)} places: ${people.gatherings.length} gatherings now (${pl.gatherings} in all), ${live.length} villages lived in${live.length ? ` (${live.map(v => `${v.name} "${v.gloss}" ${v.pop}`).join(", ")})` : ""}, ${pl.villages} founded, ${pl.abandoned} given up, ${pl.returns} returned to | fields ${people.works.filter(w => w.kind === 1 && (w.sown ?? 1) > 1).length} sown again, ${people.works.filter(w => w.kind === 1 && w.fallow).length} resting, best seed line ${Math.max(0, ...people.bands.flatMap(b => Object.values(b.seed))).toFixed(2)}`;
+      line += `\n${"".padEnd(16)} homes: ${huts} huts standing, ${going} going up, ${ruins} fallen in (${h.huts} raised) | ${pits} pits holding ${Math.round(inPits)} (${h.pits} dug; ${Math.round(h.stored)} put by, ${Math.round(h.fetched)} fetched, ${Math.round(h.eaten)} eaten from them) | ${Math.round(c.left)} food left behind on moves, ${c.home} moves home`;
+    }
     line += `\n${"".padEnd(16)} shared ${(o.shared / Math.max(1, o.shared + o.kept) * 100).toFixed(0)}% into the pot | ${Math.round(o.given)} food passed between hearths (${Math.round(o.rounds)} in the evening rounds, ${Math.round(o.family)} eaten at family hearths), ${o.asks} asked for, ${o.refused} refused, ${Math.round(o.repaid)} paid back | feuds ${o.feuds} begun (${people.feuds.length} burning, ${o.peace} settled, ${o.cooled} cooled, ${o.inherited} passed down), fights ${o.fights}, families driven out ${o.driven}, feud/faction splits ${o.factionSplits} | ${led}/${people.bands.length} bands led, new leaders ${o.leaders}, two voices ${o.contests}, mocked ${o.mocked} | gifts ${o.gifts}, left for another ${o.leftFor}`;
   }
   console.log(line);
@@ -75,9 +85,32 @@ if (people) {
     const ms = people.people.filter(p => people.cultures[people.bandById.get(p.band)!.culture] === c);
     if (ms.length) console.log(`  the ${c.lang.name}: ${ms.length} people in ${people.bands.filter(b => b.culture === c.id).length} bands, mean skin ${mean(ms.map(p => p.looks.mel)).toFixed(2)}, mean height gene ${mean(ms.map(p => p.looks.heightG)).toFixed(2)}`);
   }
+  for (const v of people.villages) console.log(`  village ${v.name} "${v.gloss}" (named ${v.why}): founded year ${Math.floor(v.founded / 2400) + 1} when ${v.story}; ${v.abandoned ? `given up in year ${Math.floor(v.abandoned / 2400) + 1}` : `${v.pop} people now, peak ${v.peak}`}`);
   const ev = people.events.slice(-8);
   console.log("Lately:"); for (const e of ev) console.log(`  - ${e.text}`);
   const big = people.events.slice().sort((a, b) => b.sig - a.sig || a.t - b.t).slice(0, 6);
   console.log("Biggest moments (of the last " + people.events.length + " events):"); for (const e of big) console.log(`  - [${e.sig.toFixed(2)}] ${e.title}: ${e.text}`);
 }
 console.log(`simulated ${years} years in ${((performance.now() - tr) / 1000).toFixed(1)}s (${((performance.now() - t0) / 1000).toFixed(1)}s in all)`);
+if (people) {
+  const c = people.stats.camp, stays = c.stays.reduce((a, n) => a + n, 0);
+  console.log(`Stays at a camp (days): ${["<5", "5-10", "10-20", "20-40", "40-80", "80+"].map((k, i) => `${k} ${c.stays[i]}`).join(", ")}; mean ${(c.stayDays / Math.max(1, stays)).toFixed(1)} | band-days at camps held 40+ days ${(c.longDays / Math.max(1, c.bandDays) * 100).toFixed(1)}% | moves to a known place ${c.offer}, into the unknown ${c.fresh}`);
+  const ins = people.stats.inspire;
+  console.log(`Chances to see a new way (tries, expected finds = spark x odds): ${IDEAS.filter(d => !d.start).map(d => `${d.name} ${ins.tries[d.id]} / ${(d.spark * ins.odds[d.id]).toFixed(2)}`).join(", ")}`);
+}
+if (people && summary) {
+  const s = people.stats, c = s.camp;
+  const cause = (k: string) => s.causes.get(k) ?? 0;
+  const out: Record<string, number | string> = {
+    seed, years, pop: people.people.length, maxPop: s.maxPop, bands: people.bands.length, births: s.births, deaths: s.deaths,
+    hunger: cause("hunger"), cold: cause("the cold"), illness: cause("illness"), thirst: cause("thirst"),
+    moves: s.moves, splits: s.splits, merges: s.merges,
+    meanStay: +(c.stayDays / Math.max(1, c.stays.reduce((a, n) => a + n, 0))).toFixed(2), long: +(c.longDays / Math.max(1, c.bandDays)).toFixed(4),
+    huts: people.works.filter(w => w.kind === 2 && (w.prog ?? 1) >= 1 && w.state >= 0.2).length, pits: people.works.filter(w => w.kind === 3).length, homeMoves: c.home, left: Math.round(c.left),
+    hutsRaised: s.homes.huts, pitsDug: s.homes.pits, firstHut: s.homes.firstHut ? +(s.homes.firstHut / 2400 + 1).toFixed(1) : 0, firstPit: s.homes.firstPit ? +(s.homes.firstPit / 2400 + 1).toFixed(1) : 0,
+    gatherings: s.places.gatherings, villages: s.places.villages, liveVillages: people.villages.filter(v => !v.abandoned).length, firstVillage: s.places.firstVillage ? +(s.places.firstVillage / 2400 + 1).toFixed(1) : 0,
+    ideas: IDEAS.filter(d => !d.start && people.ideas[d.id].knowers > 0).map(d => d.name).join("|"),
+    secs: +((performance.now() - tr) / 1000).toFixed(1),
+  };
+  console.log("SUMMARY " + JSON.stringify(out));
+}

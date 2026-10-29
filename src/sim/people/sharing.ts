@@ -4,6 +4,7 @@ import { Food, Goal, Mem, type Person } from "./person.ts";
 import { homeOf, storeFood, noFood, type Band, type Foods, type Hearth } from "./band.ts";
 import { FOOD_DAY, type Society } from "./society.ts";
 import { grievance, feudOf, feudBetween } from "./feuds.ts";
+import { eatFromPit, pitDays, pitFood, pitOf } from "./homes.ts";
 
 /*
   Sharing. Food brought back to camp is split: some goes into the band's pot, where anyone
@@ -64,12 +65,13 @@ export function familyDays(s: Society, p: Person): number {
   const b = s.band(p), head = homeOf(p, s.byId, s.time), h = b.hearths.get(head);
   const app = householdAppetite(s, b, head), band = Math.max(1, b.appetite);
   const pot = storeFood(b.store);
-  return ((h ? storeFood(h) : 0) + pot * app / band) / app * 0.6 + pot / band * 0.4;
+  return ((h ? storeFood(h) : 0) + pot * app / band) / app * 0.6 + pot / band * 0.4 + (b.pit > 0 ? pitDays(s, b, head) * 0.6 : 0);
 }
-/** Food someone can simply reach for: their own hearth, the pot, and what close family can spare. */
+/** Food someone can simply reach for: their own hearth, the pot, their family's pit at this camp, and what close family can spare. */
 export function reachFood(s: Society, p: Person): number {
   const b = s.band(p), mine = homeOf(p, s.byId, s.time), h = b.hearths.get(mine);
-  const own = storeFood(b.store) + (h ? storeFood(h) : 0);
+  let own = storeFood(b.store) + (h ? storeFood(h) : 0);
+  if (own <= 0.4 && b.pit > 0) { const w = pitOf(s, b, mine); if (w) own += pitFood(w); }
   return own > 0.4 ? own : own + familySpare(s, p, b, mine);
 }
 /** Close family whose hearth someone may eat from without asking: parents, partner, children, in the same band. */
@@ -88,7 +90,7 @@ function familySpare(s: Society, p: Person, b: Band, mine: number): number {
   return v;
 }
 
-function take(from: Foods, want: number): number {
+export function take(from: Foods, want: number): number {
   let left = want;
   for (const k of SPOIL_ORDER) { const t = Math.min(left, from[k]); from[k] -= t; left -= t; if (left <= 1e-9) break; }
   return want - left;
@@ -102,8 +104,9 @@ export function pass(from: Foods, to: Foods, amt: number): number {
 
 /**
   Eats up to `want` days of food: from the household's hearth first, then the band's pot,
-  and when both are bare, from the hearth of close family (parents, grown children,
-  brothers and sisters), who do not need to be asked. Returns what was eaten.
+  then the household's own storage pit at this camp, and when all are bare, from the
+  hearth of close family (parents, grown children, brothers and sisters), who do not need
+  to be asked. Returns what was eaten.
 */
 export function eat(s: Society, p: Person, b: Band, want: number): number {
   if (want <= 0) return 0;
@@ -111,6 +114,7 @@ export function eat(s: Society, p: Person, b: Band, want: number): number {
   let got = h ? take(h, want) : 0;
   const fromPot = take(b.store, want - got);
   got += fromPot;
+  if (got < want - 1e-9 && b.pit > 0) got += eatFromPit(s, p, b, mine, want - got);
   if (got < want - 1e-9 && (want >= 0.05 || p.food < 0.5)) got += fromFamily(s, p, b, mine, want - got);
   if (got <= 0) return 0;
   p.food = Math.min(2.5, p.food + got);
@@ -290,7 +294,7 @@ export function answer(s: Society, g: Person, a: Person, head: number): number {
   families send each other nothing, and the stingy keep most of theirs, which is noticed.
 */
 export function shareRound(s: Society, b: Band): void {
-  type HH = { head: number; folk: Person[]; app: number; h: Hearth; days: number; by: Person; generous: number; small: boolean };
+  type HH = { head: number; folk: Person[]; app: number; h: Hearth; days: number; by: Person; generous: number; small: boolean; pit: number };
   const hs: HH[] = [];
   const seen = new Set<number>();
   for (const id of b.members) {
@@ -304,13 +308,14 @@ export function shareRound(s: Society, b: Band): void {
     const generous = clamp01(c.sharing * 0.6 + (0.5 - t[2]) * 0.5 + (t[1] - 0.5) * 0.4 + (b.respected === by.id ? 0.15 : 0));
     /* a household with a nursing or expecting mother, or little children, is fed first */
     const small = folk.some(q => q.pregnantBy || q.baby || s.age(q) < 6);
-    hs.push({ head, folk, app, h, days: storeFood(h) / app, by, generous, small });
+    hs.push({ head, folk, app, h, days: storeFood(h) / app, by, generous, small, pit: b.pit > 0 ? pitDays(s, b, head) : 0 });
   }
   if (hs.length < 2) return;
   const potDays = storeFood(b.store) / Math.max(1, b.appetite);
   /* the hungriest first, each drawing on the households they are closest to */
   const want = (x: HH) => 1.5 + (x.small ? 0.5 : 0);
-  const needy = hs.filter(x => x.days + potDays < want(x)).sort((x, y) => (x.days - (x.small ? 0.5 : 0)) - (y.days - (y.small ? 0.5 : 0)));
+  /* a household with food put by in its own pit is not short, whatever its hearth holds */
+  const needy = hs.filter(x => x.days + x.pit + potDays < want(x)).sort((x, y) => (x.days - (x.small ? 0.5 : 0)) - (y.days - (y.small ? 0.5 : 0)));
   for (const n of needy) {
     /* only the two households at the heart of a feud send each other nothing; their kin still share */
     const givers = hs.filter(g => g !== n && g.days > Math.max(0.6, n.days + 0.5) && !g.folk.some(x => n.folk.some(y => feudBetween(s, x, y)))).map(g => {

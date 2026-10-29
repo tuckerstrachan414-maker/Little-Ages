@@ -1,12 +1,14 @@
-import { DAY_SECONDS, SPECIES_NAMES } from "../../shared/types.ts";
-import type { BandDetail, BandFeud, Feuding, Kin, PersonDetail } from "../../shared/protocol.ts";
+import { DAY_SECONDS, DAYS_PER_SEASON, DAYS_PER_YEAR, SEASON_NAMES, SPECIES_NAMES } from "../../shared/types.ts";
+import type { BandDetail, BandFeud, Feuding, Kin, PersonDetail, VillageDetail } from "../../shared/protocol.ts";
 import { TRAITS } from "./genetics.ts";
 import { Goal, Mem, SKILL_NAMES, St, kinWord, type Person } from "./person.ts";
-import { storeFood, campFood } from "./band.ts";
+import { storeFood, campFood, homeOf, type Band } from "./band.ts";
 import { IDEAS, Idea, howKnown } from "./ideas.ts";
-import { Work } from "./works.ts";
+import { Work, worksAround } from "./works.ts";
+import { pitFood, pitOf, hutOf, hutWords } from "./homes.ts";
+import { villageOf } from "./villages.ts";
 import { RIVAL_OP } from "./search.ts";
-import { hearthDays, household, appetiteOf } from "./sharing.ts";
+import { hearthDays, household, appetiteOf, householdAppetite } from "./sharing.ts";
 import { feudsWith, sideOf } from "./feuds.ts";
 import { followersOf, leads } from "./leaders.ts";
 import type { Society } from "./society.ts";
@@ -26,6 +28,7 @@ const GOAL_WORDS: Partial<Record<number, string>> = {
   [Goal.Ask]: "Asking for food", [Goal.Fight]: "Fighting", [Goal.Mediate]: "Making peace", [Goal.Call]: "Visiting friends",
   [Goal.Kindle]: "Lighting the fire", [Goal.Ember]: "Fetching fire", [Goal.Show]: "Showing how", [Goal.Learn]: "Learning", [Goal.Dry]: "Drying meat",
   [Goal.Build]: "Building a weir", [Goal.Sow]: "Sowing",
+  [Goal.Hut]: "Raising a hut", [Goal.Pit]: "Digging a storage pit", [Goal.Store]: "Putting food by", [Goal.Fetch]: "Fetching food from the pit",
 };
 const TRAIT_WORDS: [string, string][] = [
   ["timid", "brave"], ["cold", "kind"], ["generous", "greedy"], ["easygoing", "ambitious"],
@@ -74,7 +77,7 @@ function memoryText(s: Society, p: Person, m: Person["mem"][number]): string {
     case Mem.Taught: return `Showed ${who} ${IDEAS[m.n]?.how ?? "how it is done"}`;
     case Mem.FireOut: return `The fire went out`;
     case Mem.Harvest: return `Brought in the harvest`;
-    case Mem.Found: return m.n ? `Saw how others had made a ${m.n === Idea.Weirs ? "fish weir" : "planted plot"}, and worked it out` : `Found good land while exploring`;
+    case Mem.Found: return m.n ? `Saw how others had made a ${m.n === Idea.Weirs ? "fish weir" : m.n === Idea.Huts ? "hut" : m.n === Idea.Pits ? "storage pit" : "planted plot"}, and worked it out` : `Found good land while exploring`;
     case Mem.Rejected: return `Was turned down by ${who}`;
     case Mem.Freeloader: return `Noticed ${who} eats without bringing food`;
     case Mem.Helped: return `${who} looked after ${p.sex === "f" ? "her" : "him"}`;
@@ -117,6 +120,7 @@ export function personDetail(s: Society, id: number): PersonDetail | null {
     children: p.children.map(c => kin(s, p, c)!).filter(Boolean), siblings, friends, rivals, memories,
     pregnant: !!p.pregnantBy, carrying, prestige: p.prestige, respected: b.respected === p.id,
     hearth: hearthDays(s, p), pot: storeFood(b.store) / Math.max(1, b.appetite),
+    ...homeOfPerson(s, p, b),
     follows: p.follows && p.follows !== p.id && s.byId.has(p.follows) ? { id: p.follows, name: s.byId.get(p.follows)!.name } : null,
     followers: followersOf(s, p), leads: leads(s, p), shareRate: p.shareRate,
     feuds: feudsOf(s, p), owes: debts(s, p),
@@ -151,10 +155,71 @@ function workText(s: Society, band: number, w: Work): string {
     return `${w.band === band ? "A fish weir" : "An old fish weir others left"}, ${state}${w.food >= 1 ? `, with ${Math.round(w.food)} days of fish in its trap` : ""}.`;
   }
   const who = s.byId.get(w.by)?.name ?? s.archive.get(w.by)?.name ?? "someone";
+  const years = (w.sown ?? 1) > 1 ? `, sown ${w.sown} years` : "";
+  if (w.fallow) return `${who}'s field of ${w.crop}${years}, resting until the spring sowing${(w.fert ?? 1) < 0.6 ? `; the soil is tired` : ""}.`;
   if (w.ripe < 0) return `${who}'s patch of ${w.crop}, killed by the frost before it ripened.`;
   if (w.state >= 1) return w.food >= 1 ? `${who}'s patch of ${w.crop}, ripe, with ${Math.round(w.food)} days of food standing.` : `${who}'s patch of ${w.crop}, harvested.`;
   const days = Math.max(1, Math.round((1 - w.state) / 0.038));
   return `${who}'s patch of ${w.crop}, ${w.state < 0.25 ? "just sprouting" : w.state < 0.6 ? "growing" : "nearly ripe"}: ripe in about ${days} days.`;
+}
+
+/** Where someone's household lives, in words, and the days of food in its pit. */
+function homeOfPerson(s: Society, p: Person, b: Band): { home: string; pit: number } {
+  const head = homeOf(p, s.byId, s.time), hut = hutOf(s, b, head), pit = pitOf(s, b, head);
+  const home = b.moving ? "on the move" : !hut ? `a ${s.cultures[b.culture].shelter === "leanto" ? "lean-to" : s.cultures[b.culture].shelter === "tent" ? "hide tent" : "dome of grass"}` : (hut.prog ?? 1) < 1 ? `a ${hutWords(hut)} going up, ${Math.round((hut.prog ?? 0) * 100)}% done` : hut.state < 0.2 ? `a fallen-in ${hutWords(hut)}` : `a ${hutWords(hut)}${(hut.size ?? 1) > 1 ? ` of ${hut.size} bays` : ""}`;
+  return { home, pit: pit ? pitFood(pit) / householdAppetite(s, b, head) : -1 };
+}
+/** "spring of year 4" */
+export const seasonYear = (t: number) => `${SEASON_NAMES[Math.floor(t / DAY_SECONDS / DAYS_PER_SEASON) % 4].toLowerCase()} of year ${Math.floor(t / DAY_SECONDS / DAYS_PER_YEAR) + 1}`;
+/** The band's huts and pits at this camp, in a line. */
+function homesLine(s: Society, b: Band): string {
+  if (b.moving) return "";
+  let huts = 0, going = 0, ruins = 0, bays = 0, pits = 0, food = 0;
+  for (const w of worksAround(s, b.x, b.y, 14)) {
+    if (w.kind === Work.Hut) { if ((w.prog ?? 1) < 1) going++; else if (w.state < 0.2) ruins++; else { huts++; bays += Math.max(0, (w.size ?? 1) - 1); } }
+    else if (w.kind === Work.Pit && w.band === b.id) { pits++; food += pitFood(w); }
+  }
+  const parts: string[] = [];
+  if (huts || going) parts.push(`${huts} ${huts === 1 ? "hut" : "huts"}${bays ? ` (${bays} added ${bays === 1 ? "bay" : "bays"})` : ""}${going ? `, ${going} going up` : ""}`);
+  if (pits) { const days = Math.round(food / Math.max(1, b.appetite)); parts.push(`${pits} storage ${pits === 1 ? "pit" : "pits"} ${food < 1 ? "standing empty" : days < 1 ? "with a little food put by" : `holding ${days} ${days === 1 ? "day" : "days"} of food`}`); }
+  if (ruins) parts.push(`${ruins} fallen-in ${ruins === 1 ? "hut" : "huts"}`);
+  return parts.join("; ");
+}
+/** How long the band has been at this camp, and what keeps it there. */
+function stayLine(s: Society, b: Band): string {
+  if (b.moving) return "";
+  const days = Math.floor((s.time - b.movedAt) / 60);
+  return `Camped here ${days < 2 ? "since yesterday" : days < 40 ? `for ${days} days` : `since ${seasonYear(b.movedAt)}`}.`;
+}
+
+export function villageDetail(s: Society, id: number): VillageDetail | null {
+  const v = s.villages.find(o => o.id === id); if (!v) return null;
+  const bands = v.bands.map(bid => s.bandById.get(bid)).filter((b): b is Band => !!b);
+  const founder = s.byId.get(v.founder);
+  let huts = 0, building = 0, ruins = 0, pits = 0, food = 0, weirs = 0;
+  const fields = new Map<string, { n: number; tame: number }>();
+  for (const w of worksAround(s, v.x, v.y, 18)) {
+    if (w.kind === Work.Hut) { if ((w.prog ?? 1) < 1) building++; else if (w.state < 0.2) ruins++; else huts++; }
+    else if (w.kind === Work.Pit) { pits++; food += pitFood(w); }
+    else if (w.kind === Work.Weir && w.state > 0.2) weirs++;
+    else if (w.kind === Work.Plot) { const f = fields.get(w.crop) ?? { n: 0, tame: 0 }; f.n++; f.tame = Math.max(f.tame, w.tame ?? 0); fields.set(w.crop, f); }
+  }
+  /* whom most of the village's grown-ups listen to, whichever band they belong to */
+  const count = new Map<number, number>();
+  for (const b of bands) for (const mid of b.members) { const q = s.byId.get(mid); if (q && s.age(q) >= 16 && q.follows && q.follows !== q.id) count.set(q.follows, (count.get(q.follows) ?? 0) + 1); }
+  const top = [...count].sort((a, c) => c[1] - a[1] || a[0] - c[0])[0];
+  const appetite = bands.reduce((n, b) => n + b.appetite, 0);
+  return {
+    id: v.id, name: v.name, gloss: v.gloss, why: v.why, story: v.story, people: s.cultures[v.culture].lang.name,
+    founded: v.founded, founder: { id: v.founder, name: v.founderName, alive: !!founder },
+    bands: bands.map(b => { const l = s.byId.get(b.respected); return { id: b.id, name: b.name, pop: b.members.length, color: b.color, leader: l ? { id: l.id, name: l.name } : null }; }),
+    listened: top && s.byId.get(top[0]) ? { id: top[0], name: s.byId.get(top[0])!.name, n: top[1] } : null,
+    pop: v.pop, peak: v.peak, huts, building, ruins, pits, pitDays: appetite ? food / appetite : 0,
+    fields: [...fields].map(([crop, f]) => ({ crop, n: f.n, tame: f.tame })), weirs,
+    empty: v.empty, abandoned: v.abandoned,
+    events: s.events.filter(e => Math.hypot(e.x - v.x, e.y - v.y) < 18 && (e.t >= v.founded - DAY_SECONDS * DAYS_PER_YEAR || e.kind === "hut")).slice(-8).reverse(),
+    x: v.x, y: v.y,
+  };
 }
 
 export function bandDetail(s: Society, id: number): BandDetail | null {
@@ -180,7 +245,8 @@ export function bandDetail(s: Society, id: number): BandDetail | null {
       const who = ms.filter(q => q.know[d.id] > 0).sort((a, c) => c.know[d.id] - a.know[d.id]);
       return { id: d.id, name: d.name, start: d.start, n: who.length, who: who.slice(0, 3).map(q => ({ id: q.id, name: q.name })) };
     }),
-    works: s.works.filter(w => Math.hypot(w.x - b.x, w.y - b.y) < 18 && (w.band === b.id || !s.bandById.has(w.band))).map(w => ({ kind: w.kind === Work.Weir ? "weir" as const : "plot" as const, text: workText(s, b.id, w), x: w.x, y: w.y })),
+    works: worksAround(s, b.x, b.y, 18).filter(w => (w.kind === Work.Weir || w.kind === Work.Plot) && (w.band === b.id || !s.bandById.has(w.band))).map(w => ({ kind: w.kind === Work.Weir ? "weir" as const : "plot" as const, text: workText(s, b.id, w), x: w.x, y: w.y })),
+    homes: homesLine(s, b), stay: stayLine(s, b), village: villageOf(s, b)?.name ?? "",
     days: campFood(b) / Math.max(1, b.appetite), fire: b.fire, moves: b.moves, camp: b.siteName,
     yesterday: { brought: Math.round(b.yesterday.plant + b.yesterday.meat + b.yesterday.fish), eaten: Math.round(b.yesterday.eaten) },
     shelter: cult.shelter, sharing: cult.sharing, cousins: cult.cousins,

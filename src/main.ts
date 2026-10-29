@@ -35,11 +35,11 @@ let ideas: IdeasPanel | null = null;
 let camps: CampSnap[] = [];
 let lastTick = { time: 0, at: 0, speed: 1 };
 const life = { animals: 0, birds: 0, rabbits: 0, fish: 0, people: 0 };
-/* pin a tag to a person or a band; the worker then sends their details twice a second */
-const pin = (person: number, band: number) => {
-  pui?.pin(person, band);
-  if (renderer) { renderer.people.selected = person; renderer.people.selectedBand = band; }
-  send({ type: "inspect", person, band });
+/* pin a tag to a person, a band or a village; the worker then sends their details twice a second */
+const pin = (person: number, band: number, village = 0) => {
+  pui?.pin(person, band, village);
+  if (renderer) { renderer.people.selected = person; renderer.people.selectedBand = band; renderer.people.selectedVillage = village; }
+  send({ type: "inspect", person, band, village });
 };
 const send = (m: ToWorker) => worker?.postMessage(m);
 
@@ -66,6 +66,7 @@ function goTo(item: SearchItem) {
   const cam = renderer.cam;
   if (item.kind === "person") { cam.flyTo(item.x, item.y, Math.max(cam.z, 14), 900); pin(item.id, 0); }
   else if (item.kind === "dead") { cam.flyTo(item.x, item.y, Math.max(cam.z, 12), 900); pui?.setPing(item.x, item.y); pin(0, 0); journal?.open({ who: item.id, name: item.title, note: "remembered" }); }
+  else if (item.kind === "village") { cam.flyTo(item.x, item.y, Math.max(cam.z, 6), 900); pin(0, 0, item.id); }
   else { cam.flyTo(item.x, item.y, item.kind === "people" ? 8 : 10, 900); pin(0, item.band); }
 }
 
@@ -136,6 +137,7 @@ function start() {
         renderer.flocksPrev = renderer.flocks; renderer.flocks = { n: m.flockCount, data: m.birds };
         renderer.people.setTick(m.people, m.peopleCount, m.camps, m.looks, now);
         if (m.works) renderer.people.works = m.works;
+        if (m.villages) { renderer.people.villages = m.villages; pui?.setVillages(m.villages); }
         camps = m.camps;
         lastTick = { time: m.time, at: now, speed: m.speed };
         life.animals = m.animals; life.birds = m.birdCount; life.people = m.pop; ui?.setLife(life);
@@ -147,6 +149,7 @@ function start() {
       else if (m.type === "ideas") ideas?.set(m.list);
       else if (m.type === "person") pui?.setPerson(m.detail, m.id);
       else if (m.type === "band") pui?.setBand(m.detail, m.id);
+      else if (m.type === "village") pui?.setVillage(m.detail, m.id);
     };
     send({ type: "generate", size: choice.size, seed: choice.seed, start: choice.start, bands: choice.bands });
   });
@@ -184,8 +187,8 @@ function bindInput() {
     /* a click (not a drag) pins a tag to whoever is under the pointer, or a camp */
     if (downAt && !downAt.moved && renderer && e.type === "pointerup") {
       const [wx, wy] = renderer.cam.toWorld(e.clientX * dpr(), e.clientY * dpr());
-      const hit = renderer.people.pick(wx, wy, renderer.cam.z);
-      if (hit.person || hit.band) pin(hit.person, hit.band); else if (pui?.pinned.person || pui?.pinned.band) pin(0, 0);
+      const hit = renderer.people.pick(wx, wy, renderer.cam.z, e.clientX * dpr(), e.clientY * dpr());
+      if (hit.person || hit.band || hit.village) pin(hit.person, hit.band, hit.village); else if (pui?.pinned.person || pui?.pinned.band || pui?.pinned.village) pin(0, 0);
     }
     downAt = null;
     pointers.delete(e.pointerId); if (!pointers.size) canvas.classList.remove("dragging"); pinch = 0;

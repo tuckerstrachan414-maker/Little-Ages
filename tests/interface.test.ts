@@ -67,7 +67,7 @@ describe("how much an event matters", () => {
     expect(mk(5, 5)).toBeGreaterThan(mk(6, 5) + 0.3);
   });
   it("gives every event the kind that decides which journal group it is in", () => {
-    for (const e of s.events) expect(["life", "loss", "hunt", "bands", "ties", "ideas", "meet"]).toContain(categoryOf(e.kind));
+    for (const e of s.events) expect(["life", "loss", "hunt", "bands", "ties", "ideas", "meet", "villages"]).toContain(categoryOf(e.kind));
   });
 });
 

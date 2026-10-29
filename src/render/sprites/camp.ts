@@ -156,12 +156,14 @@ export function weirSprite(state: number, fish: boolean): HTMLCanvasElement {
 
 /**
   A planted plot: hoed rows of earth, then shoots, then the crop standing ripe (grain gold,
-  tuber leaves broad and dark, gourds swelling orange among the beans), then stubble.
+  tuber leaves broad and dark, gourds swelling orange among the beans), then stubble. A
+  field that is kept from year to year rests between harvests as stubble going to weeds,
+  and a crop sown again and again from its own seed stands fuller at harvest (`tame`).
 */
-export function plotSprite(state: number, food: number, crop: string): HTMLCanvasElement {
-  const stage = state >= 1 ? (food >= 1 ? 4 : 5) : state < 0.12 ? 0 : state < 0.45 ? 1 : state < 0.8 ? 2 : 3;
-  const kind = crop === "wild grain" ? 0 : crop === "tubers" ? 1 : 2;
-  return cache.get(`plot${stage}|${kind}`, () => {
+export function plotSprite(state: number, food: number, crop: string, fallow = false, tame = 0): HTMLCanvasElement {
+  const stage = fallow ? 6 : state >= 1 ? (food >= 1 ? 4 : 5) : state < 0.12 ? 0 : state < 0.45 ? 1 : state < 0.8 ? 2 : 3;
+  const kind = crop === "wild grain" ? 0 : crop === "tubers" ? 1 : 2, full = stage === 4 && tame >= 0.35 ? 1 : 0;
+  return cache.get(`plot${stage}|${kind}|${full}`, () => {
     const g = grid(18, 11);
     const soil = "#6e4f33", soilD = "#56402a", soilL = "#80603e";
     /* hoed ground with ragged edges, so it sits in the grass rather than on it */
@@ -175,9 +177,13 @@ export function plotSprite(state: number, food: number, crop: string): HTMLCanva
       const y = row * 3 + 1, j = (x * 5 + row * 3) % 3;
       if (stage === 0) { if ((x + row) % 4 === 0) put(g, x, y - 1, "#c9b48c"); continue; }
       if (stage === 5) { put(g, x, y - 1, "#b39a5e"); if ((x + row) % 3 === 0) put(g, x, y - 2, "#9c8550"); continue; }
+      if (stage === 6) { if ((x + row) % 3 === 0) put(g, x, y - 1, "#9c8550"); if ((x * 3 + row) % 5 === 1) { put(g, x, y - 1, green[1]); put(g, x + 1, y - 2, green[0]); } continue; }
       const c = stage === 4 ? ripe : green, h = stage === 1 ? 1 : stage === 2 ? 2 : 3;
       for (let k = 0; k < h; k++) put(g, x, y - k, c[(j + k) % 3]);
       if (stage >= 3 && kind === 0) put(g, x + 1, y - h + 1, c[2]);
+      if (full && kind === 0) { put(g, x - 1, y - h + 1, c[2]); put(g, x, y - h, c[2]); }
+      if (full && kind === 2 && (x + row) % 4 === 3) { put(g, x + 1, y, "#e08a2e"); put(g, x + 1, y - 1, "#f0a848"); }
+      if (full && kind === 1) put(g, x + 1, y - 1, c[2]);
       if (stage === 4 && kind === 2 && (x + row) % 4 === 1) { put(g, x + 1, y, "#e08a2e"); put(g, x + 1, y - 1, "#f0a848"); }
       if (stage >= 3 && kind === 1) put(g, x - 1, y - 1, c[0]);
     }

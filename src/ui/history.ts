@@ -31,6 +31,7 @@ export const CATEGORIES = [
   { key: "ties", label: "Friends and feuds", kinds: ["refused", "feud", "fight", "peace", "mocked", "gift"] },
   { key: "ideas", label: "Discoveries", kinds: ["discover", "spread", "lost", "fireout", "ember", "weir", "sow", "harvest"] },
   { key: "meet", label: "Meetings", kinds: ["contact"] },
+  { key: "villages", label: "Villages and gatherings", kinds: ["hut", "pit", "field", "seed", "gather", "disperse", "village", "villagegrow", "abandon", "return"] },
 ] as const;
 export type CategoryKey = (typeof CATEGORIES)[number]["key"];
 export const categoryOf = (kind: string): CategoryKey => CATEGORIES.find(c => (c.kinds as readonly string[]).includes(kind))?.key ?? "bands";
@@ -41,6 +42,7 @@ export const KIND_COLOR: Record<string, string> = {
   kill: "#d08a44", move: "#7fbf5a", split: "#f0c43c", leave: "#a4cf6a", merge: "#6fc2c0", leader: "#f6d77a", contest: "#e3ad2f", contact: "#7fa8e6",
   leftfor: "#c86a8a", refused: "#b0703a", feud: "#a8231c", fight: "#d0402a", peace: "#8fbf6a", mocked: "#c9b48c", gift: "#d9b45a",
   discover: "#f2e266", spread: "#c7d96a", lost: "#8a7a9a", fireout: "#7a5a4a", ember: "#e8743a", weir: "#5aa8c8", sow: "#9ac25a", harvest: "#e8c25a",
+  hut: "#c6a25c", pit: "#9a7650", field: "#b8c25a", seed: "#e0b84a", gather: "#e89a6a", disperse: "#c8a090", village: "#ffd08a", villagegrow: "#e8bc78", abandon: "#8a7a6a", return: "#d0b07a",
 };
 
 export interface Filter {

@@ -23,8 +23,8 @@ export interface Band {
   fire: number;
   members: number[];
   founded: number; movedAt: number; moves: number;
-  /** household head id to shelter position */
-  homes: Map<number, [number, number]>;
+  /** household head id to where it lives: a shelter's position, or its hut's (with the hut's id, 0 for a shelter) */
+  homes: Map<number, [number, number, number]>;
   /** how many members are on each goal right now */
   busy: Map<number, number>;
   /** the band's pot: food anyone may eat */
@@ -57,6 +57,10 @@ export interface Band {
   keeper: number[];
   /** when the fire last went out */
   outAt: number;
+  /** food put by in the band's storage pits at this camp (counted again each day and whenever a pit is filled or emptied) */
+  pit: number;
+  /** the band's own seed for each crop it sows: how tame the line has grown, from 0 (wild) up */
+  seed: Record<string, number>;
 }
 /** Food brought in, how much of it went into the pot, what was eaten, what passed between hearths, and fresh meat and fish lost to rot. */
 export interface Day { plant: number; meat: number; fish: number; eaten: number; shared: number; given: number; spoiled: number; }
@@ -65,10 +69,16 @@ export const newDay = (): Day => ({ plant: 0, meat: 0, fish: 0, eaten: 0, shared
 export const storeFood = (s: Foods) => s.plant + s.meat + s.fish + s.dried;
 /** All the food at the hearths of a band. */
 export function hearthFood(b: Band): number { let v = 0; for (const h of b.hearths.values()) v += storeFood(h); return v; }
-/** All the food in camp: the pot and every hearth. */
-export const campFood = (b: Band) => storeFood(b.store) + hearthFood(b);
+/** All the food in camp: the pot, every hearth, and the storage pits. */
+export const campFood = (b: Band) => storeFood(b.store) + hearthFood(b) + b.pit;
 /** Days the band could eat from all the food in camp. */
 export const storeDays = (b: Band) => campFood(b) / Math.max(1, b.appetite);
+/** Days the band could eat from what keeps: plant food and dried meat and fish, in the pot, at the hearths and in the pits (fresh meat and fish rot in days and are no store). */
+export function keepingDays(b: Band): number {
+  let v = b.store.plant + b.store.dried;
+  for (const h of b.hearths.values()) v += h.plant + h.dried;
+  return (v + b.pit) / Math.max(1, b.appetite);
+}
 
 /** A person's guess at what a place holds now, from when they last heard about it. */
 export function estimate(pl: { k: number; q: number; t: number }, now: number): number {

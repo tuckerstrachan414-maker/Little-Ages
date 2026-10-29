@@ -9,7 +9,8 @@ import { mock } from "./leaders.ts";
 import { gift } from "./friends.ts";
 import { storeFood, homeOf } from "./band.ts";
 import { IDEAS, Idea, knows, practice, inspire, inUse, learn, ready, shown, tellIdea, riverAt, rootsAt } from "./ideas.ts";
-import { Work, emptyWeir, buildWeir, sow, cropAt } from "./works.ts";
+import { Work, emptyWeir, buildWeir, sow, resow, seedLine, cropAt, workById, worksAround } from "./works.ts";
+import { raise, digPit, storeInPit, fetchFromPit, pitOf } from "./homes.ts";
 
 /*
   Doing things. Each plan is a list of steps (walk there, gather, walk back, put it in the
@@ -74,6 +75,10 @@ export function doStep(s: Society, p: Person, dt: number): void {
     case St.Dry: work(s, p, st, dt, Anim.Butcher); break;
     case St.Build: work(s, p, st, dt, Anim.Chop); break;
     case St.Sow: work(s, p, st, dt, Anim.Dig); break;
+    case St.Raise: work(s, p, st, dt, Anim.Build); break;
+    case St.Pit: work(s, p, st, dt, Anim.Dig); break;
+    case St.Store: work(s, p, st, dt, Anim.Gather); break;
+    case St.Fetch: work(s, p, st, dt, Anim.Dig); break;
   }
 }
 
@@ -175,11 +180,12 @@ function work(s: Society, p: Person, st: Step, dt: number, anim: number): void {
     case St.Gather: {
       /* a household's own crop, sown in the spring */
       if (st.id) {
-        const w = s.works.find(k => k.id === st.id && k.kind === Work.Plot);
+        const w = workById(s, st.id); if (w && w.kind !== Work.Plot) break;
         if (w && w.state >= 1 && w.food > 0) {
           const got = Math.min(w.food, Math.max(0, (st.a ?? 5) - p.carryAmt));
           w.food -= got; load(p, Food.Plant, got); s.stats.food.crop += got; s.stats.food.plant += got;
           practice(p, Idea.Planting, 0.01);
+          if (w.band === b.id) seedLine(s, p, w);
           harvest(s, p, w);
         }
         break;
@@ -202,7 +208,7 @@ function work(s: Society, p: Person, st: Step, dt: number, anim: number): void {
     case St.Fish: {
       /* a weir's trap: the fish are there for the taking */
       if (st.id) {
-        const w = s.works.find(k => k.id === st.id && k.kind === Work.Weir);
+        const w = workById(s, st.id); if (w && w.kind !== Work.Weir) break;
         if (w) { const got = emptyWeir(w, Math.max(0, 6 - (p.carryKind === Food.Fish ? p.carryAmt : 0))); load(p, Food.Fish, got); s.stats.food.fish += got; if (got > 1.5) s.bubble(p, Bubble.Fish, 2); }
         break;
       }
@@ -309,17 +315,26 @@ function work(s: Society, p: Person, st: Step, dt: number, anim: number): void {
       break;
     }
     case St.Build: {
-      const mend = st.id ? s.works.find(w => w.id === st.id) ?? null : null;
-      if (!mend && s.works.some(w => w.kind === Work.Weir && Math.hypot(w.wx - (st.a ?? 0), w.wy - (st.o ?? 0)) < 5)) break;
+      const mend = st.id ? workById(s, st.id) ?? null : null;
+      if (!mend && worksAround(s, st.a ?? st.x, st.o ?? st.y, 7).some(w => w.kind === Work.Weir && Math.hypot(w.wx - (st.a ?? 0), w.wy - (st.o ?? 0)) < 5)) break;
       buildWeir(s, p, { x: st.x, y: st.y, wx: st.a ?? st.x, wy: st.o ?? st.y }, mend);
       break;
     }
+    case St.Raise: raise(s, p, st); break;
+    case St.Pit: digPit(s, p, st); break;
+    case St.Store: storeInPit(s, p, st); break;
+    case St.Fetch: fetchFromPit(s, p, st); break;
     case St.Sow: {
-      /* the seed comes from the household's own store of plant food */
-      const h = hearthOf(s, p), crop = cropAt(s, st.x, st.y);
-      if (h.plant < 1 || !crop) break;
-      h.plant -= Math.min(2, h.plant);
-      sow(s, p, { x: st.x, y: st.y, crop });
+      /* the seed comes from the household's own store of plant food, or what it put by in its pit */
+      const h = hearthOf(s, p), pit = pitOf(s, b, homeOf(p, s.byId, s.time)), field = st.id ? workById(s, st.id) : undefined;
+      /* a field someone else has sown again meanwhile needs no more seed */
+      if (field && (field.kind !== Work.Plot || !field.fallow)) break;
+      const crop = field ? field.crop : cropAt(s, st.x, st.y);
+      const seed = h.plant + (pit && pit.foods ? pit.foods.plant : 0);
+      if (seed < 1 || !crop) break;
+      let need = 2; const t = Math.min(need, h.plant); h.plant -= t; need -= t;
+      if (need > 0 && pit && pit.foods) { const u = Math.min(need, pit.foods.plant); pit.foods.plant -= u; b.pit = Math.max(0, b.pit - u); }
+      if (field) resow(s, p, field); else sow(s, p, { x: st.x, y: st.y, crop });
       break;
     }
   }
@@ -611,7 +626,7 @@ function follow(s: Society, p: Person, st: Step, dt: number): void {
   p.anim = q.anim === Anim.Sit || q.anim === Anim.HoldBaby ? Anim.Sit : q.anim === Anim.Gather || q.anim === Anim.Dig ? Anim.Gather : Anim.Idle;
   face(p, q.x, q.y);
   /* watching and copying is how children learn */
-  const g = q.goal, sk = g === Goal.Gather || g === Goal.Sow ? Skill.Gather : g === Goal.Fish || g === Goal.Build ? Skill.Fish : g === Goal.Snare || g === Goal.Hunt ? Skill.Hunt : g === Goal.Craft || g === Goal.Dry || g === Goal.Kindle ? Skill.Craft : -1;
+  const g = q.goal, sk = g === Goal.Gather || g === Goal.Sow || g === Goal.Pit ? Skill.Gather : g === Goal.Fish || g === Goal.Build ? Skill.Fish : g === Goal.Snare || g === Goal.Hunt ? Skill.Hunt : g === Goal.Craft || g === Goal.Dry || g === Goal.Kindle || g === Goal.Hut ? Skill.Craft : -1;
   if (sk >= 0 && q.plan[q.si]?.k !== St.Go) p.skills[sk] = Math.min(q.skills[sk], p.skills[sk] + 0.0012 * (0.5 + p.traits[4]) * dt);
   if (q.plan[q.si]?.k !== St.Go && s.age(p) >= 5) for (const id of inUse(q)) {
     if (p.know[id] > 0 || s.age(p) < IDEAS[id].age || !ready(p, id)) continue;
