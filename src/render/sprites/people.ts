@@ -32,8 +32,10 @@ const TIMING: Record<string, number[]> = {
   chop: [200, 70, 230, 160], knap: [150, 60, 170, 120], sew: [380, 300, 380, 300], talk: [300, 240, 300, 240], sit: [460, 340, 460, 340],
   sleep: [900, 900, 900, 900], cook: [380, 380, 380, 380], holdbaby: [460, 340, 460, 340], cane: [480, 360, 480, 360], canewalk: [170, 150, 170, 150],
   play: [90, 80, 90, 80], wave: [180, 180, 180, 180], drink: [500, 400, 500, 400], eat: [360, 300, 360, 300], sick: [900, 900, 900, 900],
+  /* raising a hut: crouch back to lift, reach up to lash, bring it down and tamp (the impact held), straighten */
+  build: [260, 150, 220, 300],
 };
-const NAMES = ["idle", "walk", "run", "carry", "gather", "dig", "fish", "throw", "butcher", "chop", "knap", "sew", "talk", "sit", "sleep", "cook", "holdbaby", "cane", "canewalk", "play", "wave", "drink", "eat", "sick"];
+const NAMES = ["idle", "walk", "run", "carry", "gather", "dig", "fish", "throw", "butcher", "chop", "knap", "sew", "talk", "sit", "sleep", "cook", "holdbaby", "cane", "canewalk", "play", "wave", "drink", "eat", "sick", "build"];
 export function animName(a: number): string { return NAMES[a] ?? "idle"; }
 export function animFrame(anim: number, t: number, phase: number): number {
   const d = TIMING[animName(anim)] ?? TIMING.idle, total = d[0] + d[1] + d[2] + d[3];
@@ -89,10 +91,11 @@ function personGrid(l: Look, anim: number, f: number, view: View, flags: number,
   const bob = walking || a === "run" || a === "play" ? [0, -1, 0, -1][f] : 0;
   const breathe = (a === "idle" || a === "cane" || sit || a === "fish") && f === 1 ? -1 : 0;
   const happyHop = (flags & PFlag.Happy) && a === "idle" && f === 1 ? -1 : 0;
-  const swing = a === "chop" || a === "dig" || a === "butcher";
-  const lean = swing ? [-1, 0, 1, 0][f] : a === "run" || a === "play" ? 1 : crouch ? 1 : 0;
-  const squash = swing && f === 2 ? 1 : 0;
-  const dy = bob + breathe + squash + happyHop;
+  const swing = a === "chop" || a === "dig" || a === "butcher", raise = a === "build";
+  const lean = swing ? [-1, 0, 1, 0][f] : raise ? [-1, 0, 1, 0][f] : a === "run" || a === "play" ? 1 : crouch ? 1 : 0;
+  /* squash on the impact, a stretch up on the toes for the reach (overshooting the rest pose) */
+  const squash = (swing || raise) && f === 2 ? 1 : 0, stretch = raise && f === 1 ? -1 : 0;
+  const dy = bob + breathe + squash + stretch + happyHop;
   const blink = a === "idle" && f === 3;
   const y0 = fy - T + 1, hy = y0 + 1 + dy + (sad ? 1 : 0), ty = y0 + 1 + dy + A.hh, ly = fy - legH;
   const stoop = (A.stoop ?? 0) + (sad ? 0 : 0);
@@ -226,6 +229,12 @@ function personGrid(l: Look, anim: number, f: number, view: View, flags: number,
         for (let i = 1; i <= len; i++) put(g, ax + 2 + i, ty + 2 + i, i % 2 ? handle : handleD);
         const ex = ax + 3 + len, eyy = ty + 2 + len; head(ex, eyy - 1, true); hit = [ex, eyy];
       } else { put(g, ax + 1, ty + 1, arm); put(g, ax + 2, ty + 1, skin); hline(g, ax + 3, ty + 1, 3, handle); head(ax + 6, ty, false); }
+    } else if (raise) {
+      /* a pole lifted overhead, lashed high on the frame, then a stake tamped into the ground */
+      if (f === 0) { put(g, ax + 1, ty + 1, arm); put(g, ax + 2, ty + 2, skin); hline(g, ax + 1, ty + 3, 6, handle); put(g, ax + 6, ty + 3, handleD); }
+      else if (f === 1) { for (let y = ty - 1; y >= ty - 5; y--) put(g, ax + 2, y, arm); put(g, ax + 2, ty - 6, skin); hline(g, ax - 2, ty - 7, 8, handle); put(g, ax + 5, ty - 7, handleD); put(g, ax - 1, ty - 8, P.thatch); put(g, ax, ty - 8, P.thatchL); put(g, ax + 1, ty - 8, P.thatch); }
+      else if (f === 2) { put(g, ax + 1, ty + 1, arm); put(g, ax + 2, ty + 2, arm); put(g, ax + 3, ty + 2, skin); vline(g, ax + 3, ty + 3, Math.max(1, fy - ty - 3), handle); hit = [ax + 3, fy]; }
+      else { put(g, ax + 1, ty, arm); put(g, ax + 2, ty + 1, skin); vline(g, ax + 3, ty + 1, 3, handleD); }
     } else if (a === "throw") {
       /* wind up with the spear over the shoulder, hurl it, follow through */
       if (f === 0) { put(g, ax - 1, ty, arm); put(g, ax - 2, ty - 1, arm); put(g, ax - 2, ty - 2, skin); for (let i = -4; i <= 4; i++) put(g, ax + i, ty - 2, i > 2 ? P.stoneL : handle); }

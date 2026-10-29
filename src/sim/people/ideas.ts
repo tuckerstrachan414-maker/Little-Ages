@@ -1,7 +1,7 @@
 import { Biome, DAY_SECONDS, Flag } from "../../shared/types.ts";
 import { Anim, Bubble } from "../../shared/people.ts";
 import { Goal, Mem, St, Skill, type Person } from "./person.ts";
-import { type Band } from "./band.ts";
+import { keepingDays, type Band } from "./band.ts";
 import { feudOf } from "./feuds.ts";
 import type { Society } from "./society.ts";
 
@@ -20,6 +20,7 @@ import type { Society } from "./society.ts";
 export const Idea = {
   KeepFire: 0, Spear: 1, Fishing: 2, Hides: 3, Snares: 4,
   MakeFire: 5, Blades: 6, Axe: 7, Digging: 8, Baskets: 9, Nets: 10, Weirs: 11, Drying: 12, Planting: 13,
+  Pits: 14, Huts: 15,
 } as const;
 
 export interface IdeaDef {
@@ -65,6 +66,8 @@ export const IDEAS: IdeaDef[] = [
   { id: 11, name: "fish weirs", how: "how to build a fish weir", title: "The fish weir", needs: [2], age: 12, child: 0.03, watch: 0.008, show: 0.45, skill: Skill.Fish, worth: 0.65, spark: 0.002, start: false, anim: Anim.Chop, icon: Bubble.Fish },
   { id: 12, name: "drying meat", how: "how to dry meat and fish on racks", title: "Meat that keeps", needs: [0], age: 9, child: 0.05, watch: 0.012, show: 0.6, skill: Skill.Craft, worth: 0.75, spark: 0.0003, start: false, anim: Anim.Butcher, icon: Bubble.Meat },
   { id: 13, name: "planting", how: "how to plant", title: "The first planting", needs: [8], age: 8, child: 0.04, watch: 0.008, show: 0.5, skill: Skill.Gather, worth: 0.6, spark: 0.0028, start: false, anim: Anim.Dig, icon: Bubble.Berries },
+  { id: 14, name: "storage pits", how: "how to dig a pit and line it to keep food through the lean months", title: "Food put by", needs: [], age: 9, child: 0.04, watch: 0.01, show: 0.5, skill: Skill.Gather, worth: 0.65, spark: 0.0005, start: false, anim: Anim.Dig, icon: Bubble.Home },
+  { id: 15, name: "building huts", how: "how to raise a hut of poles and thatch", title: "The first huts", needs: [], age: 12, child: 0.03, watch: 0.008, show: 0.45, skill: Skill.Craft, worth: 0.6, spark: 0.004, start: false, anim: Anim.Build, icon: Bubble.Home },
 ];
 export const IDEA_COUNT = IDEAS.length;
 
@@ -120,7 +123,7 @@ export interface Ctx {
 }
 const DURING: Partial<Record<number, number[]>> = {
   [St.Knap]: [Idea.MakeFire, Idea.Blades], [St.Kindle]: [Idea.MakeFire], [St.Craft]: [Idea.MakeFire],
-  [St.Wood]: [Idea.Axe], [St.Gather]: [Idea.Digging, Idea.Baskets, Idea.Planting], [St.Fish]: [Idea.Nets, Idea.Weirs],
+  [St.Wood]: [Idea.Axe, Idea.Huts], [St.Gather]: [Idea.Digging, Idea.Baskets, Idea.Planting, Idea.Pits], [St.Fish]: [Idea.Nets, Idea.Weirs],
   [St.Butcher]: [Idea.Drying, Idea.Blades], [St.Cook]: [Idea.Drying],
 };
 
@@ -157,6 +160,19 @@ function pressure(s: Society, p: Person, id: number, k: number, c: Ctx): number 
       const rot = b.yesterday.spoiled / Math.max(2, b.appetite * 0.6);
       return Math.min(1, rot) * 0.8;
     }
+    case Idea.Pits: {
+      /* the autumn's plenty, more than can be eaten before it spoils, with lean months coming and a camp lived in long enough to think of keeping it */
+      const stay = Math.max(0, Math.min(1, (s.time - b.movedAt) / (DAY_SECONDS * 25)));
+      const lean = s.season >= 1 && s.tempC(b.x, b.y, s.time + DAY_SECONDS * 15) < 8;
+      const plenty = (c.full ? 0.5 : 0.1) + Math.min(0.4, keepingDays(b) / 10);
+      return plenty * (s.season === 2 ? 1 : s.season === 1 ? 0.35 : 0.12) * (lean ? 1.5 : 0.7) * (0.4 + 0.6 * stay);
+    }
+    case Idea.Huts: {
+      /* fetching wood at a camp lived in long, with cold or wet weather making the old shelters miserable */
+      const stay = Math.max(0, Math.min(1, (s.time - b.movedAt) / (DAY_SECONDS * 25)));
+      if (stay < 0.2) return 0;
+      return stay * (T < 6 ? 1 : T < 14 ? 0.6 : 0.25) * (s.season >= 2 ? 1 : 0.6);
+    }
   }
   return 0;
 }
@@ -168,7 +184,9 @@ export function inspire(s: Society, p: Person, k: number, c: Ctx = {}): boolean 
   for (const id of list) {
     if (p.know[id] > 0 || !ready(p, id)) continue;
     const pr = pressure(s, p, id, k, c); if (pr <= 0) continue;
-    if (s.rng.chance(IDEAS[id].spark * pr * aptitude(p, id, age))) { discover(s, p, id, k, c); return true; }
+    const odds = pr * aptitude(p, id, age);
+    s.stats.inspire.tries[id]++; s.stats.inspire.odds[id] += odds;
+    if (s.rng.chance(IDEAS[id].spark * odds)) { discover(s, p, id, k, c); return true; }
   }
   return false;
 }
@@ -189,6 +207,8 @@ function story(s: Society, p: Person, id: number, k: number, c: Ctx): string {
     case Idea.Weirs: return `${p.name} of the ${b.name} saw fish crowding the shallows of the ${c.river ? "river" : "water"} and drove in a fence of stakes to trap them: a weir that fishes while its makers sleep.`;
     case Idea.Drying: return `${p.name} of the ${b.name}, with ${c.big ? "more meat from the kill than anyone could eat" : "meat going bad at camp"}, cut it into thin strips and hung them over the smoke. Dried, it keeps for months.`;
     case Idea.Planting: return `${p.name} of the ${b.name} noticed shoots coming up where seeds had been spilled around camp, and pushed seeds into the ground on purpose. If the band stays, they will come up.`;
+    case Idea.Pits: return `${p.name} of the ${b.name}, with more ${s.season === 2 ? "of the autumn's food" : "food"} at the hearth than the family could eat before it spoiled, dug a pit in the dry ground, lined it with bark and grass and put the food by. Kept in the ground, it lasts for months.`;
+    case Idea.Huts: return `${p.name} of the ${b.name}, bringing in poles at a camp they had lived at a long while${T < 8 ? `, with the cold coming through the old shelter` : ""}, set them in the ground, bent and lashed them into a frame and covered it: a hut, warm and dry, that will stand when they are away.`;
   }
   return `${p.name} of the ${b.name} worked out ${IDEAS[id].how}.`;
 }
@@ -267,6 +287,8 @@ export function inUse(q: Person): number[] {
     case St.Kindle: return has(Idea.MakeFire) ? [Idea.MakeFire] : [];
     case St.Dry: return [Idea.Drying];
     case St.Build: return [Idea.Weirs];
+    case St.Raise: return [Idea.Huts];
+    case St.Pit: case St.Store: return [Idea.Pits];
     case St.Cook: return [Idea.KeepFire];
   }
   return [];

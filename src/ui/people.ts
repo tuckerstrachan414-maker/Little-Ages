@@ -1,5 +1,5 @@
-import type { BandDetail, Feuding, Kin, PersonDetail } from "../shared/protocol.ts";
-import type { CampSnap, ChronicleEvent, Look } from "../shared/people.ts";
+import type { BandDetail, Feuding, Kin, PersonDetail, VillageDetail } from "../shared/protocol.ts";
+import type { CampSnap, ChronicleEvent, Look, VillageSnap } from "../shared/people.ts";
 import { Anim, Bubble } from "../shared/people.ts";
 import { DAY_SECONDS, DAYS_PER_SEASON, DAYS_PER_YEAR, SEASON_NAMES } from "../shared/types.ts";
 import { personSprite } from "../render/sprites/people.ts";
@@ -37,19 +37,21 @@ export function portrait(look: Look, size = 30, dead = false): HTMLCanvasElement
 function when(t: number, now: number): string {
   const d = (now - t) / DAY_SECONDS;
   if (d < 1) return "today"; if (d < 2) return "yesterday"; if (d < DAYS_PER_SEASON) return `${Math.floor(d)} days ago`;
-  if (d < DAYS_PER_YEAR) return `${Math.floor(d / DAYS_PER_SEASON)} seasons ago`;
-  return `${Math.floor(d / DAYS_PER_YEAR)} years ago`;
+  if (d < DAYS_PER_YEAR) { const n = Math.floor(d / DAYS_PER_SEASON); return n === 1 ? "a season ago" : `${n} seasons ago`; }
+  const n = Math.floor(d / DAYS_PER_YEAR); return n === 1 ? "a year ago" : `${n} years ago`;
 }
 export function dateOf(t: number): string {
   const day = Math.floor(t / DAY_SECONDS), y = Math.floor(day / DAYS_PER_YEAR) + 1, s = Math.floor(day / DAYS_PER_SEASON) % 4;
   return `${SEASON_NAMES[s]}, year ${y}`;
 }
+/** What a village's pits hold, in days of its people's food. */
+const pitWords = (d: number) => d < 0.05 ? "standing empty" : d < 0.5 ? "with a little food put by" : `holding ${Math.round(d)} ${Math.round(d) === 1 ? "day" : "days"} of food`;
 /** "half a day", "1 day", "3 days" of food */
 const daysText = (d: number) => d < 0.3 ? "hardly any" : d < 0.75 ? "half a day's" : d < 1.5 ? "a day's" : `${Math.round(d)} days'`;
 const bars = (rows: [string, number, string][]) => rows.map(([n, v, col]) => `<div class="need"><span>${n}</span><span class="segs" style="--c:${col}">${Array.from({ length: 8 }, (_, i) => `<i class="${i < Math.round(Math.max(0, Math.min(1, v)) * 8) ? "on" : ""}"></i>`).join("")}</span></div>`).join("");
 
 export interface PeopleUICallbacks {
-  pin: (person: number, band: number) => void;
+  pin: (person: number, band: number, village?: number) => void;
   fly: (x: number, y: number, z?: number) => void;
   follow: (on: boolean) => void;
   /** open the journal on this person's or band's story */
@@ -69,8 +71,11 @@ export class PeopleUI {
   private tab: "now" | "family" | "mind" = "now";
   private person: PersonDetail | null = null;
   private band: BandDetail | null = null;
+  private village: VillageDetail | null = null;
+  private villages: VillageSnap[] = [];
   private pinnedId = 0;
   private pinnedBand = 0;
+  private pinnedVillage = 0;
   private threads = true;
   following = false;
   /** whether the pinned card is showing; hidden, it leaves a chip with the name instead */
@@ -147,10 +152,10 @@ export class PeopleUI {
   }
 
   /* ---------------- the pinned tag ---------------- */
-  get pinned(): { person: number; band: number } { return { person: this.pinnedId, band: this.pinnedBand }; }
-  pin(person: number, band: number): void {
-    this.pinnedId = person; this.pinnedBand = band; this.person = null; this.band = null; this.renderedKey = "";
-    if (!person && !band) { this.tag?.remove(); this.tag = null; this.svg.innerHTML = ""; this.following = false; this.cb.follow(false); this.tagOpen = true; this.chip.classList.add("off"); return; }
+  get pinned(): { person: number; band: number; village: number } { return { person: this.pinnedId, band: this.pinnedBand, village: this.pinnedVillage }; }
+  pin(person: number, band: number, village = 0): void {
+    this.pinnedId = person; this.pinnedBand = band; this.pinnedVillage = village; this.person = null; this.band = null; this.village = null; this.renderedKey = "";
+    if (!person && !band && !village) { this.tag?.remove(); this.tag = null; this.svg.innerHTML = ""; this.following = false; this.cb.follow(false); this.tagOpen = true; this.chip.classList.add("off"); return; }
     /* pinning someone always opens their card again, even if it was hidden */
     this.tagOpen = true;
     if (!this.tag) { this.tag = el("div", "paper tag"); this.tag.style.borderImageSource = `url(${frameURL()})`; this.root.append(this.tag); }
@@ -175,6 +180,13 @@ export class PeopleUI {
     if (!d) { this.pin(0, 0); return; }
     this.band = d; this.render();
   }
+  setVillage(d: VillageDetail | null, id: number): void {
+    if (id !== this.pinnedVillage) return;
+    if (!d) { this.pin(0, 0); return; }
+    this.village = d; this.render();
+  }
+  /** Villages and gatherings on the map, for keeping a village's card beside it. */
+  setVillages(v: VillageSnap[]): void { this.villages = v; }
 
   /** The buttons every card carries: hide it to a chip, or unpin it. */
   private chrome(): string {
@@ -187,7 +199,7 @@ export class PeopleUI {
 
   private render(): void {
     const t = this.tag; if (!t) return;
-    if (this.person) this.renderPerson(t, this.person); else if (this.band) this.renderBand(t, this.band);
+    if (this.person) this.renderPerson(t, this.person); else if (this.band) this.renderBand(t, this.band); else if (this.village) this.renderVillage(t, this.village);
   }
 
   private renderPerson(t: HTMLElement, d: PersonDetail): void {
@@ -224,7 +236,7 @@ export class PeopleUI {
       t.querySelector(".why")!.innerHTML = `<strong>Why?</strong> ${esc(d.why.replace(/^\S+ is /, "").replace(/^./, c => c.toUpperCase()))}`;
       t.querySelector(".needs")!.innerHTML = bars([["FOOD", n.food, "#c97a3a"], ["WATER", n.water, "#4f8fb8"], ["REST", n.rest, "#7a6ab0"], ["WARMTH", n.warmth, "#d0653a"], ["COMPANY", n.company, "#5e8f3e"], ["HEALTH", n.health, "#b04050"]]);
       t.querySelector(".mood")!.innerHTML = `<b>${d.moodWord}</b>${d.feelings.length ? ` &middot; ${d.feelings.map(esc).join(", ")}` : ""}`;
-      t.querySelector(".hearth")!.innerHTML = d.age < 2 ? "" : `<b>Hearth</b> ${esc(daysText(d.hearth))} food &middot; <b>the band's pot</b> ${esc(daysText(d.pot))} food`;
+      t.querySelector(".hearth")!.innerHTML = d.age < 2 ? "" : `<b>Hearth</b> ${esc(daysText(d.hearth))} food &middot; <b>the band's pot</b> ${esc(daysText(d.pot))} food${d.pit >= 0 ? ` &middot; <b>the family's pit</b> ${esc(daysText(d.pit))} food` : ""}<br><b>Home</b> ${esc(d.home)}`;
     }
   }
 
@@ -302,12 +314,12 @@ export class PeopleUI {
   }
 
   private renderBand(t: HTMLElement, d: BandDetail): void {
-    const key = `b${d.id}|${d.pop}|${d.events.length}|${d.respected?.id}|${d.contender?.id}|${d.feuds.map(f => f.a.id + "-" + f.b.id).join()}|${d.hearths.length}|${d.ideas.map(i => i.id + ":" + i.n).join()}|${d.works.map(w => w.text).join()}`;
+    const key = `b${d.id}|${d.pop}|${d.events.length}|${d.respected?.id}|${d.contender?.id}|${d.feuds.map(f => f.a.id + "-" + f.b.id).join()}|${d.hearths.length}|${d.ideas.map(i => i.id + ":" + i.n).join()}|${d.works.map(w => w.text).join()}|${d.homes}`;
     if (key !== this.renderedKey) {
       this.renderedKey = key;
       t.innerHTML = `${this.chrome()}
-        <div class="nm">The ${esc(d.name)}</div><div class="sub">A band of the ${esc(d.people)} people, camped at ${esc(d.camp)}</div>
-        <p class="stats"></p><p class="voices"></p><div class="needs"></div><h4>Hearths</h4><div class="hearths"></div><p class="sharing"></p>${d.feuds.length ? `<h4>Bad blood</h4><ul class="mem feuds-b"></ul>` : ""}<h4>Know-how</h4><ul class="mem ideas-b"></ul>${d.works.length ? `<h4>Weirs and plots</h4><ul class="mem works-b"></ul>` : ""}<h4>People</h4><div class="members"></div><div class="chips"><button type="button" data-act="journal">Journal</button></div>${d.events.length ? `<h4>Lately</h4><ul class="mem">${d.events.map(e => `<li>${esc(e.text)} <em>${when(e.t, this.time)}</em></li>`).join("")}</ul>` : ""}`;
+        <div class="nm">The ${esc(d.name)}</div><div class="sub">A band of the ${esc(d.people)} people, ${d.village ? `living in the village of ${esc(d.village)}` : `camped at ${esc(d.camp)}`}</div>
+        <p class="stats"></p><p class="voices"></p>${d.homes ? `<h4>Homes and stores</h4><p class="homes"></p>` : ""}<div class="needs"></div><h4>Hearths</h4><div class="hearths"></div><p class="sharing"></p>${d.feuds.length ? `<h4>Bad blood</h4><ul class="mem feuds-b"></ul>` : ""}<h4>Know-how</h4><ul class="mem ideas-b"></ul>${d.works.length ? `<h4>Weirs and plots</h4><ul class="mem works-b"></ul>` : ""}<h4>People</h4><div class="members"></div><div class="chips"><button type="button" data-act="journal">Journal</button></div>${d.events.length ? `<h4>Lately</h4><ul class="mem">${d.events.map(e => `<li>${esc(e.text)} <em>${when(e.t, this.time)}</em></li>`).join("")}</ul>` : ""}`;
       this.bindChrome(t);
       t.querySelector<HTMLButtonElement>("[data-act=journal]")!.onclick = () => this.cb.journal({ band: d.id, name: `The ${d.name}`, note: "their story" });
       const m = t.querySelector(".members")!;
@@ -335,10 +347,32 @@ export class PeopleUI {
     const voices = t.querySelector(".voices")!;
     voices.innerHTML = d.respected ? `Led by <button type="button" class="lnk" data-pin="${d.respected.id}">${esc(d.respected.name)}</button>, whom ${d.followers} of the adults listen to${d.ledDays >= 10 ? `, for ${Math.floor(d.ledDays / 10)} season${d.ledDays >= 20 ? "s" : ""} now` : ""}.${d.contender ? ` A second voice: <button type="button" class="lnk" data-pin="${d.contender.id}">${esc(d.contender.name)}</button>, with ${d.contender.followers}.` : ""}` : "Nobody leads the band: each goes by their own judgment.";
     voices.querySelectorAll<HTMLButtonElement>("[data-pin]").forEach(b => b.onclick = () => this.cb.pin(+b.dataset.pin!, 0));
-    t.querySelector(".stats")!.innerHTML = `<b>${d.pop}</b> people: ${d.adults} adults, ${d.children} children, ${d.couples} couples.${d.moving ? " <b>On the move.</b>" : ""} Moved camp ${d.moves} times. Brought in ${d.yesterday.brought} and ate ${d.yesterday.eaten} yesterday.${d.dried >= 1 ? ` ${d.dried} days of dried meat and fish put by.` : ""}${d.fire <= 0 ? " <b>The fire is out.</b>" : ""}`;
+    t.querySelector(".stats")!.innerHTML = `<b>${d.pop}</b> people: ${d.adults} adults, ${d.children} children, ${d.couples} couples.${d.moving ? " <b>On the move.</b>" : ""} ${d.moves ? `Moved camp ${d.moves === 1 ? "once" : `${d.moves} times`}.` : "Has never moved camp."} Brought in ${d.yesterday.brought} and ate ${d.yesterday.eaten} yesterday.${d.dried >= 1 ? ` ${d.dried} days of dried meat and fish put by.` : ""}${d.fire <= 0 ? " <b>The fire is out.</b>" : ""}`;
     t.querySelector(".needs")!.innerHTML = bars([["ALL FOOD", Math.min(1, d.days / 4), "#c97a3a"], ["THE POT", Math.min(1, d.pot / 4), "#b5683a"], ["FIRE", d.fire, "#d0653a"]]);
+    const homes = t.querySelector(".homes"); if (homes) homes.textContent = `${d.homes}.${d.stay ? ` ${d.stay}` : ""}`;
     t.querySelector(".hearths")!.innerHTML = `<div class="needs">${bars(d.hearths.slice(0, 8).map(h => [`${h.name.slice(0, 9).toUpperCase()} ${h.people}`, Math.min(1, h.days / 4), "#8a6a3a"] as [string, number, string]))}</div>${d.hearths.length > 8 ? `<p class="muted">and ${d.hearths.length - 8} more</p>` : ""}`;
     t.querySelector(".sharing")!.textContent = d.yesterday.brought > 0 ? `Yesterday ${Math.round(d.sharedYesterday * 100)}% of the food brought in went into the pot; the rest stayed at the hearths of those who brought it.` : "";
+  }
+
+  private renderVillage(t: HTMLElement, d: VillageDetail): void {
+    const key = `v${d.id}|${d.pop}|${d.events.length}|${d.bands.map(b => b.id + ":" + (b.leader?.id ?? 0)).join()}|${d.huts}|${d.building}|${d.ruins}|${d.pits}|${d.fields.map(f => f.crop + f.n).join()}|${d.listened?.id}|${d.abandoned}|${d.empty}`;
+    if (key === this.renderedKey) return;
+    this.renderedKey = key;
+    const founder = d.founder.alive ? `<button type="button" class="lnk" data-pin="${d.founder.id}">${esc(d.founder.name)}</button>` : esc(d.founder.name);
+    const state = d.abandoned ? `Nobody has lived here since ${dateOf(d.abandoned)}.` : d.empty ? `Its people are away; the huts wait for them.` : `<b>${d.pop}</b> people live here${d.peak > d.pop + 3 ? ` (once ${d.peak})` : ""}.`;
+    const fields = d.fields.map(f => `${f.n} ${f.n === 1 ? "field" : "fields"} of ${esc(f.crop)}${f.tame >= 0.25 ? `, the seed grown ${f.tame >= 0.5 ? "tame" : "plump"} from years of sowing` : ""}`);
+    const built = [`${d.huts} ${d.huts === 1 ? "hut" : "huts"}${d.building ? `, ${d.building} going up` : ""}${d.ruins ? `, ${d.ruins} fallen in` : ""}`, d.pits ? `${d.pits} storage ${d.pits === 1 ? "pit" : "pits"} ${pitWords(d.pitDays)}` : "", ...fields, d.weirs ? `${d.weirs} fish ${d.weirs === 1 ? "weir" : "weirs"}` : ""].filter(Boolean);
+    t.innerHTML = `${this.chrome()}
+      <div class="nm">${esc(d.name)}</div><div class="sub">"${esc(d.gloss)}": a village of the ${esc(d.people)}, named ${esc(d.why)}</div>
+      <p class="stats">${state} It began in ${dateOf(d.founded)}, when ${esc(d.story)}; ${founder} raised the first hut.</p>
+      ${d.bands.length ? `<h4>${d.bands.length === 1 ? "The band" : "The bands"} living here</h4><ul class="mem vbands">${d.bands.map(b => `<li><i class="sw" style="background:${b.color}"></i><button type="button" class="lnk" data-band="${b.id}">The ${esc(b.name)}</button>, ${b.pop} people${b.leader ? `, led by <button type="button" class="lnk" data-pin="${b.leader.id}">${esc(b.leader.name)}</button>` : ""}</li>`).join("")}</ul>${d.bands.length > 1 && d.listened ? `<p class="voices">Of all the grown-ups here, the most listen to <button type="button" class="lnk" data-pin="${d.listened.id}">${esc(d.listened.name)}</button> (${d.listened.n}).</p>` : ""}` : ""}
+      <h4>What they have built and put by</h4><ul class="mem">${built.map(x => `<li>${x}</li>`).join("")}</ul>
+      <div class="chips"><button type="button" data-act="journal">Journal</button></div>
+      ${d.events.length ? `<h4>Lately</h4><ul class="mem">${d.events.map(e => `<li>${esc(e.text)} <em>${when(e.t, this.time)}</em></li>`).join("")}</ul>` : ""}`;
+    this.bindChrome(t);
+    t.querySelectorAll<HTMLButtonElement>("[data-pin]").forEach(b => b.onclick = () => this.cb.pin(+b.dataset.pin!, 0));
+    t.querySelectorAll<HTMLButtonElement>("[data-band]").forEach(b => b.onclick = () => this.cb.pin(0, +b.dataset.band!));
+    t.querySelector<HTMLButtonElement>("[data-act=journal]")!.onclick = () => this.cb.journal({ band: d.bands[0]?.id ?? 0, name: d.name, note: "the village's story" });
   }
 
   /** Put a ring on the map where something happened, for a few seconds. */
@@ -349,6 +383,7 @@ export class PeopleUI {
     let wx = 0, wy = 0, have = false;
     if (this.pinnedId) { const p = pos.get(this.pinnedId); if (p) { [wx, wy] = p; have = true; } }
     else if (this.pinnedBand) { const c = camps.find(k => k.id === this.pinnedBand); if (c) { wx = c.x; wy = c.y; have = true; } }
+    else if (this.pinnedVillage) { const v = this.villages.find(k => k.id === this.pinnedVillage); if (v) { wx = v.x; wy = v.y; have = true; } }
     const W = window.innerWidth, H = window.innerHeight, mobile = W < 640, floor = H - this.inset;
     const t = this.tag;
     this.chip.classList.toggle("off", !have || this.tagOpen);
@@ -439,7 +474,7 @@ export class PeopleUI {
 
   /** The name chip beside the pinned person, kept on screen. */
   private placeChip(px: number, headY: number, W: number, H: number): void {
-    const name = this.person ? this.person.name : this.band ? `The ${this.band.name}` : "";
+    const name = this.person ? this.person.name : this.band ? `The ${this.band.name}` : this.village ? this.village.name : "";
     if (this.chip.dataset.name !== name) { this.chip.dataset.name = name; this.chip.innerHTML = `<b></b><span>SHOW</span>`; this.chip.querySelector("b")!.textContent = name; }
     const cw = this.chip.offsetWidth, ch = this.chip.offsetHeight;
     this.chip.style.left = `${Math.round(clamp(px + 16, 8, W - cw - 8))}px`;

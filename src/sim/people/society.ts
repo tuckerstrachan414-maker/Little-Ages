@@ -7,16 +7,18 @@ import { ancestryFor, founderGenome, inherit, looksOf, temperament, hairAt, idea
 import { makeCulture, pickStyle, type Culture } from "./culture.ts";
 import { personName, placeName } from "./language.ts";
 import { Walker } from "./walk.ts";
-import { type Band, homeOf, storeDays, storeFood, campFood, siteValue, estimate, newDay, noFood } from "./band.ts";
+import { type Band, homeOf, storeDays, keepingDays, storeFood, campFood, siteValue, estimate, newDay, noFood } from "./band.ts";
 import { Goal, Mem, Place, St, YEAR, ageOf, stageOf, type Archived, type KnownPlace, type Person, type Rel } from "./person.ts";
 import { decide, isInterruptible } from "./mind.ts";
 import { doStep, abandon } from "./doing.ts";
 import { weigh } from "./chronicle.ts";
-import { eat, household, appetiteOf, reconcileHearths, carryHearth, spoil, spoilHearths, forgetDebts, shareRound } from "./sharing.ts";
+import { eat, household, appetiteOf, reconcileHearths, carryHearth, spoil, forgetDebts, shareRound, reachFood } from "./sharing.ts";
 import { type Feud, feudDay, feudsOnDeath, feudLeave, feudOf, grievance, handDown, maybeFight, sideOf, fadeGrudges } from "./feuds.ts";
 import { chooseLeaders } from "./leaders.ts";
 import { IDEA_COUNT, Idea, type IdeaLog, newIdeaLog, founderKnow, growUp, ideasDay, countBand, watch, bandKnows } from "./ideas.ts";
-import { type Work, worksDay, lookAtWorks, plotHope } from "./works.ts";
+import { Work, worksDay, lookAtWorks, plotHope, workById, worksAround } from "./works.ts";
+import { layoutCamp, recountPits, hutStands, stakeDays, leaveBehind, pitFood, hutHomes } from "./homes.ts";
+import { villagesDay, noteSite, friendly, roomFor, tiesTo, VILLAGE_R, type Village, type Gathering, type Notable } from "./villages.ts";
 
 /*
   Everyone alive, and the bands they live in. Each step every person's body changes (they
@@ -30,7 +32,7 @@ export interface StartOptions { start: "bands" | "cradle"; bands: number; }
 export interface Carcass { id: number; x: number; y: number; sp: number; meat: number; hides: number; t: number; by: number; mocked?: boolean; }
 
 /** What a good place of each kind is worth, to compare a berry patch with a herd. */
-const PLACE_TYPICAL = [1, 4, 4, 10, 2, 8, 6, 1, 3];
+const PLACE_TYPICAL = [1, 4, 4, 10, 2, 8, 6, 1, 3, 1];
 export const FOOD_DAY: Record<Stage, number> = { baby: 0, toddler: 0.45, child: 0.65, teen: 0.95, adult: 1, elder: 0.8 };
 /** Meat on one animal, in days of food for one person. */
 export const MEAT = [25, 100, 400, 60, 0, 60];
@@ -58,7 +60,15 @@ export class Society {
     social: { eaten: 0, shared: 0, kept: 0, rounds: 0, family: 0, asks: 0, given: 0, refused: 0, repaid: 0, feuds: 0, peace: 0, cooled: 0, fights: 0, inherited: 0, driven: 0, leaders: 0, contests: 0, mocked: 0, gifts: 0, leftFor: 0, factionSplits: 0 },
     /* ideas worked out, lost by a band, and passed on by each way; fires gone out, relit by a fire-maker, and fetched from another band */
     ideas: { found: 0, lost: 0, child: 0, watch: 0, shown: 0, told: 0, seen: 0 },
-    fire: { out: 0, kindled: 0, embers: 0 } };
+    fire: { out: 0, kindled: 0, embers: 0 },
+    /* how long bands stay at a camp (days, by bucket: under 5, 10, 20, 40, 80, and longer), band-days at camps held 40 days or more, and what set each move off */
+    camp: { stays: [0, 0, 0, 0, 0, 0], stayDays: 0, bandDays: 0, longDays: 0, offer: 0, fresh: 0, home: 0, left: 0 },
+    /* storage pits dug and huts raised, food put by in pits, taken back out, and eaten straight from them */
+    homes: { pits: 0, huts: 0, stored: 0, fetched: 0, eaten: 0, firstHut: 0, firstPit: 0 },
+    /* gatherings told of, villages founded, and when the first one was */
+    places: { gatherings: 0, villages: 0, firstVillage: 0, abandoned: 0, returns: 0 },
+    /* each chance someone had to see a new way at work: how many, and the odds before the idea's rarity (expected finds = spark x odds) */
+    inspire: { tries: new Array(IDEA_COUNT).fill(0) as number[], odds: new Array(IDEA_COUNT).fill(0) as number[] } };
   /** feuds still burning, between two people and the families behind them */
   feuds: Feud[] = [];
   nextFeud = 1;
@@ -71,6 +81,12 @@ export class Society {
   worksVersion = 0;
   /** bands that have brought in a harvest of their own sowing */
   harvested = new Set<number>();
+  /** villages, lived in or given up, and bands camped together now; the weightiest thing that has happened in each square of the map (for naming places) */
+  villages: Village[] = [];
+  gatherings: Gathering[] = [];
+  notable = new Map<string, Notable>();
+  /** changes whenever a village or gathering begins, grows, shrinks or ends, for the renderer */
+  villagesVersion = 0;
   readonly start: StartOptions;
   private grid = new Map<number, Person[]>();
   private herdGrid = new Map<number, Herd[]>();
@@ -171,7 +187,7 @@ export class Society {
     for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const c = e.cell(x + dx * 16, y + dy * 16); v += e.plantK[c] + e.fishK[c] * 0.8 + e.rabbitK[c] * 0.3; }
     return v / 9;
   }
-  private climateAt(x: number, y: number) {
+  climateAt(x: number, y: number) {
     const lat = Math.abs(y / this.w.h - 0.5) * 2, i = (y | 0) * this.w.w + (x | 0);
     const annual = this.w.temp[i] / 255 * 62 - 26, amp = 3 + 15 * lat;
     return { uv: Math.max(0.02, Math.min(1, 1.04 - lat * 1.06 - Math.max(0, this.w.elev[i]) * 0.2 + 0.04)), winter: annual - amp, summer: annual + amp, annual };
@@ -240,7 +256,7 @@ export class Society {
     const id = this.bands.length ? Math.max(...this.bands.map(b => b.id)) + 1 : 1;
     const name = placeName(this.cultures[culture].lang, this.rng);
     const b: Band = { id, name, culture, color: BAND_COLORS[(id - 1) % BAND_COLORS.length], x, y, fire: 0.8, store: { ...noFood(), wood: 2, hides: 0 }, hearths: new Map(),
-      members: [], founded: this.time, movedAt: this.time, moves: 0, homes: new Map(), busy: new Map(), respected: 0, followers: 0, ledSince: this.time, contender: 0, parent, met: new Set(), appetite: 1, moving: null, siteName: placeName(this.cultures[culture].lang, this.rng), water: [x, y], past: [], today: newDay(), yesterday: newDay(), can: new Array(IDEA_COUNT).fill(0), keeper: new Array(IDEA_COUNT).fill(0), outAt: 0 };
+      members: [], founded: this.time, movedAt: this.time, moves: 0, homes: new Map(), busy: new Map(), respected: 0, followers: 0, ledSince: this.time, contender: 0, parent, met: new Set(), appetite: 1, moving: null, siteName: placeName(this.cultures[culture].lang, this.rng), water: [x, y], past: [], today: newDay(), yesterday: newDay(), can: new Array(IDEA_COUNT).fill(0), keeper: new Array(IDEA_COUNT).fill(0), outAt: 0, pit: 0, seed: {} };
     this.bands.push(b); this.bandById.set(id, b);
     return b;
   }
@@ -400,27 +416,27 @@ export class Society {
     b.x = x; b.y = y;
     b.past.push([x, y]); if (b.past.length > 8) b.past.shift();
     b.water = this.waterNear(x, y, 8) ?? [x, y];
-    if (!first) { b.fire = Math.min(b.fire, 0.3); b.movedAt = this.time; b.moves++; }
+    if (!first) {
+      const stay = (this.time - b.movedAt) / DAY_SECONDS, c = this.stats.camp;
+      c.stays[stay < 5 ? 0 : stay < 10 ? 1 : stay < 20 ? 2 : stay < 40 ? 3 : stay < 80 ? 4 : 5]++; c.stayDays += stay;
+      b.fire = Math.min(b.fire, 0.3); b.movedAt = this.time; b.moves++;
+    }
     this.layoutHomes(b);
     for (const id of b.members) { const p = this.byId.get(id); if (p) this.learnPlace(p, Place.Camp, x, y, 1, b.id, 0); }
   }
-  layoutHomes(b: Band): void {
+  /** The households of a band, by head, in a steady order. */
+  heads(b: Band): number[] {
     const heads: number[] = [];
     for (const id of b.members) { const p = this.byId.get(id); if (!p || this.stage(p) === "baby") continue; const h = homeOf(p, this.byId, this.time); if (!heads.includes(h)) heads.push(h); }
-    heads.sort((a, c) => a - c);
-    const old = b.homes; b.homes = new Map();
-    const n = heads.length, r = 2.4 + n * 0.16;
-    heads.forEach((h, k) => {
-      const keep = old.get(h); if (keep && Math.hypot(keep[0] - b.x, keep[1] - b.y) < r + 2 && this.walker.dry(keep[0], keep[1])) { b.homes.set(h, keep); return; }
-      for (let tries = 0; tries < 12; tries++) {
-        const a = (k + tries * 0.37) / Math.max(1, n) * Math.PI * 2 + b.id, rr = r + (tries % 3) * 0.6;
-        const hx = b.x + Math.cos(a) * rr, hy = b.y + Math.sin(a) * rr * 0.8;
-        if (this.walker.dry(hx, hy)) { b.homes.set(h, [hx, hy]); return; }
-      }
-      b.homes.set(h, [b.x + 0.5, b.y + 1.5]);
-    });
-    reconcileHearths(this, b);
+    return heads.sort((a, c) => a - c);
   }
+  /** Lays out where each household lives: its hut, an empty hut, or a shelter around the fire (see homes.ts). */
+  layoutHomes(b: Band): void {
+    b.homes = layoutCamp(this, b, this.heads(b), b.homes);
+    reconcileHearths(this, b);
+    recountPits(this, b);
+  }
+  relayout(b: Band): void { if (this.bandById.has(b.id)) this.layoutHomes(b); }
   homeSpot(p: Person): [number, number] {
     const b = this.band(p), h = b.homes.get(homeOf(p, this.byId, this.time));
     const j = (p.id * 0.618) % 1;
@@ -506,6 +522,7 @@ export class Society {
   }
   event(kind: string, icon: number, text: string, x: number, y: number, who: number[], band: number, hint = 0): void {
     const { sig, title } = weigh(this, kind, who, band, hint);
+    noteSite(this, kind, sig, hint, who, x, y);
     const e: ChronicleEvent = { id: this.nextEvent++, t: this.time, kind, icon: icon as ChronicleEvent["icon"], text, x, y, who, band, sig, title };
     this.events.push(e); this.fresh.push(e);
     if (this.events.length > 600) this.events.splice(0, this.events.length - 600);
@@ -577,6 +594,8 @@ export class Society {
     if (p.goal === Goal.Flee || p.goal === Goal.Migrate || p.goal === Goal.Sick) return false;
     if (p.warmth < 0.22 && p.goal !== Goal.Warm && p.goal !== Goal.Sleep && this.band(p).fire > 0.05) return true;
     if (p.food < 0.12 && p.carryAmt > 0 && p.carryKind !== 4 && p.goal !== Goal.Eat) return true;
+    /* starving at camp when food has come in: whatever they were doing, they go and eat */
+    if (p.food < 0.1 && p.goal !== Goal.Eat && this.time - p.whyAt > 3 && this.atCamp(p, 8) && reachFood(this, p) > 0.4) return true;
     if (p.sick > 0.5) return true;
     /* the fire is out in the cold and nobody at camp can light it: someone who can make fire comes back to do it, even from their bed */
     if (p.know[Idea.MakeFire] > 0 && p.goal !== Goal.Kindle && this.time - p.whyAt > 6) {
@@ -584,7 +603,7 @@ export class Society {
       if (b.fire <= 0 && !b.moving && this.tempC(b.x, b.y) < 10 && Math.hypot(p.x - b.x, p.y - b.y) < 30 && !this.fireMakerNear(b, 6)) return true;
     }
     /* night falls: whoever is still out working heads home */
-    if (this.sun < 0.08 && (p.goal === Goal.Gather || p.goal === Goal.Fish || p.goal === Goal.Snare || p.goal === Goal.Wood || p.goal === Goal.Explore || p.goal === Goal.Haul || p.goal === Goal.Talk || p.goal === Goal.Play || p.goal === Goal.Follow)) {
+    if (this.sun < 0.08 && (p.goal === Goal.Gather || p.goal === Goal.Fish || p.goal === Goal.Snare || p.goal === Goal.Wood || p.goal === Goal.Explore || p.goal === Goal.Haul || p.goal === Goal.Talk || p.goal === Goal.Play || p.goal === Goal.Follow || p.goal === Goal.Hut || p.goal === Goal.Pit)) {
       const st = p.plan[p.si]; return !(st && st.k === St.Drop) && !(st && st.k === St.Go && p.si === p.plan.length - 2);
     }
     if (this.sun < 0.08 && p.goal === Goal.Hunt && this.time - p.whyAt > 30) return true;
@@ -594,7 +613,7 @@ export class Society {
   /** The body: hunger, thirst, tiredness, cold, loneliness and health, every step. */
   private body(p: Person, dt: number): void {
     const st = this.stage(p), days = dt / DAY_SECONDS, b = this.band(p);
-    const working = p.goal >= Goal.Gather && p.goal <= Goal.Wood, asleep = p.goal === Goal.Sleep && p.anim === Anim.Sleep;
+    const working = (p.goal >= Goal.Gather && p.goal <= Goal.Wood) || p.goal === Goal.Hut || p.goal === Goal.Pit, asleep = p.goal === Goal.Sleep && p.anim === Anim.Sleep;
     const moving = p.anim === Anim.Walk || p.anim === Anim.Carry || p.anim === Anim.CaneWalk, running = p.anim === Anim.Run || p.anim === Anim.Play;
     const T = this.tempC(p.x, p.y);
     if (st === "baby") {
@@ -638,7 +657,10 @@ export class Society {
     const host = Math.hypot(p.x - b.x, p.y - b.y) < 7 ? b : this.campNear(p.x, p.y, 7);
     const fireNear = !!host && host.fire > 0.04 && Math.hypot(p.x - host.x, p.y - host.y) < 3, home = asleep && !!host;
     const comfort = 16 - 8 * this.clothesNow(p) - (moving || working || running ? 5 : 0) - (st === "baby" ? 8 : 0);
-    const felt = T + (fireNear ? 16 : 0) + (home ? 7 : 0);
+    /* a hut of one's own is warmer to sleep in than any shelter */
+    const hutHome = home ? b.homes.get(homeOf(p, this.byId, this.time)) : undefined;
+    const inHut = !!hutHome && hutHome[2] > 0 && Math.hypot(p.x - hutHome[0], p.y - hutHome[1]) < 2.5 && hutStands(workById(this, hutHome[2]));
+    const felt = T + (fireNear ? 16 : 0) + (home ? (inHut ? 12 : 7) : 0);
     const target = Math.max(0, Math.min(1, 0.96 - Math.max(0, comfort - felt) / 16));
     p.warmth += (target - p.warmth) * Math.min(1, dt * (target > p.warmth ? 0.12 : 0.05));
     /* company: being around people you like fills it, being alone drains it */
@@ -740,6 +762,9 @@ export class Society {
     let mem = 0;
     for (const m of p.mem) mem += m.v * Math.exp(-(this.time - m.t) / (DAY_SECONDS * 8));
     if (p.partner) mem += 0.08;
+    /* a home of one's own */
+    const hh = this.bandById.get(p.band)?.homes.get(homeOf(p, this.byId, this.time));
+    if (hh && hh[2] > 0) mem += 0.04;
     const kids = p.children.length ? p.children.filter(id => this.byId.has(id)).length : 0;
     if (kids) mem += 0.05;
     p.mood = Math.max(-1, Math.min(1, sv / sw * 2 + Math.max(-0.6, Math.min(0.6, mem * 0.5))));
@@ -853,6 +878,7 @@ export class Society {
     ideasDay(this);
     worksDay(this);
     for (const b of this.bands.slice()) this.bandDay(b);
+    villagesDay(this);
     /* carcasses spoil, and scavengers find them */
     for (const c of this.carcasses) { const T = this.tempC(c.x, c.y); c.meat *= T > 15 ? 0.6 : T > 5 ? 0.75 : T > -5 ? 0.92 : 0.98; for (const h of this.herdsNear(c.x, c.y, 20)) if (h.sp === Species.Wolf || h.sp === Species.Bear) { const eat = Math.min(c.meat, 6 * h.n); c.meat -= eat; h.hunger = Math.max(0, h.hunger - 0.3); } }
     this.carcasses = this.carcasses.filter(c => c.meat > 1);
@@ -995,11 +1021,18 @@ export class Society {
     if (!ms.length) { this.endBand(b, "is no more"); return; }
     this.stats.social.shared += b.today.shared; this.stats.social.kept += b.today.plant + b.today.meat + b.today.fish - b.today.shared;
     b.yesterday = b.today; b.today = newDay();
+    this.stats.camp.bandDays++; if (!b.moving && this.time - b.movedAt >= DAY_SECONDS * 40) this.stats.camp.longDays++;
     b.appetite = ms.reduce((a, q) => a + FOOD_DAY[this.stage(q)], 0);
     /* fresh meat and fish rot within days in the warm; plant food keeps longer, in baskets longer still; dried meat keeps for months */
     const T = this.tempC(b.x, b.y), rot = T > 20 ? 0.35 : T > 10 ? 0.2 : T > 5 ? 0.1 : T > 0 ? 0.04 : 0.015;
     const plantKeep = T < 5 ? 0.99 : bandKnows(b, Idea.Baskets) ? 0.985 : 0.97, driedKeep = T > 22 ? 0.99 : 0.996;
-    b.yesterday.spoiled += spoil(b.store, rot, plantKeep, driedKeep) + spoilHearths(b, rot, plantKeep, driedKeep);
+    b.yesterday.spoiled += spoil(b.store, rot, plantKeep, driedKeep);
+    /* a hearth under a hut's roof keeps its plant food dry */
+    for (const [head, h] of b.hearths) { const at = b.homes.get(head); b.yesterday.spoiled += spoil(h, rot, at && at[2] && hutStands(workById(this, at[2])) ? Math.max(plantKeep, 0.99) : plantKeep, driedKeep); }
+    /* households come and go (a child grows up, a couple forms): they get a place to live */
+    const heads = this.heads(b);
+    if (heads.length !== b.homes.size || heads.some(h => !b.homes.has(h))) this.layoutHomes(b);
+    recountPits(this, b);
     reconcileHearths(this, b);
     shareRound(this, b);
     const adults = ms.filter(q => this.age(q) >= 16);
@@ -1040,31 +1073,63 @@ export class Society {
     /* everyone at camp knows when meals have been thin */
     const deficit = Math.max(0, 1 - (b.yesterday.plant + b.yesterday.meat + b.yesterday.fish) / Math.max(1, b.appetite));
     const short = Math.max(0, 1 - storeDays(b) / 2);
+    /*
+      Thin days worry people only as far as they eat into what is put by: a band bringing in
+      less than it eats, with food enough stored to last weeks at that rate, has no reason to
+      go yet. Only food that keeps counts: fresh meat rots in days. Without a real store (a few
+      days' food is no store) thin days count in full, as they always have, and the hungry still go.
+    */
+    const kept = keepingDays(b), daysLeft = kept / Math.max(0.1, deficit);
+    const thin = kept < 4 ? deficit : deficit * Math.max(0, Math.min(1, 1 - (daysLeft - 8) / 20));
     let wFor = 0, wAll = 0, lead: Person | null = null, leadW = -1;
     /* the places those who want to go speak for, best first; the loudest voice leads */
-    const offers: { v: number; at: [number, number]; by?: Person }[] = [];
+    const offers: { v: number; at: [number, number]; by?: Person; home?: boolean }[] = [];
+    /* what each household would leave behind: its pit, its fields' harvest, its hut; it holds people back while they are fed */
+    const fed = Math.max(0, Math.min(1, storeDays(b) / 6)), stakes = new Map<number, number>();
     for (const q of adults) {
       /* a household with a crop ripening by camp counts it among what the place gives */
-      const here = siteValue(q, b.x, b.y, this.time) + plotHope(this, b, homeOf(q, this.byId, this.time)) * 0.5;
+      const home = homeOf(q, this.byId, this.time), hope = plotHope(this, b, home);
+      const here = siteValue(q, b.x, b.y, this.time) + hope * 0.5;
+      let stake = stakes.get(home); if (stake === undefined) { stake = stakeDays(this, b, home, hope); stakes.set(home, stake); }
+      const hold = 1 / (1 + stake * fed / 8);
       /* somewhere better: places they know with food, far enough to be fresh ground */
-      const mine: { v: number; at: [number, number] }[] = [];
+      const mine: { v: number; at: [number, number]; home?: boolean; social?: number }[] = [];
       for (const pl of q.places) {
         if (pl.k !== Place.Site && pl.k !== Place.Plants && pl.k !== Place.Fish && pl.k !== Place.Game) continue;
         const d = Math.hypot(pl.x - b.x, pl.y - b.y); if (d < 20 || d > 120) continue;
         /* good land seen across a lake or a strait is no use to people on foot */
-        if (!this.walker.reach(b.x, b.y, pl.x, pl.y) || this.bands.some(o => o !== b && Math.hypot(o.x - pl.x, o.y - pl.y) < 16)) continue;
-        mine.push({ v: (siteValue(q, pl.x, pl.y, this.time) + (pl.k === Place.Site ? 8 + pl.q : 0)) * (1 - d / 300), at: [pl.x, pl.y] });
+        if (!this.walker.reach(b.x, b.y, pl.x, pl.y)) continue;
+        /* strangers and bands with bad blood are kept clear of; friendly bands of their own people are company, kin and friends most of all */
+        let social = 0, ok = true;
+        for (const o of this.bands) {
+          if (o === b || Math.hypot(o.x - pl.x, o.y - pl.y) >= 16) continue;
+          if (o.moving || !friendly(this, b, o)) { ok = false; break; }
+          social += tiesTo(this, q, o) * 2;
+        }
+        if (!ok) continue;
+        const v = (siteValue(q, pl.x, pl.y, this.time) + (pl.k === Place.Site ? 8 + pl.q : 0)) * (1 - d / 300);
+        mine.push({ v, at: [pl.x, pl.y], social });
+      }
+      /* home: the camp where the household's hut stands, with whatever is waiting in its pit */
+      for (const pl of q.places) {
+        if (pl.k !== Place.Home) continue;
+        const hut = workById(this, pl.ref), d = Math.hypot(pl.x - b.x, pl.y - b.y);
+        if (!hut || !hutStands(hut) || d < 20 || d > 160 || !this.walker.reach(b.x, b.y, pl.x, pl.y)) continue;
+        if (this.bands.some(o => o !== b && !o.moving && Math.hypot(o.x - pl.x, o.y - pl.y) < 16 && !friendly(this, b, o))) continue;
+        let waiting = 0; for (const w of worksAround(this, hut.x, hut.y, 10)) if (w.kind === Work.Pit && hutHomes(hut).includes(w.home)) waiting += pitFood(w);
+        mine.push({ v: (siteValue(q, pl.x, pl.y, this.time) + 12 + waiting * 0.6) * (1 - d / 300), at: [pl.x, pl.y], home: true });
       }
       mine.sort((a, c) => c.v - a.v);
       const bestV = mine[0]?.v ?? 0;
       const danger = q.mem.some(m => m.k === Mem.Attacked && this.time - m.t < DAY_SECONDS * 4) ? 0.3 : 0;
-      const push = Math.min(1, 0.65 * deficit + 0.35 * short + danger), pull = mine.length ? Math.min(1, bestV / Math.max(4, here + 4)) : 0;
-      q.moveWish = Math.min(1, q.moveWish * 0.35 + 0.65 * push * (0.55 + 0.45 * pull) * (0.8 + q.traits[4] * 0.4));
+      const push = Math.min(1, 0.65 * thin + 0.35 * short + danger), pull = mine.length ? Math.min(1, bestV / Math.max(4, here + 4)) : 0;
+      q.moveWish = Math.min(1, q.moveWish * 0.35 + 0.65 * push * (0.55 + 0.45 * pull) * (0.8 + q.traits[4] * 0.4) * hold);
       const wt = 0.5 + q.prestige + q.traits[3] * 0.4;
       wAll += wt;
       if (q.moveWish > 0.4 && pull > 0.35) {
         wFor += wt; if (wt > leadW) { leadW = wt; lead = q; }
-        for (const m of mine.slice(0, 4)) offers.push({ v: m.v * (1 + wt * 0.2), at: m.at, by: q });
+        /* company counts in choosing where to go, once the band is going anyway; it is not a reason to go */
+        for (const m of mine.slice(0, 4)) offers.push({ v: (m.v + (m.social ?? 0)) * (1 + wt * 0.2), at: m.at, by: q, home: m.home });
       }
     }
     /*
@@ -1087,21 +1152,36 @@ export class Society {
     if (!lead || wFor / wAll < 0.45) return;
     /* the first of the places on offer where a camp can actually stand: dry, roomy ground by fresh water, that they can walk to */
     const tries = [...offers.sort((a, c) => c.v - a.v), ...fresh];
-    let spot: [number, number] | null = null, route: number[] | null = null;
+    let spot: [number, number] | null = null, route: number[] | null = null, offered = false, home = false;
+    const inHuts = [...b.homes.values()].some(h => h[2] > 0);
     for (const o of tries.slice(0, 6)) {
-      const sp = this.campSpot(o.at[0], o.at[1], 12, [b.x, b.y]); if (!sp) continue;
+      /* going home is going back to the very fire, among the huts */
+      const sp = o.home && this.walker.dry(o.at[0], o.at[1]) ? o.at : this.campSpot(o.at[0], o.at[1], 12, [b.x, b.y]); if (!sp) continue;
+      if (!roomFor(this, b, sp[0], sp[1])) continue;
+      /* a band living in huts does not shift its fire a short way and leave them standing empty: it stays, or goes somewhere new (unless hunger drives it out) */
+      if (inHuts && o.by && !o.home && Math.hypot(sp[0] - b.x, sp[1] - b.y) < 22) continue;
       const r = this.walker.route(b.x, b.y, sp[0], sp[1], 40000); if (!r) continue;
-      spot = sp; route = r; if (o.by) lead = o.by; break;
+      spot = sp; route = r; if (o.by) lead = o.by; offered = !!o.by; home = !!o.home; break;
     }
     if (!spot || !route) return;
-    const name = placeName(this.cultures[b.culture].lang, this.rng);
+    if (home) this.stats.camp.home++; else if (offered) this.stats.camp.offer++; else this.stats.camp.fresh++;
+    leaveBehind(this, b);
+    const homeName = home ? this.homeName(spot) : null, name = homeName ?? placeName(this.cultures[b.culture].lang, this.rng);
     b.moving = { x: spot[0], y: spot[1], by: lead.id, since: this.time, name, route };
     this.stats.moves++;
     lead.prestige += 0.15;
     for (const q of ms) { abandon(this, q); this.remember(q, Mem.Moved, lead.id, 0.1); }
     const dir = compass(spot[0] - b.x, spot[1] - b.y), why = storeDays(b) < 1 ? "the food around camp had run out" : "the hunting and gathering had grown poor";
     const known = lead.places.some(pl => Math.hypot(pl.x - spot[0], pl.y - spot[1]) < 20);
+    if (home) { this.event("move", Bubble.Home, `The ${b.name} packed up and set off ${dir} for home, to their huts at ${name}${storeDays(b) < 1 ? `, because the food around camp had run out` : ""}.`, b.x, b.y, [lead.id], b.id, 2); return; }
     this.event("move", Bubble.Move, known ? `The ${b.name} packed up and set off ${dir}, because ${why}. ${lead.name} knew a better place, ${name}.` : `The ${b.name} were going hungry and set off ${dir} into land they did not know, led by ${lead.name}.`, b.x, b.y, [lead.id], b.id, known ? 0 : 1);
+  }
+
+  /** The name of the camp where huts stand at a spot: what the band called it when they built there. */
+  homeName(at: [number, number]): string | null {
+    const v = this.villages.find(o => Math.hypot(o.x - at[0], o.y - at[1]) < VILLAGE_R); if (v) return v.name;
+    for (const w of worksAround(this, at[0], at[1], 14)) if (w.kind === Work.Hut && w.site) return w.site;
+    return null;
   }
 
   /** Called by the walkers when the last of a moving band has arrived, or long enough has passed. */
@@ -1189,6 +1269,8 @@ export class Society {
     const share = goers.size / ms.length;
     for (const k of ["plant", "meat", "fish", "dried", "hides"] as const) { const t = b.store[k] * share; b.store[k] -= t; nb.store[k] += t; }
     for (const id of goers) { const q = this.byId.get(id)!; b.members = b.members.filter(x => x !== id); carryHearth(b, nb, id); q.band = nb.id; nb.members.push(id); abandon(this, q); this.remember(q, Mem.Split, founder.id, 0.2); this.dirty.add(id); }
+    nb.x = b.x; nb.y = b.y; nb.seed = { ...b.seed };
+    leaveBehind(this, nb, b.store);
     countBand(this, nb);
     nb.met.add(b.id); b.met.add(nb.id);
     nb.moving = { x: spot[0], y: spot[1], by: founder.id, since: this.time, name: placeName(this.cultures[b.culture].lang, this.rng), route };
@@ -1245,6 +1327,8 @@ export class Society {
     if (!known.length) return;
     const pick = known.sort((a, c) => Math.hypot(a.x - b.x, a.y - b.y) - Math.hypot(c.x - b.x, c.y - b.y))[0];
     for (const q of ms) { this.moveTo(q, pick); }
+    /* they bring their seed: the better line of each crop is the one sown from now on */
+    for (const [crop, tame] of Object.entries(b.seed)) pick.seed[crop] = Math.max(pick.seed[crop] ?? 0, tame);
     this.stats.merges++;
     this.event("merge", Bubble.Home, `The last ${ms.length} of the ${b.name} went to live with the ${pick.name}.`, b.x, b.y, ms.map(q => q.id), pick.id);
     if (this.bandById.has(b.id)) this.endBand(b, "joined another band", false);
@@ -1314,15 +1398,28 @@ export class Society {
   }
   campSnaps(): CampSnap[] {
     return this.bands.map(b => {
-      const sh: number[] = []; for (const [, [x, y]] of b.homes) sh.push(x, y);
+      /* households living in huts are drawn with their huts, among the works */
+      /* a household whose hut is still going up keeps its shelter beside it until it stands */
+      const sh: number[] = [], huts: number[] = [];
+      for (const [, [x, y, hut]] of b.homes) { if (!hut) { sh.push(x, y); continue; } huts.push(x, y); if (!hutStands(workById(this, hut))) sh.push(x - 2.2, y + 0.5); }
       /* a drying rack beside each household with meat on it, and one by the fire for the pot's */
       const racks: number[] = [];
       for (const [head, h] of b.hearths) if (h.dried >= 1) { const at = b.homes.get(head); if (at) racks.push(at[0] + 1.3, at[1] + 0.1); }
       if (b.store.dried >= 2) racks.push(b.x - 2.2, b.y + 1);
-      return { id: b.id, name: b.name, x: b.x, y: b.y, color: b.color, pop: b.members.length, fire: b.fire, shelters: sh, shelter: this.cultures[b.culture].shelter, food: Math.round(campFood(b)), racks };
+      return { id: b.id, name: b.name, x: b.x, y: b.y, color: b.color, pop: b.members.length, fire: b.fire, shelters: sh, huts, shelter: this.cultures[b.culture].shelter, food: Math.round(campFood(b)), racks };
     });
   }
-  worksSnap(): WorkSnap[] { return this.works.map(w => ({ id: w.id, kind: w.kind, x: w.x, y: w.y, wx: w.wx, wy: w.wy, state: Math.round(w.state * 20) / 20, food: Math.round(w.food), crop: w.crop })); }
+  worksSnap(): WorkSnap[] {
+    return this.works.map(w => {
+      const o: WorkSnap = { id: w.id, kind: w.kind, x: w.x, y: w.y, wx: w.wx, wy: w.wy, state: Math.round(w.state * 20) / 20, food: Math.round(w.food), crop: w.crop };
+      if (w.kind === Work.Hut) {
+        const b = this.bandById.get(w.band), c = this.cultures[b ? b.culture : 0];
+        o.prog = Math.round((w.prog ?? 1) * 20) / 20; o.style = w.style; o.look = w.look; o.size = w.size ?? 1; o.hide = c.hide; o.trim = c.dyes[0];
+      } else if (w.kind === Work.Pit) { o.food = Math.round(pitFood(w)); o.open = this.time - (w.opened ?? 0) < DAY_SECONDS * 0.3; }
+      else if (w.kind === Work.Plot) { o.fallow = !!w.fallow; o.tame = Math.round((w.tame ?? 0) * 20) / 20; }
+      return o;
+    });
+  }
 
   /* ---------------- describing people ---------------- */
 
@@ -1335,7 +1432,7 @@ export class Society {
 }
 
 /* shelters are re-laid when households change */
-function relayout(s: Society, b: Band): void { if (s.bandById.has(b.id)) s.layoutHomes(b); }
+function relayout(s: Society, b: Band): void { s.relayout(b); }
 function followersIn(s: Society, b: Band, p: Person): number { let n = 0; for (const id of b.members) { const q = s.byId.get(id); if (q && q !== p && q.follows === p.id) n++; } return n; }
 export function compass(dx: number, dy: number): string {
   const a = Math.atan2(dy, dx) * 180 / Math.PI, d = ["east", "southeast", "south", "southwest", "west", "northwest", "north", "northeast"];

@@ -1,13 +1,14 @@
 import { Biome, Flag, Species, Tree, DAY_SECONDS } from "../../shared/types.ts";
 import { Bubble } from "../../shared/people.ts";
-import { storeFood, estimate, homeOf } from "./band.ts";
+import { storeFood, estimate, homeOf, keepingDays } from "./band.ts";
 import { Goal, Place, St, Skill, step, kinWord, type KnownPlace, type Person, type Step } from "./person.ts";
 import { MEAT, compass, type Society } from "./society.ts";
 import { askTarget, reachFood, familyDays, householdAppetite } from "./sharing.ts";
 import { feudOf, peaceToMake } from "./feuds.ts";
 import { visitTarget } from "./friends.ts";
 import { IDEAS, Idea, knows, bandKnows, showTarget } from "./ideas.ts";
-import { Work, weirSite, weirFor, plotSite, sownThisYear, ripePlot } from "./works.ts";
+import { Work, weirSite, weirFor, sownThisYear, sowSite, ripePlot, worksAround } from "./works.ts";
+import { pitOf, pitFood, pitRoom, pitSite, hutJob, hutWords, hutWordsOf, stayHope, freezing } from "./homes.ts";
 import type { Band } from "./band.ts";
 
 /*
@@ -74,7 +75,8 @@ export function decide(s: Society, p: Person, forced?: Goal): void {
   const elderly = age > 64 ? 0.55 : 1;
   /* providing: each adult means to bring home enough for themselves and the children they feed */
   const feeds = 1 + kids.filter(c => s.age(c) < 12).length * 0.7 + (p.baby ? 0.3 : 0);
-  const plenty = clamp01(1 - (days - (leanWinter ? 8 : 4)) / 6);
+  /* those who know how to keep food in the ground mean to fill their pit before the winter */
+  const plenty = clamp01(1 - (days - (leanWinter ? (knows(p, Idea.Pits) ? 14 : 8) : 4)) / 6);
   const provide = clamp01(1 - p.gaveToday / (1.4 * feeds)) * (0.35 + 0.45 * tr[7] + 0.2 * tr[1]) * (worker ? elderly : 0.4) * plenty;
   const foodDrive = Math.max(hunger, kidsHungry * 1.05, short * (0.6 + 0.3 * tr[7] + 0.2 * tr[1]) * (worker ? elderly : 0.45), provide);
   const busy = (g: Goal) => b.busy.get(g) ?? 0;
@@ -157,7 +159,7 @@ export function decide(s: Society, p: Person, forced?: Goal): void {
     }
     /* a weir's trap to empty, and a household's ripe crop to bring in */
     let weir: Work | null = null, bw = 0;
-    if (age >= 9) for (const w of s.works) {
+    if (age >= 9) for (const w of worksAround(s, b.x, b.y, range)) {
       if (w.kind !== Work.Weir || w.food < 1.5 || !weirFor(s, b, w)) continue;
       const dfromCamp = Math.hypot(w.x - b.x, w.y - b.y); if (dfromCamp > range) continue;
       const E = Math.min(carry, w.food), v = E / (E + 1.5) * (1 / (1 + (Math.hypot(w.x - p.x, w.y - p.y) + dfromCamp * 0.6) / 16));
@@ -247,7 +249,7 @@ export function decide(s: Society, p: Person, forced?: Goal): void {
   /* --- children: play, and tag along to learn --- */
   if ((st === "child" || (st === "teen" && age < 14)) && !dark) {
     add({ g: Goal.Play, v: 0.48 + (1 - tr[7]) * 0.14 + tr[5] * 0.16, plan: () => [step(St.Play, b.x + Math.cos(p.id * 7 + s.time / 60) * 3, b.y + Math.sin(p.id * 7 + s.time / 60) * 2.2, 0, 9)], why: () => playWhy(s, p), icon: Bubble.Sun });
-    const parent = [s.byId.get(p.mother), s.byId.get(p.father)].find(q => q && q.band === p.band && (q.goal === Goal.Gather || q.goal === Goal.Fish || q.goal === Goal.Snare || q.goal === Goal.Wood || q.goal === Goal.Craft || q.goal === Goal.Dry || q.goal === Goal.Sow || q.goal === Goal.Build || q.goal === Goal.Kindle));
+    const parent = [s.byId.get(p.mother), s.byId.get(p.father)].find(q => q && q.band === p.band && (q.goal === Goal.Gather || q.goal === Goal.Fish || q.goal === Goal.Snare || q.goal === Goal.Wood || q.goal === Goal.Craft || q.goal === Goal.Dry || q.goal === Goal.Sow || q.goal === Goal.Build || q.goal === Goal.Kindle || q.goal === Goal.Hut || q.goal === Goal.Pit));
     if (parent && age >= 5) add({ g: Goal.Follow, v: 0.42 + tr[4] * 0.3, plan: () => [step(St.Follow, 0, 0, parent.id, 24)], why: () => `${p.name} is tagging along with ${her(p)} ${parent.id === p.mother ? "mother" : "father"} to learn ${LEARN[parent.goal] ?? "how things are done"}.` });
   }
 
@@ -262,17 +264,61 @@ export function decide(s: Society, p: Person, forced?: Goal): void {
   /* a fish weir in the river by camp, or mending one the floods have knocked about */
   if (worker && !dark && age < 60 && knows(p, Idea.Weirs) && s.time - b.movedAt > DAY_SECONDS * 2 && !busy(Goal.Build)) {
     let mend: Work | null = null, ok = false;
-    for (const w of s.works) if (w.kind === Work.Weir && weirFor(s, b, w) && Math.hypot(w.x - b.x, w.y - b.y) < 16) { if (w.state > 0.5) ok = true; else if (!mend || w.state > mend.state) mend = w; }
+    for (const w of worksAround(s, b.x, b.y, 16)) if (w.kind === Work.Weir && weirFor(s, b, w) && Math.hypot(w.x - b.x, w.y - b.y) < 16) { if (w.state > 0.5) ok = true; else if (!mend || w.state > mend.state) mend = w; }
     const site = ok ? null : mend ? { x: mend.x, y: mend.y, wx: mend.wx, wy: mend.wy } : weirSiteFor(s, b);
     if (site) { const m = mend; add({ g: Goal.Build, v: (0.32 + tr[7] * 0.25) * (1 - foodDrive * 0.5) * (m ? 1.2 : 1), plan: () => [step(St.Go, site.x, site.y), step(St.Build, site.x, site.y, m?.id ?? 0, m ? 10 : 24, { a: site.wx, o: site.wy }), step(St.Go, fx, fy)], why: () => m ? `${p.name} is mending the fish weir ${where(s, p, site.wx, site.wy)}, which the water has knocked about.` : `${p.name} is building a fish weir ${where(s, p, site.wx, site.wy)}: a fence of stakes that will trap fish while everyone is busy with other things.`, icon: Bubble.Fish }); }
   }
-  /* sowing, in spring: seed from the family's store pushed into good ground by camp */
+  /* sowing, in spring: seed from the family's store (or its pit) pushed into good ground by camp; a household that means to stay sows more than one patch */
   const sowing = s.season === 0 || (s.season === 1 && s.day % 10 < 3);
-  if (sowing && worker && !dark && knows(p, Idea.Planting) && s.time - b.movedAt > DAY_SECONDS * 3 && hh && hh.plant >= 2 && foodDrive < 0.75 && !busy(Goal.Sow)) {
-    const head = homeOf(p, s.byId, s.time);
-    if (!sownThisYear(s, b, head)) {
-      const site = plotSite(s, b);
-      if (site) add({ g: Goal.Sow, v: (0.3 + tr[7] * 0.25 + tr[4] * 0.1) * (1 - foodDrive * 0.6), plan: () => [step(St.Go, site.x, site.y), step(St.Sow, site.x, site.y, 0, 14), step(St.Go, fx, fy)], why: () => `${p.name} is sowing ${site.crop} by camp with seed from the family's store, to harvest when it ripens if the band is still here.`, icon: Bubble.Berries });
+  if (sowing && worker && !dark && knows(p, Idea.Planting) && s.time - b.movedAt > DAY_SECONDS * 3 && foodDrive < 0.75 && !busy(Goal.Sow)) {
+    const head = homeOf(p, s.byId, s.time), pit = pitOf(s, b, head);
+    const seed = (hh ? hh.plant : 0) + (pit && pit.foods ? pit.foods.plant : 0);
+    const done = sownThisYear(s, b, head);
+    const room = done === 0 ? 1 : Math.min(3, b.members.filter(id => { const q = s.byId.get(id); return !!q && s.age(q) >= 15 && homeOf(q, s.byId, s.time) === head; }).length) - done;
+    if (seed >= 2 && room > 0 && (done === 0 || stayHope(s, b, head) > 0.35)) {
+      const site = sowSite(s, b, head);
+      if (site) { const f = site.field; add({ g: Goal.Sow, v: (0.3 + tr[7] * 0.25 + tr[4] * 0.1) * (1 - foodDrive * 0.6) * (done ? 0.7 : 1), plan: () => [step(St.Go, site.x, site.y), step(St.Sow, site.x, site.y, f?.id ?? 0, f ? 8 : 14), step(St.Go, fx, fy)], why: () => f ? `${p.name} is sowing ${f.crop} again in the family's field${b.seed[f.crop] ? `, from the seed kept from last year's harvest` : ""}, to harvest when it ripens.` : `${p.name} is sowing ${site.crop} by camp with seed from the family's store, to harvest when it ripens if the band is still here.`, icon: Bubble.Berries }); }
+    }
+  }
+  /* --- homes and stores: a pit to keep food in, food put by in it or fetched out, a hut raised or mended --- */
+  if (worker && !dark && !b.moving) {
+    const head = homeOf(p, s.byId, s.time), pit = pitOf(s, b, head), app = householdAppetite(s, b, head);
+    const keepable = hh ? hh.plant + hh.dried + (freezing(s, b) ? hh.meat + hh.fish : 0) : 0, keepDays = leanWinter ? 3 : 4;
+    if (!pit && knows(p, Idea.Pits) && age < 62 && s.time - b.movedAt > DAY_SECONDS * 3 && !busy(Goal.Pit) && foodDrive < 0.75) {
+      /* food that keeps, more than the family will eat soon (its own, or the camp's), and lean months ahead */
+      const want = (keepable > app * (keepDays + 1.5) ? 0.6 : keepingDays(b) > 3 ? 0.3 : 0) + (leanWinter ? 0.4 : s.season === 2 ? 0.2 : 0);
+      if (want > 0.3) {
+        const site = pitSite(s, b, head);
+        if (site) add({ g: Goal.Pit, v: (0.4 + tr[7] * 0.3) * want * (1 - foodDrive * 0.5), plan: () => [step(St.Go, site[0], site[1]), step(St.Pit, site[0], site[1], 0, knows(p, Idea.Digging) ? 14 : 20), step(St.Go, fx, fy)], why: () => `${p.name} is digging a pit by ${her(p)} family's shelter and lining it with bark and grass, to keep food through ${leanWinter ? "the winter" : "the lean months"}.`, icon: Bubble.Home });
+      }
+    }
+    if (pit && pit.foods) {
+      const room = pitRoom(pit) - pitFood(pit), spare = keepable - app * keepDays;
+      if (room > 2 && spare > app && (b.busy.get(Goal.Store) ?? 0) < 2) add({ g: Goal.Store, v: (0.22 + tr[7] * 0.2 + (leanWinter ? 0.2 : 0)) * clamp01(spare / (app * 4)) * (1 - hunger * 0.7), plan: () => [step(St.Go, pit.x, pit.y), step(St.Store, pit.x, pit.y, pit.id, 4)], why: () => `${p.name} is putting the family's ${hh && hh.dried > hh.plant ? "dried meat" : "plant food"} by in the pit, ${leanWinter ? "against the winter" : "where it keeps far longer than at the hearth"}.`, icon: Bubble.Home });
+      const hd = hh ? storeFood(hh) / app : 0;
+      if (hd < 1 && pitFood(pit) > 1 && !night) add({ g: Goal.Fetch, v: (0.3 + Math.max(hunger, kidsHungry) * 0.9) * (1 - hd), plan: () => [step(St.Go, pit.x, pit.y), step(St.Fetch, pit.x, pit.y, pit.id, 3), step(St.Go, hx, hy)], why: () => `${p.name} is opening the family's pit for food, because the hearth is bare${kidsHungry > 0.3 ? " and the children are hungry" : ""}.`, icon: Bubble.Berries });
+    }
+    /* a hut: whoever knows how starts one; the rest of the household helps with one going up */
+    if (age >= 12 && age < 66 && s.time - b.movedAt > DAY_SECONDS * 3 && foodDrive < 0.7 && p.injury < 0.3 && !p.pregnantBy) {
+      const job = hutJob(s, p, b);
+      /* starting a hut, or a longhouse bay, takes knowing how; anyone helps with one already going up, or patches their own */
+      const going = !!job?.hut && ((job.hut.prog ?? 1) < 1 || (job.bay && (job.hut.ext ?? 0) > 0));
+      if (job && (knows(p, Idea.Huts) || going || job.mend)) {
+        const hope = going ? Math.max(0.55, stayHope(s, b, head)) : job.mend ? 0.8 : stayHope(s, b, head);
+        /* poles from the nearest trees; where there are none, turf, reeds and grass cut on the spot */
+        const spot = hope > 0.45 ? woodSpot(s, job.x, job.y) ?? [job.x, job.y] as [number, number] : null;
+        if (spot) {
+          const word = job.hut ? hutWords(job.hut) : hutWordsOf(s.cultures[b.culture].hut, "plain");
+          /* settled people set days aside to build, as long as the family is not going hungry */
+          add({ g: Goal.Hut, v: (0.45 + tr[7] * 0.3 + (going ? 0.15 : 0)) * hope * (1 - foodDrive * 0.6) / (1 + busy(Goal.Hut) * 0.2),
+            plan: () => [...(spot[0] !== job.x || spot[1] !== job.y ? [step(St.Go, spot[0], spot[1]), step(St.Wood, spot[0], spot[1], 0, knows(p, Idea.Axe) ? 5 : 6, { a: 1 })] : []), step(St.Go, job.x, job.y), step(St.Raise, job.x, job.y, job.hut?.id ?? 0, spot[0] !== job.x || spot[1] !== job.y ? 8 : 14, { a: job.mend ? 1 : job.bay ? 2 : 0 })],
+            why: () => job.mend ? `${p.name} is mending the family's hut with fresh poles and thatch, before the weather gets in.`
+              : job.bay ? `${p.name} is adding a bay to the longhouse for ${her(p)} family, beside ${her(p)} kin, now that the ${b.name} mean to stay.`
+              : going ? `${p.name} is bringing poles for the ${word} ${her(p)} family is raising, because the ${b.name} have been at ${b.siteName} a while and mean to stay${s.season >= 2 ? " the winter" : ""}.`
+              : `${p.name} is starting a ${word} for ${her(p)} family, because the ${b.name} have been at ${b.siteName} a while and mean to stay${s.season >= 2 ? " the winter" : ""}.`,
+            icon: Bubble.Home });
+        }
+      }
     }
   }
   if (worker && !night && knows(p, Idea.Hides) && b.store.hides >= 1) {
@@ -354,7 +400,7 @@ function pick(s: Society, p: Person, opts: Option[]): void {
   const [fx, fy] = s.fireSpot(p);
   commit(s, p, { g: Goal.Rest, v: 0.1, plan: () => [step(St.Go, fx, fy), step(St.Sit, fx, fy, 0, 6)], why: () => restWhy(s, p) });
 }
-const TRIPS = new Set<Goal>([Goal.Gather, Goal.Fish, Goal.Snare, Goal.Hunt, Goal.Haul, Goal.Wood, Goal.Explore, Goal.Visit, Goal.Call, Goal.Ember]);
+const TRIPS = new Set<Goal>([Goal.Gather, Goal.Fish, Goal.Snare, Goal.Hunt, Goal.Haul, Goal.Wood, Goal.Explore, Goal.Visit, Goal.Call, Goal.Ember, Goal.Hut]);
 function commit(s: Society, p: Person, o: Option): boolean {
   const plan = o.plan(); if (!plan || !plan.length) return false;
   const b = s.band(p), dc = Math.hypot(p.x - b.x, p.y - b.y);
@@ -431,7 +477,7 @@ function explorePlan(s: Society, p: Person): Step[] | null {
 export const HUNT_P = [0.42, 0.24, 0.17, 0.32, 0, 0.12];
 export const DANGER = [0.004, 0.04, 0.05, 0.01, 0, 0.12];
 export const SPECIES_SHORT = ["deer", "aurochs", "mammoth", "horses", "wolves", "bear"];
-const LEARN: Partial<Record<number, string>> = { [Goal.Gather]: "which plants are good to eat", [Goal.Fish]: "how to fish", [Goal.Snare]: "how to set snares", [Goal.Wood]: "how to keep a fire", [Goal.Craft]: "how to work hides", [Goal.Dry]: "how to dry meat", [Goal.Sow]: "how to plant", [Goal.Build]: "how to build a weir", [Goal.Kindle]: "how to make fire" };
+const LEARN: Partial<Record<number, string>> = { [Goal.Gather]: "which plants are good to eat", [Goal.Fish]: "how to fish", [Goal.Snare]: "how to set snares", [Goal.Wood]: "how to keep a fire", [Goal.Craft]: "how to work hides", [Goal.Dry]: "how to dry meat", [Goal.Sow]: "how to plant", [Goal.Build]: "how to build a weir", [Goal.Kindle]: "how to make fire", [Goal.Hut]: "how to raise a hut", [Goal.Pit]: "how to dig a storage pit" };
 
 function canHunt(s: Society, p: Person, age: number): boolean {
   if (age < 15 || age > 62 || p.spear < 0.1 || !knows(p, Idea.Spear) || p.injury > 0.25) return false;

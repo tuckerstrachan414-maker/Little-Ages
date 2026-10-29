@@ -1,7 +1,8 @@
 import type { Camera } from "./camera.ts";
-import { Anim, PERSON_STRIDE, PFlag, type CampSnap, type Look, type WorkSnap } from "../shared/people.ts";
+import { Anim, PERSON_STRIDE, PFlag, type CampSnap, type Look, type VillageSnap, type WorkSnap } from "../shared/people.ts";
 import { personSprite, tinySprite, animFrame, drawBubble, type View } from "./sprites/people.ts";
 import { fireSprite, shelterSprite, storeSprite, woodpileSprite, shelterVariant, rackSprite, weirSprite, plotSprite } from "./sprites/camp.ts";
+import { hutSprite, pitSprite, hutStage } from "./sprites/huts.ts";
 import { isSnowy } from "../shared/seasonfx.ts";
 import type { Season, WorldData } from "../shared/types.ts";
 import type { DepthItem } from "./depth.ts";
@@ -17,7 +18,7 @@ import { CREATURE_SCALE } from "./scale.ts";
 
 export interface PeopleSnap { n: number; data: Float32Array; }
 interface Particle { x: number; y: number; vx: number; vy: number; life: number; age: number; c: string; g: number; }
-const SIDE_ONLY = new Set<number>([Anim.Fish, Anim.Throw, Anim.Chop, Anim.Dig, Anim.Butcher, Anim.Gather, Anim.Drink]);
+const SIDE_ONLY = new Set<number>([Anim.Fish, Anim.Throw, Anim.Chop, Anim.Dig, Anim.Butcher, Anim.Gather, Anim.Drink, Anim.Build]);
 
 export class PeopleLayer {
   looks = new Map<number, Look>();
@@ -27,6 +28,10 @@ export class PeopleLayer {
   camps: CampSnap[] = [];
   /** fish weirs and planted plots */
   works: WorkSnap[] = [];
+  /** villages, gatherings and ruins, for their labels; the village pinned; where each label was drawn, for clicks */
+  villages: VillageSnap[] = [];
+  selectedVillage = 0;
+  private labelHits: { kind: string; id: number; band: number; x0: number; y0: number; x1: number; y1: number }[] = [];
   selected = 0;
   selectedBand = 0;
   /** interpolated position of everyone drawn this frame */
@@ -58,10 +63,17 @@ export class PeopleLayer {
       if (c.x < v.x0 - 8 || c.x > v.x1 + 8 || c.y < v.y0 - 8 || c.y > v.y1 + 8) continue;
       this.ground(ctx, cam, c);
     }
-    /* plots lie flat on the ground, and weirs stand in water, where nothing walks */
+    /* plots and pits lie flat on the ground, and weirs stand in water, where nothing walks; huts stand up among the people */
     if (z >= 4) for (const w of this.works) {
-      if (w.wx < v.x0 - 4 || w.wx > v.x1 + 4 || w.wy < v.y0 - 4 || w.wy > v.y1 + 4) continue;
-      if (w.kind === 1) this.stamp(ctx, cam, plotSprite(w.state, w.food, w.crop), w.x, w.y + 0.7, z / 8, 1);
+      if (w.wx < v.x0 - 6 || w.wx > v.x1 + 6 || w.wy < v.y0 - 4 || w.wy > v.y1 + 6) continue;
+      if (w.kind === 1) this.stamp(ctx, cam, plotSprite(w.state, w.food, w.crop, w.fallow, w.tame ?? 0), w.x, w.y + 0.7, z / 8, 1);
+      else if (w.kind === 3) this.stamp(ctx, cam, pitSprite(!!w.open, w.food >= 3), w.x, w.y + 0.5, z / 8, 1);
+      else if (w.kind === 2) {
+        const i = (w.y | 0) * this.world.w + (w.x | 0), snow = isSnowy(this.world.temp[i] / 255, this.world.biome[i], season, 0.5);
+        const { stage, wear } = hutStage(w.prog ?? 1, w.state);
+        const spr = hutSprite({ style: w.style ?? "round", look: w.look ?? "plain", stage, wear, snow, size: w.size ?? 1, v: shelterVariant(w.x, w.y), hide: w.hide ?? "#a47b52", trim: w.trim ?? "#b4553e" });
+        out.push({ x: w.x, y: w.y - 0.3, f: () => this.stamp(ctx, cam, spr, w.x, w.y, z / 8, 1) });
+      }
       else if (w.state > 0) this.stamp(ctx, cam, weirSprite(w.state, w.food >= 2), w.wx, w.wy + 0.6, z / 8, 1);
     }
     for (const c of this.camps) {
@@ -105,10 +117,11 @@ export class PeopleLayer {
   /** Bare, trodden earth around a camp: a soft-edged oval of dirt with scuffs, under the shelters. Built once per layout. */
   private groundCache = new Map<number, { key: string; c: HTMLCanvasElement; r: number }>();
   private ground(ctx: CanvasRenderingContext2D, cam: Camera, c: CampSnap): void {
-    const key = `${c.x},${c.y},${c.shelters.length}`;
+    const key = `${c.x},${c.y},${c.shelters.length},${c.huts.length}`;
     let g = this.groundCache.get(c.id);
     if (!g || g.key !== key) {
       let r = 2.4; for (let k = 0; k < c.shelters.length; k += 2) r = Math.max(r, Math.hypot(c.shelters[k] - c.x, (c.shelters[k + 1] - c.y) / 0.8) + 1.2);
+      for (let k = 0; k < c.huts.length; k += 2) r = Math.max(r, Math.hypot(c.huts[k] - c.x, (c.huts[k + 1] - c.y) / 0.8) + 1.6);
       const W = Math.ceil(r * 16) + 2, H = Math.ceil(r * 0.8 * 16) + 2, cv = document.createElement("canvas"); cv.width = W; cv.height = H;
       const x = cv.getContext("2d")!;
       for (let py = 0; py < H; py++) for (let px = 0; px < W; px++) {
@@ -172,7 +185,7 @@ export class PeopleLayer {
     /* chips, dust and sparks at the moment of impact */
     if (d.hit && frame === 2 && Math.random() < dt * 14) {
       const hx = x + (flip ? -1 : 1) * (d.hit[0] - d.c.width / 2) / 8 * CREATURE_SCALE, hy = y - (d.c.height - 2 - d.hit[1]) / 8 * CREATURE_SCALE;
-      const col = anim === Anim.Chop ? ["#a8805a", "#dcc085"] : anim === Anim.Knap ? ["#f2efe6", "#aaa79d"] : anim === Anim.Butcher ? ["#a8433a", "#cf6a52"] : ["#ad8562", "#93694a"];
+      const col = anim === Anim.Chop ? ["#a8805a", "#dcc085"] : anim === Anim.Knap ? ["#f2efe6", "#aaa79d"] : anim === Anim.Butcher ? ["#a8433a", "#cf6a52"] : anim === Anim.Build ? ["#dcc07e", "#93694a"] : ["#ad8562", "#93694a"];
       for (let i = 0; i < 3; i++) this.parts.push({ x: hx, y: hy, vx: (Math.random() - 0.5) * 2.2, vy: -1.5 - Math.random() * 1.5, life: 0.5, age: 0, c: col[i % 2], g: 7 });
     }
     if (anim === Anim.Run && Math.random() < dt * 5) this.parts.push({ x: x - (flip ? -1 : 1) * 0.3, y, vx: (Math.random() - 0.5) * 0.6, vy: -0.4, life: 0.5, age: 0, c: "#c9b48c", g: 0 });
@@ -242,11 +255,49 @@ export class PeopleLayer {
 
   /** Band names over their camps when zoomed out, like a map's labels. */
   drawLabels(ctx: CanvasRenderingContext2D, cam: Camera, dpr: number): void {
+    this.labelHits = [];
     const z = cam.z; if (z >= 6) return;
     const fs = Math.round((z < 1.2 ? 11 : 12) * dpr);
-    ctx.font = `600 ${fs}px "Pixelify Sans", "Silkscreen", monospace`;
     ctx.textAlign = "center"; ctx.textBaseline = "bottom";
     const placed: [number, number, number, number][] = [];
+    /* villages first, on carved wooden signs; gatherings on a light tag; ruins faded */
+    const vfs = Math.round((z < 1.2 ? 12 : 14) * dpr);
+    for (const v of this.villages.slice().sort((a, d) => (a.kind === "village" ? 0 : 1) - (d.kind === "village" ? 0 : 1) || d.pop - a.pop)) {
+      const [sx, sy] = cam.toScreen(v.x, v.y);
+      if (sx < -120 || sy < -30 || sx > cam.vw + 120 || sy > cam.vh + 60) continue;
+      const village = v.kind === "village", ruins = v.kind === "ruins";
+      const label = ruins ? `ruins of ${v.name}` : village ? (z >= 1.5 ? `${v.name} \u00b7 ${v.pop}` : v.name) : `gathering at ${v.name}`;
+      ctx.font = `${village ? 700 : 600} ${village ? vfs : fs}px "Pixelify Sans", "Silkscreen", monospace`;
+      const w = ctx.measureText(label).width, pad = 6 * dpr, h = (village ? vfs : fs) + 5 * dpr;
+      const bw = Math.round(w + pad * 2), bh = Math.round(h), bx = Math.round(sx - w / 2 - pad);
+      /* signs close together at world zoom: lift the later one clear, and leave out a tag or a ruin that still will not fit */
+      let by = Math.round(sy - (z < 2 ? 14 : 22 + z * 2) * dpr - h), clear = false;
+      for (let tries = 0; tries < 4 && !clear; tries++) {
+        clear = !placed.some(([a, b, c2, d]) => bx - 2 < c2 && bx + bw + 2 > a && by - 2 < d && by + bh + 8 * dpr > b);
+        if (!clear) by -= Math.round(bh + 10 * dpr);
+      }
+      if (!clear && !village) continue;
+      const u = Math.max(1, Math.round(dpr));
+      if (village) {
+        /* two posts and a board with a darker grain line, like a sign driven into the ground */
+        ctx.fillStyle = "#2b2418"; ctx.fillRect(bx + 4 * u, by + bh, 2 * u, 6 * u); ctx.fillRect(bx + bw - 6 * u, by + bh, 2 * u, 6 * u);
+        ctx.fillStyle = "#2b2418"; ctx.fillRect(bx - u, by - u, bw + 2 * u, bh + 2 * u);
+        ctx.fillStyle = v.id === this.selectedVillage ? "#e8c890" : "#c49a62"; ctx.fillRect(bx, by, bw, bh);
+        ctx.fillStyle = "#a87e4a"; ctx.fillRect(bx, by + Math.round(bh * 0.55), bw, u);
+        ctx.fillStyle = "#dcb67a"; ctx.fillRect(bx, by, bw, u);
+        ctx.fillStyle = "#2b2418"; ctx.fillText(label, Math.round(sx), Math.round(by + bh - 2 * dpr));
+      } else {
+        ctx.globalAlpha = ruins ? 0.75 : 0.95;
+        ctx.fillStyle = "#2b2418"; ctx.fillRect(bx - u, by - u, bw + 2 * u, bh + 2 * u);
+        ctx.fillStyle = ruins ? "#bdb5a2" : "#f2e6c8"; ctx.fillRect(bx, by, bw, bh);
+        if (!ruins) { ctx.fillStyle = v.color; for (let k = 0; k < bw; k += 6 * u) ctx.fillRect(bx + k, by + bh - u, 3 * u, u); }
+        ctx.fillStyle = ruins ? "#4a4438" : "#2b2418"; ctx.fillText(label, Math.round(sx), Math.round(by + bh - 2 * dpr));
+        ctx.globalAlpha = 1;
+      }
+      placed.push([bx, by, bx + bw, by + bh + (village ? 6 * u : 0)]);
+      this.labelHits.push({ kind: v.kind, id: v.id, band: v.band, x0: bx, y0: by, x1: bx + bw, y1: by + bh + 6 * u });
+    }
+    ctx.font = `600 ${fs}px "Pixelify Sans", "Silkscreen", monospace`;
     for (const c of this.camps.slice().sort((a, d) => d.pop - a.pop)) {
       const [sx, sy] = cam.toScreen(c.x, c.y);
       if (sx < -80 || sy < -20 || sx > cam.vw + 80 || sy > cam.vh + 40) continue;
@@ -273,16 +324,18 @@ export class PeopleLayer {
   }
 
   /** Who or what is under a point: the nearest person within reach, else a camp. */
-  pick(wx: number, wy: number, z: number): { person: number; band: number } {
+  pick(wx: number, wy: number, z: number, sx = -1, sy = -1): { person: number; band: number; village: number } {
+    /* a village's sign, a gathering's tag */
+    for (const h of this.labelHits) if (sx >= h.x0 && sx <= h.x1 && sy >= h.y0 && sy <= h.y1) return h.kind === "gathering" ? { person: 0, band: h.band, village: 0 } : { person: 0, band: 0, village: h.id };
     let best = 0, bd = z >= 8 ? 1.1 : Math.max(1, 6 / z);
     for (const [id, [x, y]] of this.pos) {
       const l = this.looks.get(id); if (!l) continue;
       const cy = z >= 8 ? y - 0.9 : y - 0.4, d = Math.hypot(x - wx, cy - wy);
       if (d < bd) { bd = d; best = id; }
     }
-    if (best) return { person: best, band: 0 };
+    if (best) return { person: best, band: 0, village: 0 };
     let band = 0, bb = Math.max(3, 10 / z);
     for (const c of this.camps) { const d = Math.hypot(c.x - wx, c.y - wy); if (d < bb) { bb = d; band = c.id; } }
-    return { person: 0, band };
+    return { person: 0, band, village: 0 };
   }
 }

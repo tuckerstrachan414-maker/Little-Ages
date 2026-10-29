@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Little Ages: villages</title>
+<style>body{margin:0;background:#2b2418;font:13px system-ui;color:#f2e6c8} canvas{image-rendering:pixelated;display:block;margin:0 0 6px} p{margin:6px 10px}</style></head>
+<body>
+<script type="module">
+/*
+  Villages of checkpoint 2C, drawn by the game's own camp renderer from made-up snapshots: a
+  round-hut village in summer with fields and pits, a longhouse village sunk under turf in the
+  snow, a village of cones on stilts by the water, and the map's signs for a village, a
+  gathering and a ruin. People stand about, one raising a hut.
+*/
+import { PeopleLayer } from "/src/render/people.ts";
+import { Camera } from "/src/render/camera.ts";
+import { paintInDepth } from "/src/render/depth.ts";
+import { Anim, PERSON_STRIDE, PFlag } from "/src/shared/people.ts";
+import { looksOf, ancestryFor, founderGenome, hairAt } from "/src/sim/people/genetics.ts";
+import { makeCulture, pickStyle } from "/src/sim/people/culture.ts";
+import { Rng } from "/src/shared/rng.ts";
+
+const W = 1400, H = 640, N = 64;
+function scene(title, { style, look, temp, season, hide, trim, shelter, zoom = 13, labels = false }) {
+  const p = document.createElement("p"); p.textContent = title; document.body.append(p);
+  const c = document.createElement("canvas"); c.width = W; c.height = H; document.body.append(c);
+  const ctx = c.getContext("2d"); ctx.imageSmoothingEnabled = false;
+  ctx.fillStyle = look === "cold" && season === "winter" ? "#e7ebe5" : "#7c9a4c"; ctx.fillRect(0, 0, W, H);
+  if (look === "wet") { ctx.fillStyle = "#4d8fa3"; ctx.fillRect(0, H * 0.72, W, H); }
+  const world = { w: N, h: N, temp: new Uint8Array(N * N).fill(temp), biome: new Uint8Array(N * N).fill(look === "cold" ? 12 : 6) };
+  const layer = new PeopleLayer(world), cam = new Camera(N, N);
+  cam.vw = W; cam.vh = H; cam.z = zoom; cam.x = 32; cam.y = 31.5;
+  const cx = 32, cy = 32, rng = new Rng(style.length * 7 + look.length);
+  /* households: four in huts (one still going up), two in shelters */
+  const huts = [[cx - 5, cy - 2.5], [cx + 5, cy - 2.6], [cx - 6.5, cy + 2.6], [cx + 6, cy + 2.8], [cx - 0.5, cy - 5]];
+  const works = huts.map(([x, y], k) => ({ id: k + 1, kind: 2, x, y, wx: x, wy: y, state: k === 3 ? 0.4 : 1, food: 0, crop: "", prog: k === 4 ? 0.55 : 1, style, look, size: style === "long" && k === 0 ? 2 : 1, hide, trim }));
+  works.push({ id: 20, kind: 3, x: cx - 3.2, y: cy - 0.8, wx: 0, wy: 0, state: 1, food: 20, crop: "", open: false });
+  works.push({ id: 21, kind: 3, x: cx + 3.4, y: cy - 0.6, wx: 0, wy: 0, state: 1, food: 20, crop: "", open: true });
+  if (look !== "wet") [[cx - 13, cy + 6], [cx - 10.6, cy + 6], [cx + 11, cy + 6.2]].forEach(([x, y], k) => works.push({ id: 30 + k, kind: 1, x, y, wx: x, wy: y, state: season === "winter" ? 0 : k === 2 ? 0.6 : 1, food: k === 0 ? 30 : 0, crop: "wild grain", fallow: season === "winter", tame: k === 0 ? 0.6 : 0 }));
+  layer.works = works;
+  const camp = { id: 1, name: "Kele", x: cx, y: cy, color: "#d8584a", pop: 18, fire: 0.8, shelters: [cx - 1.5, cy + 4.2, cx + 1.8, cy + 4.4, huts[4][0] - 2.2, huts[4][1] + 0.5], huts: huts.flat(), shelter, food: 40, racks: [cx - 2.2, cy + 1] };
+  /* people: a builder at the frame, others about camp */
+  const cult = makeCulture(3, 3), anc = ancestryFor(0.5, 0.5, 0.5, rng), looks = [];
+  const spots = [[huts[4][0] + 1.2, huts[4][1] + 0.6, Anim.Build, 1], [cx + 0.8, cy + 1.2, Anim.Sit, 0], [cx - 1.3, cy + 1.4, Anim.Cook, 0], [cx + 3.4, cy, Anim.Dig, 1], [cx - 8, cy + 5.5, Anim.Gather, 1], [cx + 2.5, cy + 3, Anim.Walk, 0], [cx - 3, cy - 0.2, Anim.Idle, 0]];
+  const data = new Float32Array(spots.length * PERSON_STRIDE);
+  spots.forEach(([x, y, anim, dir], k) => {
+    const sex = k % 2 ? "m" : "f", g = founderGenome(anc, rng), l = looksOf(g, [0, 0, 0, 0, 0]), h = hairAt(l, 30);
+    const id = 100 + k;
+    looks.push({ id, name: "x", sex, stage: "adult", band: 1, skin: l.mel, hair: h.hex, gray: 0, style: pickStyle(cult, sex, l.curl, rng), beard: sex === "m", eye: l.eye, wear: season === "winter" ? "furs" : sex === "f" ? cult.mildF : cult.mildM, top: cult.hide, bottom: cult.hideD, beads: true, trim: cult.dyes[0], paint: 0, tall: 0 });
+    const o = k * PERSON_STRIDE; data[o] = id; data[o + 1] = x; data[o + 2] = y; data[o + 3] = dir; data[o + 4] = anim; data[o + 5] = anim === Anim.Walk ? PFlag.Wood | PFlag.Carrying : 0;
+  });
+  layer.setTick(data, spots.length, [camp], looks, performance.now());
+  if (labels) {
+    layer.villages = [
+      { id: 1, kind: "village", name: "Otisudo", gloss: "Otisu's Ford", x: cx, y: cy, pop: 54, bands: ["Kele", "Muwe"], color: "#d8584a", band: 1 },
+      { id: 2, kind: "gathering", name: "Sutlatlo", gloss: "", x: cx + 22, y: cy + 6, pop: 61, bands: ["Tyli", "Lini"], color: "#7fa8e6", band: 2 },
+      { id: 3, kind: "ruins", name: "Pokumeto", gloss: "Mammoth Fell", x: cx - 19, y: cy + 3, pop: 0, bands: [], color: "#9a8a6a", band: 0 },
+      /* two old ruins close together, to see the second sign lifted clear */
+      { id: 4, kind: "ruins", name: "Tenaki", gloss: "Tena's Hill", x: cx - 4, y: cy + 16, pop: 0, bands: [], color: "#9a8a6a", band: 0 },
+      { id: 5, kind: "ruins", name: "Wosuhe", gloss: "Cold Hearth", x: cx - 2, y: cy + 16.5, pop: 0, bands: [], color: "#9a8a6a", band: 0 },
+    ];
+  }
+  const out = [];
+  layer.collect(out, ctx, cam, performance.now() + 300, ["spring", "summer", "autumn", "winter"].indexOf(season));
+  paintInDepth(out);
+  layer.drawLabels(ctx, cam, 1);
+}
+scene("Round huts (plain), summer: one going up, one worn, a pit open and one closed, fields with a tame crop, shelters for the rest", { style: "round", look: "plain", temp: 150, season: "summer", hide: "#c29a68", trim: "#b4553e", shelter: "dome" });
+scene("Longhouses sunk under turf (cold), in the snow; the fields rest", { style: "long", look: "cold", temp: 20, season: "winter", hide: "#e2d6ba", trim: "#4f6a8a", shelter: "leanto" });
+scene("Cones on stilts by the water (wet)", { style: "cone", look: "wet", temp: 170, season: "summer", hide: "#b48a5e", trim: "#d1a646", shelter: "tent" });
+scene("The map's signs: a village, a gathering and ruins", { style: "round", look: "hot", temp: 220, season: "summer", hide: "#c29a68", trim: "#6f8a44", shelter: "dome", zoom: 4.5, labels: true });
+window.done = true;
+</script></body></html>

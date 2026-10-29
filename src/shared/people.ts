@@ -4,9 +4,10 @@
 export const Anim = {
   Idle: 0, Walk: 1, Run: 2, Carry: 3, Gather: 4, Dig: 5, Fish: 6, Throw: 7, Butcher: 8, Chop: 9, Knap: 10,
   Sew: 11, Talk: 12, Sit: 13, Sleep: 14, Cook: 15, HoldBaby: 16, Cane: 17, CaneWalk: 18, Play: 19, Wave: 20, Drink: 21, Eat: 22, Sick: 23,
+  Build: 24,
 } as const;
 export type Anim = (typeof Anim)[keyof typeof Anim];
-export const ANIM_NAMES = ["idle", "walk", "run", "carry", "gather", "dig", "fish", "throw", "butcher", "chop", "knap", "sew", "talk", "sit", "sleep", "cook", "holdbaby", "cane", "canewalk", "play", "wave", "drink", "eat", "sick"] as const;
+export const ANIM_NAMES = ["idle", "walk", "run", "carry", "gather", "dig", "fish", "throw", "butcher", "chop", "knap", "sew", "talk", "sit", "sleep", "cook", "holdbaby", "cane", "canewalk", "play", "wave", "drink", "eat", "sick", "build"] as const;
 export type AnimName = (typeof ANIM_NAMES)[number];
 
 /** Picture bubbles over heads: what a conversation is about, or what someone badly needs. */
@@ -23,6 +24,9 @@ export const PFlag = { Carrying: 1, Spear: 2, Sling: 4, Wood: 8, Injured: 16, Sa
 
 export type Stage = "baby" | "toddler" | "child" | "teen" | "adult" | "elder";
 export type Wear = "loin" | "wrap" | "tunic" | "dress" | "furs";
+/** How a people builds a hut (round huts, longhouses, tall cones), and how it is built where it stands (sunk under turf in the cold, on stilts on wet ground, open-sided in the heat). */
+export type HutStyle = "round" | "long" | "cone";
+export type HutLook = "plain" | "cold" | "wet" | "hot";
 export type HairStyle = "short" | "long" | "wavy" | "shaggy" | "bun" | "topknot" | "braids" | "coils" | "puffs" | "crop" | "bald";
 
 /** How a person looks, sent when someone is born or changes (grows up, grays, dresses for winter). */
@@ -38,10 +42,25 @@ export interface Look {
   tall: number;
 }
 
-/** A band's camp, sent every tick. `racks` are [x, y] pairs of drying racks hung with meat. */
-export interface CampSnap { id: number; name: string; x: number; y: number; color: string; pop: number; fire: number; shelters: number[]; shelter: "tent" | "leanto" | "dome"; food: number; racks: number[]; }
-/** A fish weir (kind 0) or a planted plot (kind 1): where it stands, how it is (repair, or growth to ripe at 1), and what it holds. */
-export interface WorkSnap { id: number; kind: number; x: number; y: number; wx: number; wy: number; state: number; food: number; crop: string; }
+/** A band's camp, sent every tick. `shelters` are [x, y] pairs of households without a hut, `huts` [x, y] pairs of those with one; `racks` are [x, y] pairs of drying racks hung with meat. */
+export interface CampSnap { id: number; name: string; x: number; y: number; color: string; pop: number; fire: number; shelters: number[]; huts: number[]; shelter: "tent" | "leanto" | "dome"; food: number; racks: number[]; }
+/**
+  A fish weir (kind 0), planted plot (1), hut (2) or storage pit (3): where it stands, how it is (repair, or
+  growth to ripe at 1), and what it holds. Huts add how far built they are, their style and look, their bays
+  and the people's colors; pits whether they stand open and have food in them; fields whether they lie fallow
+  and how tame their seed line is.
+*/
+export interface WorkSnap {
+  id: number; kind: number; x: number; y: number; wx: number; wy: number; state: number; food: number; crop: string;
+  prog?: number; style?: HutStyle; look?: HutLook; size?: number; hide?: string; trim?: string;
+  open?: boolean; fallow?: boolean; tame?: number;
+}
+
+/**
+  A village, a gathering of bands camped together, or the ruins of a village nobody lives in, for the map's labels.
+  `bands` are the names of the bands living or camped there; `color` is the first band's.
+*/
+export interface VillageSnap { id: number; kind: "village" | "gathering" | "ruins"; name: string; gloss: string; x: number; y: number; pop: number; bands: string[]; color: string; band: number; }
 
 /**
   Something that happened. `sig` (0..1) is how much it matters, weighed from what it was and how rare it is

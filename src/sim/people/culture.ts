@@ -1,5 +1,5 @@
 import { Rng } from "../../shared/rng.ts";
-import type { HairStyle, Wear } from "../../shared/people.ts";
+import type { HairStyle, HutStyle, Wear } from "../../shared/people.ts";
 import { makeLanguage, type Language } from "./language.ts";
 
 /*
@@ -22,6 +22,8 @@ export interface Culture {
   hairF: Partial<Record<HairStyle, number>>; hairM: Partial<Record<HairStyle, number>>;
   beads: number;
   shelter: "tent" | "leanto" | "dome";
+  /** the huts they raise once they stay: round huts from those who bend domes, longhouses from lean-to builders, tall cones from tent makers */
+  hut: HutStyle;
   /** 0..1, how much of what anyone brings in is shared with the whole band */
   sharing: number;
   /** 0 couples live with the woman's band, 1 with the man's, in between either */
@@ -43,7 +45,7 @@ export function makeCulture(id: number, seed: number): Culture {
   const weights = (list: HairStyle[]) => { const o: Partial<Record<HairStyle, number>> = {}; for (const s of list) o[s] = Math.pow(rng.next(), 2.2) * 3 + 0.08; return o; };
   const dyes: string[] = []; while (dyes.length < 3) { const d = rng.pick(DYES); if (!dyes.includes(d)) dyes.push(d); }
   const [hide, hideD] = rng.pick(HIDES);
-  return {
+  const c: Culture = {
     id, lang: makeLanguage(id, seed),
     hide, hideD, dyes, paint: rng.pick([0, 0, 1, 2]),
     hotWear: rng.chance(0.55) ? "loin" : "wrap",
@@ -51,12 +53,17 @@ export function makeCulture(id: number, seed: number): Culture {
     hairF: weights(STYLES_F), hairM: weights(STYLES_M),
     beads: rng.range(0.1, 0.7),
     shelter: rng.pick(["tent", "leanto", "dome"] as const),
+    hut: "round",
     sharing: rng.range(0.55, 0.95),
     locality: rng.pick([0.15, 0.5, 0.5, 0.85]),
     namesake: rng.range(0, 0.35),
     cousins: rng.chance(0.45),
   };
+  c.hut = hutStyleOf(c.shelter);
+  return c;
 }
+/** The hut style that grows out of a people's shelters. */
+export const hutStyleOf = (shelter: Culture["shelter"]): HutStyle => (shelter === "dome" ? "round" : shelter === "leanto" ? "long" : "cone");
 
 /** A hairstyle for someone: what their culture favors, among what their hair can do. */
 export function pickStyle(c: Culture, sex: "f" | "m", curl: number, rng: Rng): HairStyle {

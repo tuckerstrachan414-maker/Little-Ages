@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Little Ages: huts and pits</title>
+<style>body{margin:0;background:#7c9a4c;font:12px system-ui} canvas{image-rendering:pixelated;display:block}</style></head>
+<body><canvas id="c"></canvas>
+<script type="module">
+/* Every hut of checkpoint 2C: each people's style in each local look, from a frame of poles to a ruin, under snow, longhouses of one to three bays, and storage pits. */
+import { hutSprite, pitSprite } from "/src/render/sprites/huts.ts";
+const K = 4, c = document.getElementById("c"), x = c.getContext("2d");
+c.width = 1500; c.height = 2200; x.imageSmoothingEnabled = false;
+x.fillStyle = "#7c9a4c"; x.fillRect(0, 0, c.width, c.height);
+const draw = (cv, px, py) => x.drawImage(cv, px, py - cv.height * K, cv.width * K, cv.height * K);
+x.fillStyle = "#14110c"; x.font = "14px system-ui";
+const cols = [["frame", 0, 0, false], ["half", 1, 0, false], ["done", 2, 0, false], ["worn", 2, 1, false], ["ruin", 2, 2, false], ["snow", 2, 0, true], ["snow, worn", 2, 1, true]];
+cols.forEach(([n], i) => x.fillText(n, 170 + i * 185, 20));
+let row = 0;
+for (const style of ["round", "long", "cone"]) for (const look of ["plain", "cold", "wet", "hot"]) {
+  const y = 150 + row * 160;
+  x.fillText(`${style}, ${look}`, 10, y - 40);
+  cols.forEach(([, stage, wear, snow], i) => draw(hutSprite({ style, look, stage, wear, snow, size: 1, v: row, hide: "#a47b52", trim: "#b4553e" }), 170 + i * 185, y));
+  row++;
+}
+const y0 = 150 + row * 160;
+x.fillText("longhouse bays", 10, y0 - 40);
+[1, 2, 3].forEach((n, i) => draw(hutSprite({ style: "long", look: "plain", stage: 2, wear: 0, snow: false, size: n, v: 1, hide: "#a47b52", trim: "#6f8a44" }), 170 + i * 300, y0));
+x.fillText("hide cones", 10, y0 + 120);
+["#d4b68c", "#c29a68", "#e2d6ba", "#b48a5e"].forEach((h, i) => draw(hutSprite({ style: "cone", look: "plain", stage: 2, wear: 0, snow: false, size: 1, v: 1, hide: h, trim: ["#b4553e", "#d1a646", "#4f6a8a", "#3f3733"][i] }), 170 + i * 120, y0 + 160));
+x.fillText("pits", 10, y0 + 260);
+[[false, false], [true, false], [true, true]].forEach(([o, f], i) => draw(pitSprite(o, f), 170 + i * 100, y0 + 280));
+window.done = true;
+</script></body></html>

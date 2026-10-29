@@ -190,6 +190,9 @@ button { font: inherit; color: inherit; }
 .tag ul.mem li.bad::before { color: #b5502a; }
 .tag ul.mem li.good::before { color: var(--ok); }
 .tag ul.mem em { font-style: normal; color: var(--ink-3); font-size: 11px; }
+/* a village card: a swatch of each band's color beside its name */
+.tag ul.vbands li::before { content: none; }
+.tag ul.vbands i.sw { display: inline-block; width: 8px; height: 8px; margin-right: 5px; border: 1px solid var(--ink); vertical-align: 0; }
 .tag .chips { display: flex; gap: 5px; margin-top: 8px; }
 .tag .chips button { font-family: var(--f-label); font-size: 10.5px; letter-spacing: .04em; padding: 5px 8px 4px; border: 1px solid #6b5a3a; background: var(--paper-2); border-radius: 2px; cursor: pointer; }
 .tag .chips button[aria-pressed="true"] { background: #5e4a2c; color: var(--paper); }
@@ -200,7 +203,7 @@ button { font: inherit; color: inherit; }
 .tag .muted { color: var(--ink-3); }
 .tag .hearth { margin: 0 0 4px; font-size: 12px; color: var(--ink-2); }
 .tag .hearth b { font-family: var(--f-label); font-size: 10px; letter-spacing: .04em; font-weight: 400; text-transform: uppercase; color: var(--ink-2); }
-.tag .voice, .tag .owes, .tag .voices, .tag .sharing { margin: 4px 0; font-size: 12.5px; }
+.tag .voice, .tag .owes, .tag .voices, .tag .sharing, .tag .homes { margin: 4px 0; font-size: 12.5px; }
 .tag .lnk { border: 0; background: none; padding: 0; font: inherit; font-weight: 600; color: var(--ink); text-decoration: underline; text-decoration-color: var(--ink-3); text-underline-offset: 2px; cursor: pointer; }
 .tag .lnk:hover { text-decoration-color: var(--ink); }
 .tag .feuds { display: grid; gap: 3px; }

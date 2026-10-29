@@ -20,6 +20,7 @@ export const Goal = {
   Play: 13, Follow: 14, Explore: 15, Craft: 16, Spear: 17, Tend: 18, Rest: 19, Flee: 20, Migrate: 21, Carried: 22, Sick: 23, Cook: 24, Toddle: 25, Visit: 26,
   Ask: 27, Fight: 28, Mediate: 29, Call: 30,
   Kindle: 31, Ember: 32, Show: 33, Learn: 34, Dry: 35, Build: 36, Sow: 37,
+  Hut: 38, Pit: 39, Store: 40, Fetch: 41,
 } as const;
 export type Goal = (typeof Goal)[keyof typeof Goal];
 
@@ -28,6 +29,7 @@ export const St = {
   Play: 13, Follow: 14, Look: 15, Craft: 16, Knap: 17, Tend: 18, Wait: 19, Cook: 20, Feed: 21,
   Ask: 22, Fight: 23,
   Kindle: 24, Ember: 25, Dry: 26, Build: 27, Sow: 28,
+  Raise: 29, Pit: 30, Store: 31, Fetch: 32,
 } as const;
 export type St = (typeof St)[keyof typeof St];
 
@@ -51,8 +53,8 @@ export const step = (k: St, x = 0, y = 0, id = 0, dur = 0, extra: Partial<Step> 
 
 export const Food = { None: 0, Plant: 1, Meat: 2, Fish: 3, Wood: 4 } as const;
 
-export const Place = { Water: 0, Plants: 1, Fish: 2, Game: 3, Rabbits: 4, Site: 5, Carcass: 6, Camp: 7, Danger: 8 } as const;
-export const PLACE_NAMES = ["water", "plant food", "fish", "game", "small game", "a camp site", "a carcass", "a camp", "danger"];
+export const Place = { Water: 0, Plants: 1, Fish: 2, Game: 3, Rabbits: 4, Site: 5, Carcass: 6, Camp: 7, Danger: 8, Home: 9 } as const;
+export const PLACE_NAMES = ["water", "plant food", "fish", "game", "small game", "a camp site", "a carcass", "a camp", "danger", "home"];
 export interface KnownPlace {
   k: number; x: number; y: number;
   /** how good it looked: food units for food, herd size for game, a score for sites */
@@ -61,7 +63,7 @@ export interface KnownPlace {
   t: number;
   /** who told us (0 if we saw it ourselves) */
   src: number;
-  /** herd id, band id or carcass id this place is about */
+  /** herd id, band id, carcass id, or the hut a home is about */
   ref: number;
   /** herd species */
   sp?: number;

@@ -1,4 +1,4 @@
-import type { Look } from "../../shared/people.ts";
+import { Bubble, type Look } from "../../shared/people.ts";
 import type { Society } from "./society.ts";
 import type { Person } from "./person.ts";
 import { IDEAS } from "./ideas.ts";
@@ -9,7 +9,7 @@ import { IDEAS } from "./ideas.ts";
   languages' accented ones, so "kaelo" finds "Kaelo" however it is spelled.
 */
 
-export type SearchKind = "person" | "dead" | "band" | "people" | "place" | "idea";
+export type SearchKind = "person" | "dead" | "band" | "people" | "place" | "idea" | "village";
 export interface SearchItem {
   kind: SearchKind; id: number;
   title: string; sub: string;
@@ -71,6 +71,17 @@ export function searchWorld(s: Society, raw: string, limit = 6): SearchItem[] {
     const pop = bs.reduce((a, b) => a + b.members.length, 0);
     const ps = score(c.lang.name, q);
     if (ps) keep(ps + 3, { kind: "people", id: big.id, title: `The ${c.lang.name}`, sub: `${bs.length} ${bs.length === 1 ? "band" : "bands"}, ${pop} people`, x: big.x, y: big.y, band: big.id });
+  }
+  /* villages, by their name or what it means; gatherings by where they are; ruins too */
+  for (const v of s.villages) {
+    const sc = Math.max(score(v.name, q), score(v.gloss, q) - 5); if (!sc) continue;
+    const lang = s.cultures[v.culture].lang.name;
+    keep(sc + 6, { kind: "village", id: v.id, title: v.abandoned ? `The ruins of ${v.name}` : v.name, sub: `"${v.gloss}", ${v.abandoned ? `a village of the ${lang} nobody lives in now` : `a village of the ${lang}, ${v.pop} people`}`, x: v.x, y: v.y, band: v.bands[0] ?? 0, icon: Bubble.Home });
+  }
+  for (const g of s.gatherings) {
+    if (!g.told) continue;
+    const sc = score(g.name, q); if (!sc) continue;
+    keep(sc + 4, { kind: "band", id: g.bands[0], title: `Gathering at ${g.name}`, sub: `${g.bands.length} bands camped together`, x: g.x, y: g.y, band: g.bands[0] });
   }
   /* know-how: goes to the band where most know it, or where it was first worked out */
   for (const d of IDEAS) {

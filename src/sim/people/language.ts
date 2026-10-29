@@ -101,3 +101,29 @@ export function placeName(l: Language, rng: Rng): string {
   for (let tries = 0; tries < 12; tries++) { w = word(l, rng, rng.chance(0.55) ? 2 : 3); if (pronounceable(w)) break; }
   return cap(w);
 }
+
+/**
+  A word of this language for a meaning ("ford", "hill", "mammoth"): the same meaning always
+  gives the same word, made from the language's own sounds, so a people names its places
+  consistently. Nothing is stored; the word is worked out from the language and the meaning.
+*/
+export function lexeme(l: Language, meaning: string): string {
+  let h = (l.id * 7919 + 17) | 0;
+  for (const ch of `${l.name}|${meaning}`) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+  const rng = new Rng(h);
+  let w = "";
+  for (let tries = 0; tries < 12; tries++) { w = word(l, rng, rng.chance(0.6) ? 1 : 2); if (w.length >= 2 && w.length <= 6 && !/[aeiouy]{3}/.test(w) && /[^aeiouy]/.test(w)) break; }
+  return w;
+}
+/** Words run together into one name, the way this people would say them: "Ama" and the word for ford become one word. */
+export function compound(...parts: string[]): string {
+  let out = "";
+  for (const raw of parts) {
+    const p = raw.toLowerCase();
+    if (!out) { out = p; continue; }
+    /* no doubled letter at the join, and no three vowels in a row */
+    const a = out.slice(-1), b = p.charAt(0), va = /[aeiouy]/.test(a), vb = /[aeiouy]/.test(b);
+    out = a === b ? out + p.slice(1) : va && vb && /[aeiouy]{2}$/.test(out) ? out.slice(0, -1) + p : out + p;
+  }
+  return cap(out.replace(/(.)\1\1/g, "$1$1"));
+}

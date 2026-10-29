@@ -1,5 +1,5 @@
 import type { MapMode, Season, SizeKey, WorldData } from "./types.ts";
-import type { CampSnap, ChronicleEvent, Look, Stage, WorkSnap } from "./people.ts";
+import type { CampSnap, ChronicleEvent, Look, Stage, VillageSnap, WorkSnap } from "./people.ts";
 import type { SearchItem } from "../sim/people/search.ts";
 import type { IdeaSummary } from "../sim/people/ideas.ts";
 
@@ -10,8 +10,8 @@ export type ToWorker =
   | { type: "speed"; speed: number }
   | { type: "mode"; mode: MapMode }
   | { type: "settime"; time: number }
-  /* the person or band the player has pinned a tag to (0 for none) */
-  | { type: "inspect"; person: number; band: number }
+  /* the person, band or village the player has pinned a tag to (0 for none) */
+  | { type: "inspect"; person: number; band: number; village?: number }
   /** look people up by name; answered with `results` carrying the same `seq` */
   | { type: "search"; q: string; seq: number }
   /** relationship threads for everyone in this stretch of map (off turns them off) */
@@ -25,8 +25,8 @@ export type FromWorker =
   | { type: "baked"; season: Season; mode: MapMode; pixels: Uint8ClampedArray }
   | { type: "tick"; time: number; speed: number; herds: Float32Array; herdCount: number; animals: number; birds: Float32Array; flockCount: number; birdCount: number;
       people: Float32Array; peopleCount: number; camps: CampSnap[]; looks: Look[]; events: ChronicleEvent[]; pop: number;
-      /* weirs and plots, sent only when they have changed */
-      works?: WorkSnap[] }
+      /* weirs, plots, huts and pits, sent only when they have changed; villages and gatherings likewise */
+      works?: WorkSnap[]; villages?: VillageSnap[] }
   /* small game and fish per 16x16-tile patch, 0..255, sent once a game day */
   | { type: "fields"; gw: number; gh: number; cell: number; rabbits: Uint8Array; fish: Uint8Array; rabbitTotal: number; fishTotal: number }
   | { type: "results"; seq: number; items: SearchItem[] }
@@ -34,7 +34,8 @@ export type FromWorker =
   | { type: "bonds"; edges: Int32Array }
   | { type: "ideas"; list: IdeaSummary[] }
   | { type: "person"; detail: PersonDetail | null; id: number }
-  | { type: "band"; detail: BandDetail | null; id: number };
+  | { type: "band"; detail: BandDetail | null; id: number }
+  | { type: "village"; detail: VillageDetail | null; id: number };
 
 export interface Kin {
   id: number; name: string; rel: string; alive: boolean; age: number; sex: "f" | "m";
@@ -64,6 +65,8 @@ export interface PersonDetail {
   pregnant: boolean; carrying: string; prestige: number; respected: boolean;
   /** days of food at their household's hearth, and in the band's pot */
   hearth: number; pot: number;
+  /** where their household lives ("a round hut of thatch over bent poles", "a shelter", "a hut going up") and the days of food in its pit (-1 for no pit) */
+  home: string; pit: number;
   /** whose word they go along with (null when it is their own), and how many listen to them */
   follows: { id: number; name: string } | null; followers: number;
   /** days they have led their band, or -1 */
@@ -79,6 +82,21 @@ export interface PersonDetail {
 
 export interface Feuding { id: number; name: string; heat: number; cause: string; days: number; own: boolean; inherited: boolean; look?: Look; }
 export interface BandFeud { a: { id: number; name: string }; b: { id: number; name: string }; heat: number; cause: string; days: number; }
+
+/** A village's card: its name and what the name means, how it began, who lives there, and what they have built and put by. */
+export interface VillageDetail {
+  id: number; name: string; gloss: string; why: string; story: string; people: string;
+  founded: number; founder: { id: number; name: string; alive: boolean };
+  bands: { id: number; name: string; pop: number; color: string; leader: { id: number; name: string } | null }[];
+  /** whom most of the grown-ups in the village listen to, across its bands, and how many */
+  listened: { id: number; name: string; n: number } | null;
+  pop: number; peak: number; huts: number; building: number; ruins: number; pits: number; pitDays: number;
+  fields: { crop: string; n: number; tame: number }[]; weirs: number;
+  /** empty since (0 if lived in) and given up (0 if not) */
+  empty: number; abandoned: number;
+  events: ChronicleEvent[];
+  x: number; y: number;
+}
 
 export interface BandDetail {
   id: number; name: string; people: string; pop: number; adults: number; children: number; couples: number;
@@ -98,6 +116,10 @@ export interface BandDetail {
   ideas: { id: number; name: string; start: boolean; n: number; who: { id: number; name: string }[] }[];
   /** the band's weirs and plots, in words */
   works: { kind: "weir" | "plot"; text: string; x: number; y: number }[];
+  /** huts, pits and fields at this camp, in a line ("7 huts (2 going up), 5 storage pits holding 140 days of food"), and how long they have stayed and what holds them */
+  homes: string; stay: string;
+  /** the village the band lives in ("" if none) */
+  village: string;
   days: number; fire: number; moves: number; camp: string;
   yesterday: { brought: number; eaten: number };
   shelter: string; sharing: number; cousins: boolean;

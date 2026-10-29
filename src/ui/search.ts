@@ -22,8 +22,8 @@ export interface SearchCallbacks {
 }
 
 type Row = { item: SearchItem } | { event: ChronicleEvent };
-const HEADINGS: Record<SearchKind | "event" | "suggest", string> = { person: "People", dead: "Remembered", band: "Bands", people: "Peoples", place: "Places", idea: "Know-how", event: "Moments", suggest: "Worth a look" };
-const ORDER: (SearchKind | "event")[] = ["person", "dead", "band", "people", "place", "idea", "event"];
+const HEADINGS: Record<SearchKind | "event" | "suggest", string> = { person: "People", dead: "Remembered", band: "Bands", people: "Peoples", village: "Villages", place: "Places", idea: "Know-how", event: "Moments", suggest: "Worth a look" };
+const ORDER: (SearchKind | "event")[] = ["person", "dead", "village", "band", "people", "place", "idea", "event"];
 
 export class SearchBox {
   readonly el: HTMLElement;
