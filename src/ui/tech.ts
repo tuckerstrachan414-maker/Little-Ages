@@ -42,7 +42,7 @@ export class TechPanel {
     this.dock = dock; this.hist = hist; this.cb = cb;
     this.el = el("div", "paper"); this.el.id = "hud-tech";
     this.el.style.borderImageSource = `url(${frameURL()})`;
-    this.el.innerHTML = `<div class="th"><h3>What is known</h3><select class="tg" aria-label="Whose knowledge"></select><span class="age"></span><input class="tq" type="search" placeholder="Find a way of doing things" aria-label="Find"><span class="hint muted">DRAG TO PAN / WHEEL TO ZOOM / CLICK A NODE</span></div><div class="tb"><canvas aria-label="The tree of knowledge"></canvas><div class="tip" hidden></div><div class="tn-card" hidden></div></div>`;
+    this.el.innerHTML = `<div class="th"><h3>What is known</h3><select class="tg" aria-label="Whose knowledge"></select><span class="age"></span><input class="tq" type="search" placeholder="Find a way of doing things" aria-label="Find"><span class="hint muted">DRAG TO PAN / WHEEL TO ZOOM / CLICK A NODE / ARROWS AND ENTER TO WALK THE TREE</span></div><div class="tb"><canvas aria-label="The tree of knowledge" tabindex="0"></canvas><div class="tip" hidden></div><div class="tn-card" hidden></div></div>`;
     this.canvas = this.el.querySelector("canvas")!; this.ctx = this.canvas.getContext("2d")!;
     this.card = this.el.querySelector(".tn-card")!; this.select = this.el.querySelector(".tg")!; this.ageEl = this.el.querySelector(".age")!; this.tip = this.el.querySelector(".tip")!; this.filter = this.el.querySelector(".tq")!;
     this.select.onchange = () => { const [kind, id] = this.select.value.split(":"); this.group = { kind: kind as TechGroup["kind"], id: +id }; this.fitted = false; this.lastAsk = 0; this.cb.ask(this.group); if (this.selected >= 0) this.cb.askNode(this.selected, this.group); };
@@ -202,6 +202,15 @@ export class TechPanel {
     cv.addEventListener("pointerleave", () => { this.hover = -1; this.tip.hidden = true; this.needsDraw = true; });
     cv.addEventListener("wheel", e => { e.preventDefault(); const r = cv.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top, f = Math.exp(-e.deltaY * 0.0015), nz = Math.max(0.4, Math.min(2.2, this.z * f)); this.ox = mx - (mx - this.ox) * (nz / this.z); this.oy = my - (my - this.oy) * (nz / this.z); this.z = nz; this.clampView(); this.needsDraw = true; }, { passive: false });
     cv.addEventListener("dblclick", () => { this.fit(); this.needsDraw = true; });
+    /* the keyboard walks the tree: arrows step to the nearest node that way, Enter opens its card, Escape (handled by the page) closes the card, then the panel */
+    cv.addEventListener("keydown", e => {
+      const dirs: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+      if (e.key === "Enter" || e.key === " ") { const id = this.selected >= 0 ? this.selected : this.hover; if (id >= 0) { this.selectNode(id); this.center(id); } e.preventDefault(); return; }
+      const dir = dirs[e.key]; if (!dir) return;
+      e.preventDefault();
+      const next = this.step(this.selected >= 0 ? this.selected : this.hover >= 0 ? this.hover : this.firstKnown(), dir);
+      if (next >= 0) { this.selected = next; this.detail = null; this.card.hidden = false; this.card.innerHTML = `<p class="muted">Looking...</p>`; this.cb.askNode(next, this.group); this.center(next); this.needsDraw = true; }
+    });
     this.card.addEventListener("click", e => {
       const b = (e.target as HTMLElement).closest<HTMLElement>("[data-ix],[data-ev],[data-fly],[data-close]"); if (!b) return;
       if (b.dataset.ix) { this.selectNode(+b.dataset.ix); this.center(+b.dataset.ix); }
@@ -218,6 +227,24 @@ export class TechPanel {
     const r = this.canvas.getBoundingClientRect(); this.tip.style.left = `${Math.min(r.width - 200, e.clientX - r.left + 12)}px`; this.tip.style.top = `${e.clientY - r.top + 14}px`;
   }
   selectNode(id: number): void { this.selected = id; this.detail = null; this.card.hidden = false; this.card.innerHTML = `<p class="muted">Looking...</p>`; this.cb.askNode(id, this.group); this.needsDraw = true; }
+  /** The nearest node from `from` in a direction: mostly that way, and not too far aside. */
+  private step(from: number, [dx, dy]: [number, number]): number {
+    const a = this.byId.get(from); if (!a) return this.firstKnown();
+    const ax = a.x + a.w / 2, ay = a.y + a.h / 2;
+    let best = -1, bd = Infinity;
+    for (const b of this.boxes) {
+      if (b.id === from) continue;
+      const vx = b.x + b.w / 2 - ax, vy = b.y + b.h / 2 - ay, along = vx * dx + vy * dy, aside = Math.abs(vx * dy) + Math.abs(vy * dx);
+      if (along <= 0 || aside > along * 1.5 + 30) continue;
+      const d = along + aside * 2; if (d < bd) { bd = d; best = b.id; }
+    }
+    return best;
+  }
+  /** Somewhere to start walking from: the first known node of the group, else the first node of all. */
+  private firstKnown(): number {
+    const d = this.data; if (d) for (const b of this.boxes) if (d.nodes[b.id] >= Known.Known) return b.id;
+    return this.boxes.length ? this.boxes[0].id : -1;
+  }
 
   private renderCard(): void {
     const d = this.detail; if (!d) return;
@@ -233,7 +260,7 @@ export class TechPanel {
       ${d.needs.length || d.any.length ? `<p>Builds on ${d.needs.map(link).join(", ")}${d.any.length ? `${d.needs.length ? " and " : ""}any of ${d.any.map(link).join(", ")}` : ""}.</p>` : ""}
       ${d.unlocks.length ? `<p>Leads to ${d.unlocks.map(link).join(", ")}.</p>` : ""}
       ${d.knowers.length ? `<p>Known best by ${d.knowers.map(k => `${esc(k.name)} of the ${esc(k.band)} (${mastery(k.m)})`).join(", ")}${d.nKnowers > d.knowers.length ? ` and ${d.nKnowers - d.knowers.length} more` : ""}.</p>` : ""}
-      ${d.refine && d.refine.level > 0 ? `<p>Refined to level ${d.refine.level.toFixed(1)} from ${d.refine.uses.toLocaleString()} times done${d.refine.best ? `; the best at it is ${esc(d.refine.best.name)}` : ""}.</p>` : ""}`;
+      ${d.refine && d.refine.level > 0 ? `<p>Refined to level ${d.refine.level.toFixed(1)} from ${d.refine.uses.toLocaleString()} times done${d.refine.best ? `; the best at it is ${esc(d.refine.best.name)}` : ""}.</p><div class="rbar" title="Refinement, on a scale that slows as it climbs"><i style="width:${Math.min(100, Math.log2(1 + d.refine.level) / Math.log2(31) * 100).toFixed(0)}%"></i></div>` : ""}`;
   }
 }
 

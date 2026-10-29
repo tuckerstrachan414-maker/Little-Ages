@@ -7,6 +7,7 @@ import type { Society } from "./society.ts";
 import { TECHS, TECH_COUNT, Idea, DURING, packHint, techIx, type Ctx } from "../tech/tree.ts";
 import { HOOKS } from "../tech/hooks.ts";
 import { genericPressure, fillStory } from "../tech/engine.ts";
+import { practiced, passRefine } from "../tech/refine.ts";
 
 /*
   What people know how to do. Knowledge lives only in heads. Nobody is handed an
@@ -61,8 +62,8 @@ export function ready(p: Person, id: number): boolean {
   if (d.any.length) { let ok = false; for (const n of d.any) if (p.know[n] > 0) { ok = true; break; } if (!ok) return false; }
   return true;
 }
-/** Practice makes better: how well someone knows a thing creeps up each time they do it. */
-export function practice(p: Person, id: number, amt = 0.01): void { if (p.know[id] > 0) p.know[id] = Math.min(1, p.know[id] + amt); }
+/** Practice makes better: how well someone knows a thing creeps up each time they do it, and their people's way of doing it is refined a little (see tech/refine.ts). */
+export function practice(s: Society, p: Person, id: number, amt = 0.01): void { if (p.know[id] > 0) { p.know[id] = Math.min(1, p.know[id] + amt); practiced(s, p, id, amt); } }
 /** Whether anyone in a band knows it (counted each morning, and whenever someone learns). */
 export const bandKnows = (b: Band, id: number) => b.can[id] > 0;
 
@@ -153,6 +154,8 @@ export function learn(s: Society, p: Person, id: number, teacher: Person | null,
   if (teacher) {
     s.remember(p, Mem.Learned, teacher.id, 0.3, id);
     const r = s.rel(p, teacher.id); r.op = Math.min(1, r.op + 0.05);
+    /* a thing learned from another people comes with most of their way of doing it */
+    const tc = s.bandById.get(teacher.band)?.culture; if (tc !== undefined && tc !== b.culture) passRefine(s, tc, b.culture, id);
   }
   /* the first of a band to know a thing, learned from someone of another band */
   if (fresh && !TECHS[id].start && teacher && teacher.band !== p.band) {
@@ -238,7 +241,7 @@ export function showTarget(s: Society, p: Person): { q: Person; id: number; v: n
 /** At the end of a lesson: whether it took. */
 export function shown(s: Society, a: Person, b: Person, id: number): void {
   const d = TECHS[id]; if (!d || b.know[id] > 0 || !ready(b, id)) return;
-  practice(a, id, 0.01);
+  practice(s, a, id, 0.01);
   a.prestige += 0.01;
   const r = s.rel(b, a.id); r.op = Math.min(1, r.op + 0.04);
   if (s.rng.chance(d.show * (0.45 + b.traits[4] * 0.7) * (0.6 + a.know[id] * 0.6))) {

@@ -10,7 +10,7 @@ import { gift } from "./friends.ts";
 import { storeFood, homeOf } from "./band.ts";
 import { knows, practice, inspire, inUse, learn, ready, shown, tellIdea, riverAt, rootsAt } from "./ideas.ts";
 import { TECHS as IDEAS, Idea } from "../tech/tree.ts";
-import { Work, emptyWeir, buildWeir, sow, resow, seedLine, cropAt, workById, worksAround } from "./works.ts";
+import { Work, emptyWeir, buildWeir, sow, resow, seedLine, cropAt, workById, worksAround, SICKLE } from "./works.ts";
 import { raise, digPit, storeInPit, fetchFromPit, pitOf } from "./homes.ts";
 import { buildSpell, RAISE } from "../buildings/build.ts";
 import { Mat, MATS, isFood } from "../economy/goods.ts";
@@ -22,6 +22,7 @@ import { standing } from "../buildings/build.ts";
 import { pitRoom, pitFood } from "./homes.ts";
 import { Biome } from "../../shared/types.ts";
 import { keepYoung, youngOf, herdSpell, hasDogs } from "./herding.ts";
+import { qualityOf } from "../tech/refine.ts";
 
 /*
   Doing things. Each plan is a list of steps (walk there, gather, walk back, put it in the
@@ -199,9 +200,11 @@ function work(s: Society, p: Person, st: Step, dt: number, anim: number): void {
         if (w && w.state >= 1 && w.food > 0) {
           const got = Math.min(w.food, Math.max(0, (st.a ?? 5) - p.carryAmt));
           w.food -= got; load(p, Food.Plant, got); s.stats.food.crop += got; s.stats.food.plant += got;
-          practice(p, Idea.Planting, 0.01);
+          practice(s, p, Idea.Planting, 0.01);
+          if (knows(p, SICKLE())) practice(s, p, SICKLE(), 0.01);
           if (w.band === b.id) seedLine(s, p, w);
           harvest(s, p, w);
+          inspire(s, p, St.Gather, { harvest: w.home === homeOf(p, s.byId, s.time), slow: w.crop === "wild grain" && !knows(p, SICKLE()), full: p.carryAmt >= (st.a ?? 5) - 0.2 });
         }
         break;
       }
@@ -212,8 +215,8 @@ function work(s: Society, p: Person, st: Step, dt: number, anim: number): void {
       load(p, Food.Plant, got);
       p.skills[Skill.Gather] = Math.min(1, p.skills[Skill.Gather] + 0.004);
       s.stats.food.plant += got;
-      if (dig) practice(p, Idea.Digging, 0.005);
-      if (knows(p, Idea.Baskets)) practice(p, Idea.Baskets, 0.004);
+      if (dig) practice(s, p, Idea.Digging, 0.005);
+      if (knows(p, Idea.Baskets)) practice(s, p, Idea.Baskets, 0.004);
       s.learnPlace(p, Place.Plants, st.x, st.y, s.eco.plantsAt(p.x, p.y) * 0.06, 0, 0);
       inspire(s, p, St.Gather, { full: p.carryAmt >= (st.a ?? 5) - 0.2 && s.eco.plantsAt(p.x, p.y) * 0.06 > 1.5, poor: got < want * 0.4, roots });
       /* a bare patch is not worth a second try */
@@ -228,10 +231,10 @@ function work(s: Society, p: Person, st: Step, dt: number, anim: number): void {
         break;
       }
       const nets = knows(p, Idea.Nets);
-      const got = s.eco.catchFish(p.x, p.y, 2.6 * (0.45 + p.skills[Skill.Fish] * 0.9) * (nets ? 1.45 + p.know[Idea.Nets] * 0.3 : 1), nets ? 0.045 : 0.03);
+      const got = s.eco.catchFish(p.x, p.y, 2.6 * (0.45 + p.skills[Skill.Fish] * 0.9) * (nets ? (1.45 + p.know[Idea.Nets] * 0.3) * qualityOf(s, p, Idea.Nets) : 1), nets ? 0.045 : 0.03);
       load(p, Food.Fish, got);
       p.skills[Skill.Fish] = Math.min(1, p.skills[Skill.Fish] + 0.005);
-      if (nets) practice(p, Idea.Nets, 0.006);
+      if (nets) practice(s, p, Idea.Nets, 0.006);
       s.stats.food.fish += got;
       s.learnPlace(p, Place.Fish, st.x, st.y, Math.min(20, s.eco.fishAt(p.x, p.y) * 0.1), 0, 0);
       if (got > 1.5) s.bubble(p, Bubble.Fish, 2);
@@ -251,8 +254,8 @@ function work(s: Society, p: Person, st: Step, dt: number, anim: number): void {
       if (c && Math.hypot(c.x - p.x, c.y - p.y) < 4) {
         /* keen blades cut cleaner and faster: more meat off the bone in the time */
         const blades = knows(p, Idea.Blades), big = c.meat > 40;
-        const take = Math.min(c.meat, (blades ? 7.5 : 6) - (p.carryKind === Food.Meat ? p.carryAmt : 0));
-        if (blades) practice(p, Idea.Blades, 0.005);
+        const take = Math.min(c.meat, (blades ? 7.5 * qualityOf(s, p, Idea.Blades) : 6) - (p.carryKind === Food.Meat ? p.carryAmt : 0));
+        if (blades) practice(s, p, Idea.Blades, 0.005);
         /* the young of the kill, standing by it: a well-fed, soft-hearted family carries them home */
         if (c.young && familyDays(s, p) > 2.5 && s.rng.chance(0.25 + p.traits[1] * 0.3)) keepYoung(s, p, c);
         inspire(s, p, St.Butcher, { big, wolves: s.herdsNear(c.x, c.y, 14).some(h => h.sp === Species.Wolf && h.n > 0) });
@@ -265,12 +268,12 @@ function work(s: Society, p: Person, st: Step, dt: number, anim: number): void {
     }
     case St.Wood: {
       /* an axe brings down dead wood that hands can only break off a stick at a time; the tree it comes off has only so much on it */
-      const axe = knows(p, Idea.Axe), want = axe ? 5 : 3;
+      const axe = knows(p, Idea.Axe), want = axe ? Math.round(5 * qualityOf(s, p, Idea.Axe)) : 3;
       let got = s.resources.cutNear(st.x, st.y, want, s.time);
       /* turf, reeds and grass cut on the spot for a hut where no trees stand */
       if (st.a === 1 && got < want) got = want;
       load(p, Food.Wood, got);
-      if (axe) practice(p, Idea.Axe, 0.005);
+      if (axe) practice(s, p, Idea.Axe, 0.005);
       inspire(s, p, St.Wood);
       break;
     }
@@ -316,7 +319,7 @@ function work(s: Society, p: Person, st: Step, dt: number, anim: number): void {
       }
       break;
     }
-    case St.Knap: inspire(s, p, St.Knap); p.spear = 1; p.skills[Skill.Craft] = Math.min(1, p.skills[Skill.Craft] + 0.005); if (knows(p, Idea.Blades)) practice(p, Idea.Blades, 0.01); break;
+    case St.Knap: inspire(s, p, St.Knap); p.spear = 1; p.skills[Skill.Craft] = Math.min(1, p.skills[Skill.Craft] + 0.005); if (knows(p, Idea.Blades)) practice(s, p, Idea.Blades, 0.01); break;
     case St.Cook: { const h = hearthOf(s, p), hg = hgoodsOf(s, p); inspire(s, p, St.Cook, { clayNear: s.resources.knownNear(b.culture, b.x, b.y, 20, "clay"), grain: h.plant > 0 && b.problems[Problem.Grain] > 0, pots: hg[Mat.Pots] >= 1 }); break; }
     case St.Shape: shapePots(s, p, st); break;
     case St.Bake: bakePots(s, p, st); break;
@@ -336,9 +339,10 @@ function work(s: Society, p: Person, st: Step, dt: number, anim: number): void {
       const src = st.a === 1 ? hearthOf(s, p) : b.store;
       const amt = Math.min(src.meat + src.fish, 8 * (0.6 + p.know[Idea.Drying] * 0.6));
       const m = Math.min(src.meat, amt), f = Math.min(src.fish, amt - m);
-      src.meat -= m; src.fish -= f; src.dried += (m + f) * 0.92;
-      s.stats.food.dried += (m + f) * 0.92;
-      practice(p, Idea.Drying, 0.01);
+      const keep = Math.min(0.99, 0.92 * qualityOf(s, p, Idea.Drying));
+      src.meat -= m; src.fish -= f; src.dried += (m + f) * keep;
+      s.stats.food.dried += (m + f) * keep;
+      practice(s, p, Idea.Drying, 0.01);
       break;
     }
     case St.Build: {
@@ -388,7 +392,7 @@ function kindle(s: Society, p: Person, st: Step): void {
     s.event("ember", Bubble.Fire, `The ${b.name}'s fire had gone out, and none of them could make fire. ${p.name} walked to ${host ? `the camp of the ${host.name}` : "another band's camp"} and carried fire home in a smoldering bundle of moss.`, p.x, p.y, [p.id], b.id);
     return;
   }
-  if (knows(p, Idea.MakeFire)) { s.relight(b); practice(p, Idea.MakeFire, 0.02); s.stats.fire.kindled++; s.bubble(p, Bubble.Fire, 2.5); return; }
+  if (knows(p, Idea.MakeFire)) { s.relight(b); practice(s, p, Idea.MakeFire, 0.02); s.stats.fire.kindled++; s.bubble(p, Bubble.Fire, 2.5); return; }
   if (inspire(s, p, St.Kindle)) { s.relight(b); s.stats.fire.kindled++; }
 }
 
@@ -415,7 +419,7 @@ function quarry(s: Society, p: Person, st: Step): void {
   const got = s.resources.take(dep, Math.max(0, MATS[mat].load - (p.carryKind === mat ? p.carryAmt : 0)));
   load(p, mat, got); s.stats.buildings.quarried += got;
   s.learnPlace(p, Place.Deposit, dep.x, dep.y, dep.left / Math.max(1, dep.amount), dep.id, 0, s.time, dep.kind);
-  if (knows(p, Idea.Digging)) practice(p, Idea.Digging, 0.004);
+  if (knows(p, Idea.Digging)) practice(s, p, Idea.Digging, 0.004);
   if (dep.left <= 0) {
     const b = s.band(p);
     s.event("exhausted", Bubble.Question, `The ${MATS[mat].name} ${Math.hypot(dep.x - b.x, dep.y - b.y) < 6 ? "by" : `${compass(dep.x - b.x, dep.y - b.y)} of`} ${b.siteName} is dug out: ${p.name} of the ${b.name} came for more and found nothing left but gravel. The ${b.name} will have to look further.`, dep.x, dep.y, [p.id], b.id, mat);
@@ -479,12 +483,14 @@ function stalk(s: Society, p: Person, st: Step, dt: number): void {
   st.a = (st.a ?? 0) + 1;
   const party = s.near(p.x, p.y, 6).filter(q => q.party === p.id);
   const cover = s.w.tree[(h.y | 0) * s.w.w + (h.x | 0)] ? 0.85 : 1;
-  /* dogs run the quarry down and hold it at bay */
-  const chance = HUNT_P[h.sp] * (0.5 + p.skills[Skill.Hunt]) * (1 + 0.45 * (party.length - 1)) * (h.cond < 0.6 ? 1.3 : 1) * cover * (hasDogs(s, s.band(p)) ? 1.2 : 1);
+  /* dogs run the quarry down and hold it at bay; an arrow flies further and truer than a thrown spear */
+  const bow = knows(p, BOW());
+  const chance = HUNT_P[h.sp] * (0.5 + p.skills[Skill.Hunt]) * (1 + 0.45 * (party.length - 1)) * (h.cond < 0.6 ? 1.3 : 1) * cover * (hasDogs(s, s.band(p)) ? 1.2 : 1) * (bow ? 1.3 : 1);
+  if (bow) practice(s, p, BOW(), 0.006);
   /* a point struck as a blade breaks less often */
   p.spear -= knows(p, Idea.Blades) ? 0.075 : 0.12;
   /* the big ones fight back */
-  const hurt = DANGER[h.sp] * Math.max(0.3, 1 - 0.25 * (party.length - 1));
+  const hurt = DANGER[h.sp] * Math.max(0.3, 1 - 0.25 * (party.length - 1)) * (bow ? 0.7 : 1);
   if (s.rng.chance(hurt)) {
     const victim = s.rng.pick(party.length ? party : [p]), sev = s.rng.range(0.25, 0.9);
     victim.injury = Math.min(1, victim.injury + sev); victim.health -= sev * 0.6;
@@ -497,8 +503,9 @@ function stalk(s: Society, p: Person, st: Step, dt: number): void {
   if (!s.byId.has(p.id)) return;
   if (s.rng.chance(chance)) kill(s, p, h, party);
   else {
-    /* missed: the herd bolts; try once more if they can catch up */
+    /* missed: the herd bolts; try once more if they can catch up. A throw that fell short is when a better weapon comes to mind */
     h.state = 2; h.timer = 10; const a = Math.atan2(h.y - p.y, h.x - p.x); h.tx = h.x + Math.cos(a) * 24; h.ty = h.y + Math.sin(a) * 24;
+    inspire(s, p, St.Stalk, { missed: true });
     if (st.a >= 3 || p.spear <= 0) {
       p.why = `${p.name} is heading home empty-handed. The ${SPECIES_SHORT[h.sp]} got away.`; p.whyAt = s.time;
       p.tripYield *= 0.7; giveUpHunt(s, p);
@@ -735,7 +742,7 @@ function shapePots(s: Society, p: Person, st: Step): void {
   const fromHand = Math.min(clay, need); if (fromHand > 0) { p.carryAmt -= fromHand; need -= fromHand; if (p.carryAmt <= 1e-6) { p.carryAmt = 0; p.carryKind = Food.None; } }
   b.goods[Mat.Clay] = Math.max(0, b.goods[Mat.Clay] - need);
   p.raw += want;
-  practice(p, POTTERY(), 0.02);
+  practice(s, p, POTTERY(), 0.02);
   p.skills[Skill.Craft] = Math.min(1, p.skills[Skill.Craft] + 0.003);
 }
 /** Shaped pots baked in the ashes of the fire, or in a kiln: some crack, many more in the open fire. */
@@ -744,15 +751,17 @@ function bakePots(s: Society, p: Person, st: Step): void {
   if (p.raw <= 0) return;
   const kiln = st.id ? workById(s, st.id) : undefined, inKiln = !!kiln && kiln.kind === Line.Kiln && standing(kiln);
   let broke = 0;
-  for (let k = 0; k < p.raw; k++) if (s.rng.chance(inKiln ? 0.15 : 0.4)) broke++;
+  /* a people that has fired many a batch loses fewer to the fire */
+  const crack = (inKiln ? 0.15 : 0.4) / qualityOf(s, p, inKiln ? KILN() : POTTERY());
+  for (let k = 0; k < p.raw; k++) if (s.rng.chance(crack)) broke++;
   const whole = p.raw - broke;
   p.raw = 0;
   const hg = hgoodsOf(s, p), first = hg[Mat.Pots] < 1 && !b.members.some(id => { const g = b.hgoods.get(id); return !!g && g[Mat.Pots] >= 1; });
   hg[Mat.Pots] += whole;
   s.stats.pots.made += whole; s.stats.pots.broke += broke; if (inKiln) s.stats.pots.kiln += whole;
   if (broke > 0) b.broke = s.time;
-  if (inKiln && kiln) { kiln.opened = s.time; practice(p, KILN(), 0.02); } else practice(p, POTTERY(), 0.01);
+  if (inKiln && kiln) { kiln.opened = s.time; practice(s, p, KILN(), 0.02); } else practice(s, p, POTTERY(), 0.01);
   if (first && whole > 0) s.event("pots", Bubble.Pot, `${p.name} of the ${b.name} drew the first pots from the ${inKiln ? "kiln" : "ashes of the fire"} at ${b.siteName}: ${whole} came out whole${broke ? `, ${broke} cracked` : ""}. Food will boil now, and keep.`, p.x, p.y, [p.id], b.id, s.stats.pots.made === whole ? 1 : 0);
   inspire(s, p, St.Bake, { broke: broke > 0, clayNear: s.resources.knownNear(b.culture, b.x, b.y, 20, "clay") });
 }
-const POTTERY = () => techIx("pottery"), KILN = () => techIx("kiln-firing"), HERBS = () => techIx("herb-lore");
+const POTTERY = () => techIx("pottery"), KILN = () => techIx("kiln-firing"), HERBS = () => techIx("herb-lore"), BOW = () => techIx("bow-and-arrow");

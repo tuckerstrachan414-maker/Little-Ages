@@ -11,6 +11,7 @@ import { techIx, type Ctx } from "../tech/tree.ts";
 import { buildingOf, defOf, standing } from "../buildings/build.ts";
 import { Line } from "../buildings/defs.ts";
 import { EATS, GRASS, FECUND, MORTAL } from "../wildlife.ts";
+import { quality } from "../tech/refine.ts";
 
 /*
   The animals people keep. Nobody is handed a herd: a hunter finds the kid of the goat she
@@ -330,7 +331,7 @@ function dogsFed(s: Society, b: Band, f: Flock): number {
 function milkDay(s: Society, b: Band, f: Flock): void {
   const folk = household(s, b, f.home).filter(q => s.age(q) >= 1);
   if (!folk.some(q => knows(q, MILKING()))) return;
-  let total = (MILK[f.sp] ?? 0) * f.n * Math.min(1, f.cond + 0.2);
+  let total = (MILK[f.sp] ?? 0) * f.n * Math.min(1, f.cond + 0.2) * quality(s, b.culture, MILKING());
   if (total <= 0) return;
   s.stats.herds.milk += total;
   /* the little ones first, then everyone, a bowl each */
@@ -385,9 +386,9 @@ export function herdSpell(s: Society, p: Person, st: Step): void {
   }
   f.tame = Math.min(1, f.tame + 0.0015 * (0.6 + p.traits[1] * 0.8));
   const tech = TAMING[f.sp];
-  if (tech && knows(p, techIx(tech))) practice(p, techIx(tech), 0.005);
-  if (f.young > 0 && knows(p, MILKING())) practice(p, MILKING(), 0.004);
-  if (f.pen && knows(p, PENNING())) practice(p, PENNING(), 0.002);
+  if (tech && knows(p, techIx(tech))) practice(s, p, techIx(tech), 0.005);
+  if (f.young > 0 && knows(p, MILKING())) practice(s, p, MILKING(), 0.004);
+  if (f.pen && knows(p, PENNING())) practice(s, p, PENNING(), 0.002);
   const wolves = s.herdsNear(f.x, f.y, 14).some(o => o.sp === Species.Wolf && o.n > 0);
   const ctx: Ctx = {
     kept: s.time - f.kept > DAY_SECONDS * 20, young: f.young > 0, wolves, lost: f.lostAt > 0 && s.time - f.lostAt < DAY_SECONDS * 20,

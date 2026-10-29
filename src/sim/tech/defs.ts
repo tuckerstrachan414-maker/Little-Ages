@@ -25,6 +25,8 @@ export interface Ctx {
   young?: boolean; kept?: boolean; wolves?: boolean; lost?: boolean; missed?: boolean; farWater?: boolean; slow?: boolean;
   /** herding: which beasts are in hand (goats and sheep, cattle, pigs), and wolf pups being raised at the hearth */
   goats?: boolean; cattle?: boolean; pigs?: boolean; pups?: boolean;
+  /** bringing in a crop of one's own sowing */
+  harvest?: boolean;
 }
 
 /** A node as it is written in the branch files. */

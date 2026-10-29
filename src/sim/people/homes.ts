@@ -83,7 +83,7 @@ export function pitSite(s: Society, b: Band, home: number): [number, number] | n
 export function digPit(s: Society, p: Person, st: Step): void {
   const b = s.band(p), home = homeOf(p, s.byId, s.time);
   if (pitOf(s, b, home)) return;
-  practice(p, Idea.Pits, 0.03);
+  practice(s, p, Idea.Pits, 0.03);
   const first = !worksAround(s, b.x, b.y, 14).some(w => w.kind === Work.Pit && w.band === b.id);
   addWork(s, { kind: Work.Pit, x: st.x, y: st.y, wx: st.x, wy: st.y, band: b.id, home, by: p.id, t: s.time, state: 1, food: 0, crop: "", ripe: 0, size: knows(p, Idea.Digging) ? 52 : 40, foods: noFood(), opened: s.time });
   s.stats.homes.pits++; if (!s.stats.homes.firstPit) s.stats.homes.firstPit = s.time;
@@ -247,7 +247,7 @@ export function raise(s: Society, p: Person, st: Step): void {
     b.homes.set(home, [st.x, st.y, hut.id]);
   }
   p.skills[Skill.Craft] = Math.min(1, p.skills[Skill.Craft] + 0.004);
-  practice(p, Idea.Huts, 0.015);
+  practice(s, p, Idea.Huts, 0.015);
   if (st.a === 1) { hut.state = Math.min(1, hut.state + amt * 2.4); return; }
   if (st.a === 2) {
     /* a bay added to a longhouse for a grown child's family */

@@ -9,7 +9,7 @@ import { feudOf, peaceToMake } from "./feuds.ts";
 import { visitTarget } from "./friends.ts";
 import { knows, bandKnows, showTarget } from "./ideas.ts";
 import { TECHS as IDEAS, Idea } from "../tech/tree.ts";
-import { Work, weirSite, weirFor, sownThisYear, sowSite, ripePlot, worksAround } from "./works.ts";
+import { Work, weirSite, weirFor, sownThisYear, sowSite, ripePlot, worksAround, harvestSpell } from "./works.ts";
 import { pitOf, pitFood, pitRoom, pitSite, hutJob, hutWords, hutWordsOf, stayHope, freezing } from "./homes.ts";
 import { wants, nextMaterial, type Want } from "../buildings/wants.ts";
 import { needsOf, RAISE, OWNER } from "../buildings/build.ts";
@@ -151,9 +151,11 @@ export function decide(s: Society, p: Person, forced?: Goal): void {
     /* a basket carries half as much again as arms and a hide sling */
     const basket = knows(p, Idea.Baskets), carry = st === "child" ? (basket ? 3 : 2) : basket ? 7.5 : 5;
     let bestPlant: KnownPlace | null = null, bp = 0, bestFish: KnownPlace | null = null, bf = 0, bestRab: KnownPlace | null = null, br = 0, bestGame: KnownPlace | null = null, bg = 0, bestCarc: KnownPlace | null = null, bc = 0;
+    /* a bow brings game within reach that a spear would not */
+    const bowReach = knows(p, BOW()) ? 4 : 0;
     for (const pl of p.places) {
       const d = Math.hypot(pl.x - p.x, pl.y - p.y), dfromCamp = Math.hypot(pl.x - b.x, pl.y - b.y);
-      if (dfromCamp > range) continue;
+      if (dfromCamp > range + (pl.k === Place.Game ? bowReach : 0)) continue;
       const dF = 1 / (1 + (d + dfromCamp * 0.6) / 16), e = estimate(pl, s.time);
       if (pl.k === Place.Plants) { const E = Math.min(carry, e * 0.35) * (0.6 + p.skills[Skill.Gather] * 0.6), v = E / (E + 1.5) * dF; if (v > bp) { bp = v; bestPlant = pl; } }
       else if (pl.k === Place.Fish && knows(p, Idea.Fishing) && st !== "child") { const E = Math.min(carry, e * 0.3) * (0.5 + p.skills[Skill.Fish] * 0.8), v = E / (E + 1.5) * dF; if (v > bf) { bf = v; bestFish = pl; } }
@@ -180,7 +182,7 @@ export function decide(s: Society, p: Person, forced?: Goal): void {
     const crop = ripePlot(s, p);
     const damp = (g: Goal, k: number) => 1 / (1 + busy(g) * k);
     if (weir) { const w = weir; add({ g: Goal.Fish, v: foodDrive * bw * 2.4, plan: () => [step(St.Go, w.x, w.y), step(St.Fish, w.x, w.y, w.id, 3), step(St.Go, fx, fy), step(St.Drop, fx, fy)], why: () => `${p.name} is taking the fish out of ${w.band === b.id ? "the band's" : "an old"} weir ${where(s, p, w.wx, w.wy)}, because ${foodReason(s, p, hunger, kidsHungry, short)}.`, icon: Bubble.Fish }); }
-    if (crop) { const w = crop, E = Math.min(carry, w.food), v = E / (E + 1.5) / (1 + Math.hypot(w.x - p.x, w.y - p.y) / 16); add({ g: Goal.Gather, v: (foodDrive + 0.25) * v * 2.3, plan: () => [step(St.Go, w.x, w.y), step(St.Gather, w.x, w.y, w.id, 4.5, { a: carry }), step(St.Go, fx, fy), step(St.Drop, fx, fy)], why: () => `${p.name} is bringing in the ${w.crop} ${w.home === homeOf(p, s.byId, s.time) ? `${her(p)} household sowed` : "sown here"} in the spring, now that it is ripe.`, icon: Bubble.Berries }); }
+    if (crop) { const w = crop, E = Math.min(carry, w.food), v = E / (E + 1.5) / (1 + Math.hypot(w.x - p.x, w.y - p.y) / 16); add({ g: Goal.Gather, v: (foodDrive + 0.25) * v * 2.3, plan: () => [step(St.Go, w.x, w.y), step(St.Gather, w.x, w.y, w.id, harvestSpell(p), { a: carry }), step(St.Go, fx, fy), step(St.Drop, fx, fy)], why: () => `${p.name} is bringing in the ${w.crop} ${w.home === homeOf(p, s.byId, s.time) ? `${her(p)} household sowed` : "sown here"} in the spring, now that it is ripe.`, icon: Bubble.Berries }); }
     if (bestPlant) { const pl = bestPlant; add({ g: Goal.Gather, v: foodDrive * bp * 2.1 * damp(Goal.Gather, 0.03), plan: () => gatherPlan(s, p, pl, carry), why: () => workWhy(s, p, Goal.Gather, pl, hunger, kidsHungry, short), icon: Bubble.Berries }); }
     if (bestFish) { const pl = bestFish; add({ g: Goal.Fish, v: foodDrive * bf * 2.1 * damp(Goal.Fish, 0.05), plan: () => fishPlan(s, p, pl), why: () => workWhy(s, p, Goal.Fish, pl, hunger, kidsHungry, short), icon: Bubble.Fish }); }
     if (bestRab) { const pl = bestRab; add({ g: Goal.Snare, v: foodDrive * br * 1.7 * damp(Goal.Snare, 0.12), plan: () => snarePlan(s, p, pl), why: () => workWhy(s, p, Goal.Snare, pl, hunger, kidsHungry, short) }); }
@@ -542,6 +544,7 @@ function explorePlan(s: Society, p: Person): Step[] | null {
 /* ---------------- helpers ---------------- */
 
 export const HUNT_P = [0.42, 0.24, 0.17, 0.32, 0, 0.12, 0.36, 0.4, 0.3, 0];
+const BOW = () => techIx("bow-and-arrow");
 export const DANGER = [0.004, 0.04, 0.05, 0.01, 0, 0.12, 0.002, 0.001, 0.03, 0];
 export const SPECIES_SHORT = ["deer", "aurochs", "mammoth", "horses", "wolves", "bear", "goats", "sheep", "boar", "dogs"];
 const LEARN: Partial<Record<number, string>> = { [Goal.Gather]: "which plants are good to eat", [Goal.Fish]: "how to fish", [Goal.Snare]: "how to set snares", [Goal.Wood]: "how to keep a fire", [Goal.Craft]: "how to work hides", [Goal.Dry]: "how to dry meat", [Goal.Sow]: "how to plant", [Goal.Build]: "how to build a weir", [Goal.Kindle]: "how to make fire", [Goal.Hut]: "how to raise a hut", [Goal.Pit]: "how to dig a storage pit", [Goal.Construct]: "how to build", [Goal.Quarry]: "where the good clay and stone are", [Goal.Pot]: "how to shape a pot", [Goal.Herd]: "how to mind the animals" };

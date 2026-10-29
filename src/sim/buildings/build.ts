@@ -1,3 +1,4 @@
+import { quality, qualityOf, qualityFor } from "../tech/refine.ts";
 import { Bubble } from "../../shared/people.ts";
 import { DEFS, Line, defById, baseDef, materialTotal, houseWords, type BuildingDef, type Owner, type WallKind, type RoofKind } from "./defs.ts";
 import { addWork, workById, worksAround, type Work } from "../people/works.ts";
@@ -109,9 +110,11 @@ export function buildSpell(s: Society, p: Person, st: Step): void {
   deliver(s, p, w);
   const def = targetDef(w);
   const labor = Math.max(1, w.up ? w.up.labor : (w.labor ?? def.labor));
-  const amt = (1 / labor) * (0.7 + p.skills[Skill.Craft] * 0.6) * (knows(p, Idea.Axe) ? 1.15 : 1);
+  /* a people that has raised many of a kind raises the next faster */
+  const way = def.tech.map(k => techIx(k)).find(ix => knows(p, ix));
+  const amt = (1 / labor) * (0.7 + p.skills[Skill.Craft] * 0.6) * (knows(p, Idea.Axe) ? 1.15 : 1) * (way !== undefined ? qualityOf(s, p, way) : 1);
   p.skills[Skill.Craft] = Math.min(1, p.skills[Skill.Craft] + 0.004);
-  for (const k of def.tech) { const ix = techIx(k); if (knows(p, ix)) practice(p, ix, 0.015); }
+  for (const k of def.tech) { const ix = techIx(k); if (knows(p, ix)) practice(s, p, ix, 0.015); }
   const cap = deliveredFraction(w);
   if (w.up) {
     const before = w.up.prog;
@@ -160,7 +163,8 @@ function finishUpgrade(s: Society, p: Person, b: Band, w: Work): void {
   if (!w.up) return;
   const def = defById(w.up.def), was = defOf(w), m = chooseMaterials(s, b, def);
   w.tier = def.tier; w.def = def.id; w.walls = m.walls; w.roof = m.roof; w.up = undefined; w.prog = 1; w.state = 1; w.built = s.time;
-  if (def.line === Line.Store) w.size = def.effects.room;
+  /* a granary built by people who have built many holds more */
+  if (def.line === Line.Store && def.effects.room) w.size = Math.round(def.effects.room * quality(s, b.culture, techIx(def.tech[0])));
   s.worksVersion++;
   p.prestige += 0.1;
   s.stats.buildings.upgrades++;
@@ -181,7 +185,8 @@ export function buildingDay(s: Society, w: Work): boolean {
   if ((w.prog ?? 1) < 1) { if (!kept) w.prog = (w.prog ?? 0) - 0.01; return (w.prog ?? 0) > 0; }
   if (w.up && !kept) { w.up.prog -= 0.01; if (w.up.prog <= 0) { w.up = undefined; s.worksVersion++; } }
   const before = w.state;
-  w.state -= kept ? def.decay.lived : def.decay.empty;
+  /* a people that has built many of a kind builds them to last */
+  w.state -= (kept ? def.decay.lived : def.decay.empty) / qualityFor(s, w.band, techIx(def.tech[0]));
   if ((before >= 0.55) !== (w.state >= 0.55) || (before >= 0.2) !== (w.state >= 0.2)) s.worksVersion++;
   return w.state > -1.4;
 }

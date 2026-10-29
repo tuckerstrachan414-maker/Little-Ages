@@ -25,6 +25,7 @@ import { Resources, type Deposit } from "../resources.ts";
 import { Weather } from "../weather.ts";
 import { settlementsDay, isChief } from "./settlements.ts";
 import { flocksDay, flocksArrive, carryFlocks, releaseFlocks, hasDogs, flockQuads, type Flock } from "./herding.ts";
+import { newRefine, newUses, carryRefine } from "../tech/refine.ts";
 import { buildingsNear, standing } from "../buildings/build.ts";
 import { WELLS } from "../buildings/wants.ts";
 import { Mat, MATS, MAT_COUNT, isFood } from "../economy/goods.ts";
@@ -121,9 +122,9 @@ export class Society {
   readonly resources: Resources;
   /** the weather: the soil's moisture per patch, and the slow swing of wet and dry years */
   readonly weather: Weather;
-  /** each people's refinement of each idea, and how often it has done each (later checkpoints fill these) */
-  refine?: Map<number, Float32Array>;
-  uses?: Map<number, Uint32Array>;
+  /** each people's refinement of each idea, and how often it has done each (see tech/refine.ts) */
+  refine = new Map<number, Float32Array>();
+  uses = new Map<number, Uint32Array>();
 
   constructor(w: WorldData, eco: Ecology, wild: Wildlife, seed: number, start: StartOptions, time: number) {
     this.w = w; this.eco = eco; this.wild = wild; this.walker = new Walker(w);
@@ -264,6 +265,7 @@ export class Society {
     homes.forEach((home, h) => {
       const cult = h;
       this.cultures[cult] = makeCulture(cult, seed);
+      this.refine.set(cult, newRefine()); this.uses.set(cult, newUses());
       const anc = this.ancestryAt(home.x, home.y);
       const sites: { x: number; y: number }[] = [home];
       for (const c of cands) {
@@ -429,7 +431,7 @@ export class Society {
   /** Moves a person (and any baby or young children they look after) to another band. */
   moveTo(p: Person, to: Band): void {
     const move = (q: Person) => {
-      const from = this.bandById.get(q.band); if (from) { from.members = from.members.filter(id => id !== q.id); carryHearth(from, to, q.id); carryFlocks(this, from, to, q.id); }
+      const from = this.bandById.get(q.band); if (from) { from.members = from.members.filter(id => id !== q.id); carryHearth(from, to, q.id); carryFlocks(this, from, to, q.id); carryRefine(this, q, from.culture, to.culture); }
       q.band = to.id; to.members.push(q.id); abandon(this, q); this.dirty.add(q.id); q.follows = q.id; q.joined = this.time; q.came = from?.id ?? 0;
       for (const id of to.members) { const o = this.byId.get(id); if (o && o !== q) { const r = this.rel(q, id); r.fam = Math.max(r.fam, 0.3); this.rel(o, q.id).fam = Math.max(this.rel(o, q.id).fam, 0.3); } }
       this.learnPlace(q, Place.Camp, to.x, to.y, 1, to.id, 0);

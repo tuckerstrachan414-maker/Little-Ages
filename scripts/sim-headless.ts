@@ -14,6 +14,7 @@ import { TECHS as IDEAS, ERA_NAMES } from "../src/sim/tech/tree.ts";
 import { MATS } from "../src/sim/economy/goods.ts";
 import { defOf } from "../src/sim/buildings/build.ts";
 import { dietScore } from "../src/sim/economy/diet.ts";
+import { mostRefined } from "../src/sim/tech/refine.ts";
 import { DAY_SECONDS, DAYS_PER_SEASON, SEASON_NAMES, SPECIES_NAMES, type SizeKey } from "../src/shared/types.ts";
 
 const arg = (k: string, d: string) => { const i = process.argv.indexOf(`--${k}`); return i >= 0 ? process.argv[i + 1] : d; };
@@ -65,6 +66,10 @@ const report = (label: string) => {
         const vs = people.villages.filter(v => !v.abandoned), tiers = [0, 0, 0, 0]; for (const v of vs) tiers[v.tier]++;
         const chiefs = vs.filter(v => v.chief).length, communal = vs.reduce((n, v) => n + v.communal.length, 0), calls = vs.filter(v => v.call).length;
         line += `\n${"".padEnd(16)} settlements: ${tiers[0]} hamlets, ${tiers[1]} villages, ${tiers[2]} towns, ${tiers[3]} cities | ${chiefs} chiefs, ${communal} shared buildings, ${calls} works called for | ages: ${people.cultures.map(c => `${c.lang.name} ${ERA_NAMES[c.age].replace(" Age", "")}`).join(", ")}`;
+      }
+      {
+        const top = mostRefined(people, 5);
+        line += `\n${"".padEnd(16)} refined: ${top.length ? top.map(([c, i, r]) => `${IDEAS[i].name} ${r.toFixed(2)} (${people.cultures[c].lang.name})`).join(", ") : "nothing much yet"}`;
       }
       const wsum = people.weather.summary(), wells = people.works.filter(w => w.kind === 4 && (w.prog ?? 1) >= 1 && w.state > 0.2).length;
       line += `\n${"".padEnd(16)} weather: soil ${wsum.mean.toFixed(2)} wet, ${wsum.drought} patches in drought (${people.weather.stats.droughtDays} patch-days so far), ${wells} wells standing`;
@@ -147,6 +152,7 @@ if (people && summary) {
     flocks: people.flocks.length, animals: people.flocks.reduce((n, f) => n + f.n + f.young, 0), tameFlocks: people.flocks.filter(f => f.tame >= 0.3).length, dogs: people.flocks.filter(f => f.sp === 9).reduce((n, f) => n + f.n, 0),
     kept: people.stats.herds.kept, herdLoss: people.stats.herds.lost, milk: Math.round(people.stats.herds.milk), pens: people.works.filter(w => w.kind === 6 && (w.prog ?? 1) >= 1 && w.state > 0.2).length,
     firstFlock: people.stats.herds.firstFlock ? +(people.stats.herds.firstFlock / 2400 + 1).toFixed(1) : 0, firstTame: people.stats.herds.firstTame ? +(people.stats.herds.firstTame / 2400 + 1).toFixed(1) : 0,
+    maxRefine: +(mostRefined(people, 1)[0]?.[2] ?? 0).toFixed(2),
     secs: +((performance.now() - tr) / 1000).toFixed(1),
   };
   console.log("SUMMARY " + JSON.stringify(out));

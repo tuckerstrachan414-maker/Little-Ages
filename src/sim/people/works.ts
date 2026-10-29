@@ -1,10 +1,11 @@
+import { qualityFor } from "../tech/refine.ts";
 import { Biome, Flag, DAY_SECONDS } from "../../shared/types.ts";
 import { Bubble, type HutLook, type HutStyle } from "../../shared/people.ts";
 import type { WallKind, RoofKind } from "../buildings/defs.ts";
 import { FISH_UNITS } from "../ecology.ts";
 import { Mem, type Person } from "./person.ts";
 import { homeOf, type Band, type Foods } from "./band.ts";
-import { practice, learn, ready } from "./ideas.ts";
+import { practice, learn, ready, knows } from "./ideas.ts";
 import { Idea } from "../tech/tree.ts";
 import { hutDay, pitDay } from "./homes.ts";
 import { buildingDay, defOf } from "../buildings/build.ts";
@@ -133,7 +134,7 @@ export function weirSite(s: Society, b: Band): { x: number; y: number; wx: numbe
 }
 /** A weir built, or one mended. */
 export function buildWeir(s: Society, p: Person, at: { x: number; y: number; wx: number; wy: number }, mend: Work | null): void {
-  practice(p, Idea.Weirs, 0.03);
+  practice(s, p, Idea.Weirs, 0.03);
   if (mend) { mend.state = 1; mend.band = p.band; p.prestige += 0.03; return; }
   const b = s.band(p), first = !s.works.some(w => w.kind === Work.Weir && w.band === b.id);
   addWork(s, { kind: Work.Weir, x: at.x, y: at.y, wx: at.wx, wy: at.wy, band: b.id, home: homeOf(p, s.byId, s.time), by: p.id, t: s.time, state: 1, food: 0, crop: "", ripe: 0 });
@@ -176,7 +177,7 @@ export function plotSite(s: Society, b: Band): { x: number; y: number; crop: str
 }
 export function sow(s: Society, p: Person, at: { x: number; y: number; crop: string }): void {
   const b = s.band(p), home = homeOf(p, s.byId, s.time);
-  practice(p, Idea.Planting, 0.03);
+  practice(s, p, Idea.Planting, 0.03);
   const first = !s.works.some(w => w.kind === Work.Plot && w.band === b.id);
   addWork(s, { kind: Work.Plot, x: at.x, y: at.y, wx: at.x, wy: at.y, band: b.id, home, by: p.id, t: s.time, state: 0, food: 0, crop: at.crop, ripe: 0, sown: 1, fert: 1, tame: b.seed[at.crop] ?? 0 });
   if (first) s.event("sow", Bubble.Berries, `${p.name} of the ${b.name} sowed a patch of ${at.crop} by camp, the band's first. It will ripen in late summer, if the ${b.name} are still there.`, at.x, at.y, [p.id], b.id);
@@ -184,7 +185,7 @@ export function sow(s: Society, p: Person, at: { x: number; y: number; crop: str
 /** A field sown again in spring: the ground is already worked, and the seed is the band's own from last year's harvest. */
 export function resow(s: Society, p: Person, w: Work): void {
   const b = s.band(p), home = homeOf(p, s.byId, s.time);
-  practice(p, Idea.Planting, 0.03);
+  practice(s, p, Idea.Planting, 0.03);
   const first = !worksAround(s, b.x, b.y, 18).some(o => o !== w && o.kind === Work.Plot && o.band === b.id && (o.sown ?? 1) > 1);
   w.fallow = false; w.state = 0; w.food = 0; w.ripe = 0; w.t = s.time; w.kept = s.time; w.by = p.id; w.home = home; w.band = b.id;
   w.sown = (w.sown ?? 1) + 1; w.tame = b.seed[w.crop] ?? 0;
@@ -220,8 +221,12 @@ function fieldKept(s: Society, w: Work): boolean {
   sown (the heads that held their grain longest, the biggest tubers, the best gourds are
   what got brought in), and the band's seed line for that crop is what it sows next year.
 */
+/** How long a spell of harvesting takes: with a sickle the stalks come down an armful at a time. */
+export const SICKLE = () => techIx("sickle-harvest"), SEED_SELECTION = () => techIx("seed-selection");
+export const harvestSpell = (p: Person): number => (knows(p, SICKLE()) ? 2.8 : 4.5);
 export function seedLine(s: Society, p: Person, w: Work): void {
-  const b = s.band(p), before = b.seed[w.crop] ?? 0, next = Math.min(1, Math.max(before, (w.tame ?? 0) + 0.025));
+  /* someone who keeps back the plumpest heads for seed tames the line faster */
+  const b = s.band(p), before = b.seed[w.crop] ?? 0, next = Math.min(1, Math.max(before, (w.tame ?? 0) + (knows(p, SEED_SELECTION()) ? 0.04 : 0.025)));
   b.seed[w.crop] = next;
   for (const at of [0.25, 0.5, 0.75]) if (before < at && next >= at) {
     const what = w.crop === "wild grain" ? `grain has grown plump and holds its seed until it is cut` : w.crop === "tubers" ? `tubers have grown fat and quick to come up` : `gourds and beans have grown big and sure`;
@@ -274,7 +279,7 @@ export function worksDay(s: Society): void {
     if (w.kind === Work.Weir) {
       /* the trap fills from the fish in that water; what is not taken out spoils */
       if (w.state > 0.05) {
-        const c = s.eco.cell(w.wx, w.wy), got = Math.min(Math.max(0, 30 - w.food), s.eco.fish[c] * FISH_UNITS * 0.025 * w.state);
+        const c = s.eco.cell(w.wx, w.wy), got = Math.min(Math.max(0, 30 - w.food), s.eco.fish[c] * FISH_UNITS * 0.025 * w.state * qualityFor(s, w.band, Idea.Weirs));
         s.eco.fish[c] -= got / FISH_UNITS; w.food += got; s.stats.food.weir += got;
       }
       w.food *= T > 15 ? 0.7 : T > 5 ? 0.82 : 0.92;
@@ -296,14 +301,15 @@ export function worksDay(s: Society): void {
             w.ripe = s.time;
             const sower = s.byId.get(w.by);
             /* worked ground gives a little more in its first years; each crop takes something out of the soil */
-            w.food = expectedYield(s, w) * (0.75 + (sower ? sower.know[Idea.Planting] : 0.3) * 0.5) * ((w.sown ?? 1) > 1 ? 1.1 : 1) * (0.4 + 0.6 * s.weather.wetnessAt(w.x, w.y));
+            w.food = expectedYield(s, w) * (0.75 + (sower ? sower.know[Idea.Planting] : 0.3) * 0.5) * ((w.sown ?? 1) > 1 ? 1.1 : 1) * (0.4 + 0.6 * s.weather.wetnessAt(w.x, w.y)) * qualityFor(s, w.band, Idea.Planting);
             w.fert = Math.max(0.35, (w.fert ?? 1) - 0.07);
             s.worksVersion++;
           }
         }
       } else {
-        /* a ripe crop standing in the field: birds, mice and rot take it bit by bit; tamer grain holds on to its seed longer */
-        w.food *= 0.96 + 0.03 * (w.tame ?? 0);
+        /* a ripe crop standing in the field: birds, mice and rot take it bit by bit; tamer grain holds on to its seed longer, and a people with sickles brings it in before half is lost */
+        const sickle = s.bandById.get(w.band)?.can[SICKLE()] ?? 0;
+        w.food *= 1 - (1 - (0.96 + 0.03 * (w.tame ?? 0))) * (sickle ? 0.5 : 1);
       }
       /* a plot is kept a season past ripening or failing; then a field its household still lives by rests until spring, and any other goes back to weeds */
       const done = (w.ripe > 0 && s.time - w.ripe > DAY_SECONDS * 25) || (w.ripe < 0 && s.time - w.t > DAY_SECONDS * 50) || s.time - w.t > DAY_SECONDS * 70;

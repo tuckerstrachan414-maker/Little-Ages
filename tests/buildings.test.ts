@@ -16,6 +16,7 @@ import { wants, materialsInReach, communalSite } from "../src/sim/buildings/want
 import { Problem } from "../src/sim/tech/problems.ts";
 import { Mat, MAT_COUNT } from "../src/sim/economy/goods.ts";
 import { bandDetail } from "../src/sim/people/inspect.ts";
+import { qualityFor } from "../src/sim/tech/refine.ts";
 import { DAY_SECONDS, DAYS_PER_SEASON, type WorldData } from "../src/shared/types.ts";
 
 /*
@@ -97,12 +98,14 @@ describe("raising a building", () => {
   });
   it("wears at its own pace, fastest with nobody keeping it", () => {
     const w = s.works.find(o => o.kind === Line.Well)!;
+    /* a people that has built a thing builds it a little to last: the wear is the def's, over their refinement of it */
+    const q = qualityFor(s, w.band, techIx(defOf(w).tech[0]));
     const kept = w.state; buildingDay(s, w); const lived = kept - w.state;
-    expect(lived).toBeCloseTo(defOf(w).decay.lived, 6);
+    expect(lived).toBeCloseTo(defOf(w).decay.lived / q, 6);
     b.x += 100; b.y += 100;
     const before = w.state; buildingDay(s, w); const empty = before - w.state;
     b.x -= 100; b.y -= 100;
-    expect(empty).toBeCloseTo(defOf(w).decay.empty, 6);
+    expect(empty).toBeCloseTo(defOf(w).decay.empty / q, 6);
     expect(empty).toBeGreaterThan(lived);
   });
   it("a frame nobody comes back to rots where it stands", () => {
