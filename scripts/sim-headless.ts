@@ -98,6 +98,8 @@ const report = (label: string) => {
 };
 
 const tr = performance.now();
+/* the head count at the end of some years, for the balance sweep */
+const popAt: Record<number, number> = {};
 let lastSeason = seasonAt(time);
 report(`Y1 ${SEASON_NAMES[lastSeason]}`);
 const end = time + years * 4 * DAYS_PER_SEASON * DAY_SECONDS, dt = people ? 2 : 1;
@@ -107,7 +109,7 @@ while (time < end) {
   wild.update(dt, s, day); birds.update(dt, s);
   if (day !== lastDay) { lastDay = day; eco.daily(s); }
   people?.update(dt, time, s);
-  if (s !== lastSeason) { lastSeason = s; if (s === 0 || years <= 3) report(`Y${Math.floor(day / (4 * DAYS_PER_SEASON)) + 1} ${SEASON_NAMES[s]}`); }
+  if (s !== lastSeason) { lastSeason = s; const y = Math.floor(day / (4 * DAYS_PER_SEASON)); if (s === 0 && people && (y === 10 || y === 25 || y === 50 || y === 75)) popAt[y] = people.people.length; if (s === 0 || years <= 3) report(`Y${y + 1} ${SEASON_NAMES[s]}`); }
 }
 if (people) {
   const s = people.stats, k = s.kills;
@@ -135,6 +137,8 @@ if (people) {
 if (people && summary) {
   const s = people.stats, c = s.camp;
   const cause = (k: string) => s.causes.get(k) ?? 0;
+  /* the year a way of doing things was first worked out anywhere (0 if never) */
+  const firstYear = (key: string) => { const d = IDEAS.find(o => o.key === key); const f = d ? people.ideas[d.id].first : null; return f ? +(f.t / 2400 + 1).toFixed(1) : 0; };
   const out: Record<string, number | string> = {
     seed, years, pop: people.people.length, maxPop: s.maxPop, bands: people.bands.length, births: s.births, deaths: s.deaths,
     hunger: cause("hunger"), cold: cause("the cold"), illness: cause("illness"), thirst: cause("thirst"),
@@ -153,6 +157,13 @@ if (people && summary) {
     kept: people.stats.herds.kept, herdLoss: people.stats.herds.lost, milk: Math.round(people.stats.herds.milk), pens: people.works.filter(w => w.kind === 6 && (w.prog ?? 1) >= 1 && w.state > 0.2).length,
     firstFlock: people.stats.herds.firstFlock ? +(people.stats.herds.firstFlock / 2400 + 1).toFixed(1) : 0, firstTame: people.stats.herds.firstTame ? +(people.stats.herds.firstTame / 2400 + 1).toFixed(1) : 0,
     maxRefine: +(mostRefined(people, 1)[0]?.[2] ?? 0).toFixed(2),
+    /* what the plan's acceptance targets ask for: the head count along the way, when each of the checkpoint's ways first came, how many ways are known, what stands */
+    pop10: popAt[10] ?? 0, pop25: popAt[25] ?? 0, pop50: popAt[50] ?? 0, pop75: popAt[75] ?? 0,
+    techs: IDEAS.filter(d => !d.start && people.ideas[d.id].knowers > 0).length,
+    firstPottery: firstYear("pottery"), firstWells: firstYear("wells"), firstGranary: firstYear("granary"), firstHerd: Math.min(...["herding-goats-and-sheep", "herding-cattle", "herding-pigs"].map(firstYear).filter(y => y > 0), Infinity) === Infinity ? 0 : Math.min(...["herding-goats-and-sheep", "herding-cattle", "herding-pigs"].map(firstYear).filter(y => y > 0)),
+    firstDogs: firstYear("taming-dogs"), firstBow: firstYear("bow-and-arrow"), firstHouse1: Math.min(...["mud-brick", "wattle-and-daub", "timber-framing"].map(firstYear).filter(y => y > 0), Infinity) === Infinity ? 0 : Math.min(...["mud-brick", "wattle-and-daub", "timber-framing"].map(firstYear).filter(y => y > 0)),
+    granaries: people.works.filter(w => w.kind === 3 && (w.tier ?? 0) >= 1 && w.state > 0.2).length, houses1: people.works.filter(w => w.kind === 2 && (w.tier ?? 0) >= 1 && (w.prog ?? 1) >= 1 && w.state > 0.2).length, kilns: people.works.filter(w => w.kind === 5 && (w.prog ?? 1) >= 1 && w.state > 0.2).length,
+    secsPerYear: +(((performance.now() - tr) / 1000) / years).toFixed(2),
     secs: +((performance.now() - tr) / 1000).toFixed(1),
   };
   console.log("SUMMARY " + JSON.stringify(out));
