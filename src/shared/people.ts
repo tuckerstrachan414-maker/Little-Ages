@@ -54,6 +54,8 @@ export interface WorkSnap {
   id: number; kind: number; x: number; y: number; wx: number; wy: number; state: number; food: number; crop: string;
   prog?: number; style?: HutStyle; look?: HutLook; size?: number; hide?: string; trim?: string;
   open?: boolean; fallow?: boolean; tame?: number;
+  /** buildings beyond the first huts and pits: tier and def, what they are built of, whose they are, a rebuild in progress (0..1), and the people's way of building */
+  tier?: number; def?: string; walls?: string; roof?: string; owner?: number; up?: number; pitch?: number; windows?: number; decor?: number;
 }
 
 /**

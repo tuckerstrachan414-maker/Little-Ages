@@ -29,6 +29,7 @@ const BASE: Record<string, [number, string]> = {
   gather: [0.48, "Bands gather"], disperse: [0.32, "A gathering breaks up"],
   village: [0.84, "A village is born"], villagegrow: [0.45, "A village grows"], abandon: [0.6, "A village abandoned"], return: [0.5, "Back to the old village"],
   found: [0.3, "A deposit found"], exhausted: [0.38, "A deposit dug out"], regrown: [0.2, "The wood comes back"],
+  well: [0.4, "A well"], granary: [0.34, "A granary"], kiln: [0.3, "A kiln"], pen: [0.3, "A pen"], upgrade: [0.3, "A house rebuilt"], built: [0.3, "Something new built"],
 };
 /** Every kind of event the simulation tells of. */
 export const KINDS = Object.keys(BASE);
@@ -80,6 +81,8 @@ export function weigh(s: Society, kind: string, who: number[], band: number, hin
     case "pit": if (n === 0) title = "Food put by in the ground"; break;
     case "gather": sig += Math.min(0.25, Math.max(0, hint - 40) / 200); break;
     case "village": if (n === 0) title = "The first village"; break;
+    case "well": case "granary": case "kiln": case "pen": case "built": if (hint === 1) { sig += 0.15; title = `The first ${kind === "built" ? "of its kind" : kind} anywhere`; } break;
+    case "upgrade": if (hint === 1) { sig += 0.12; title = "A house built to last"; } break;
     case "found": { const m = MATS[hint]; if (m) { title = `${m.name.charAt(0).toUpperCase()}${m.name.slice(1)} found`; if (hint >= 15) sig += 0.08; } break; }
     case "exhausted": { const m = MATS[hint]; if (m) title = `The ${m.name} runs out`; break; }
     case "feud": if (hint === 1) { sig += 0.04; title = "A feud passes down"; } break;

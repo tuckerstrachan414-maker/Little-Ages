@@ -22,7 +22,7 @@ import { Work, worksDay, lookAtWorks, plotHope, workById, worksAround } from "./
 import { layoutCamp, recountPits, hutStands, stakeDays, leaveBehind, pitFood, hutHomes } from "./homes.ts";
 import { villagesDay, noteSite, friendly, roomFor, tiesTo, VILLAGE_R, type Village, type Gathering, type Notable } from "./villages.ts";
 import { Resources, type Deposit } from "../resources.ts";
-import { MATS } from "../economy/goods.ts";
+import { MATS, MAT_COUNT, isFood } from "../economy/goods.ts";
 
 /*
   Everyone alive, and the bands they live in. Each step every person's body changes (they
@@ -74,6 +74,7 @@ export class Society {
     camp: { stays: [0, 0, 0, 0, 0, 0], stayDays: 0, bandDays: 0, longDays: 0, offer: 0, fresh: 0, home: 0, left: 0 },
     /* storage pits dug and huts raised, food put by in pits, taken back out, and eaten straight from them */
     homes: { pits: 0, huts: 0, stored: 0, fetched: 0, eaten: 0, firstHut: 0, firstPit: 0 },
+    buildings: { started: 0, built: 0, upgrades: 0, delivered: 0, quarried: 0, firstOf: {} as Record<number, number> },
     /* gatherings told of, villages founded, and when the first one was */
     places: { gatherings: 0, villages: 0, firstVillage: 0, abandoned: 0, returns: 0 },
     /* each chance someone had to see a new way at work: how many, and the odds before the idea's rarity (expected finds = spark x odds) */
@@ -273,7 +274,7 @@ export class Society {
     const id = this.bands.length ? Math.max(...this.bands.map(b => b.id)) + 1 : 1;
     const name = placeName(this.cultures[culture].lang, this.rng);
     const b: Band = { id, name, culture, color: BAND_COLORS[(id - 1) % BAND_COLORS.length], x, y, fire: 0.8, store: { ...noFood(), wood: 2, hides: 0 }, hearths: new Map(),
-      members: [], founded: this.time, movedAt: this.time, moves: 0, homes: new Map(), busy: new Map(), respected: 0, followers: 0, ledSince: this.time, contender: 0, parent, met: new Set(), appetite: 1, moving: null, siteName: placeName(this.cultures[culture].lang, this.rng), water: [x, y], past: [], today: newDay(), yesterday: newDay(), can: new Int32Array(IDEA_COUNT), keeper: new Int32Array(IDEA_COUNT), outAt: 0, pit: 0, seed: {}, problems: newProblems(), meatAt: this.time, regrownAt: 0 };
+      members: [], founded: this.time, movedAt: this.time, moves: 0, homes: new Map(), busy: new Map(), respected: 0, followers: 0, ledSince: this.time, contender: 0, parent, met: new Set(), appetite: 1, moving: null, siteName: placeName(this.cultures[culture].lang, this.rng), water: [x, y], past: [], today: newDay(), yesterday: newDay(), can: new Int32Array(IDEA_COUNT), keeper: new Int32Array(IDEA_COUNT), outAt: 0, pit: 0, seed: {}, problems: newProblems(), meatAt: this.time, regrownAt: 0, goods: new Float32Array(MAT_COUNT), broke: 0 };
     this.bands.push(b); this.bandById.set(id, b);
     return b;
   }
@@ -623,7 +624,7 @@ export class Society {
     if (p.water < (p.goal === Goal.Sick || p.goal === Goal.Migrate ? 0.1 : 0.2)) return true;
     if (p.goal === Goal.Flee || p.goal === Goal.Migrate || p.goal === Goal.Sick) return false;
     if (p.warmth < 0.22 && p.goal !== Goal.Warm && p.goal !== Goal.Sleep && this.band(p).fire > 0.05) return true;
-    if (p.food < 0.12 && p.carryAmt > 0 && p.carryKind !== 4 && p.goal !== Goal.Eat) return true;
+    if (p.food < 0.12 && p.carryAmt > 0 && isFood(p.carryKind) && p.goal !== Goal.Eat) return true;
     /* starving at camp when food has come in: whatever they were doing, they go and eat */
     if (p.food < 0.1 && p.goal !== Goal.Eat && this.time - p.whyAt > 3 && this.atCamp(p, 8) && reachFood(this, p) > 0.4) return true;
     if (p.sick > 0.5) return true;
@@ -633,7 +634,7 @@ export class Society {
       if (b.fire <= 0 && !b.moving && this.tempC(b.x, b.y) < 10 && Math.hypot(p.x - b.x, p.y - b.y) < 30 && !this.fireMakerNear(b, 6)) return true;
     }
     /* night falls: whoever is still out working heads home */
-    if (this.sun < 0.08 && (p.goal === Goal.Gather || p.goal === Goal.Fish || p.goal === Goal.Snare || p.goal === Goal.Wood || p.goal === Goal.Explore || p.goal === Goal.Haul || p.goal === Goal.Talk || p.goal === Goal.Play || p.goal === Goal.Follow || p.goal === Goal.Hut || p.goal === Goal.Pit)) {
+    if (this.sun < 0.08 && (p.goal === Goal.Gather || p.goal === Goal.Fish || p.goal === Goal.Snare || p.goal === Goal.Wood || p.goal === Goal.Explore || p.goal === Goal.Haul || p.goal === Goal.Talk || p.goal === Goal.Play || p.goal === Goal.Follow || p.goal === Goal.Hut || p.goal === Goal.Pit || p.goal === Goal.Construct || p.goal === Goal.Quarry)) {
       const st = p.plan[p.si]; return !(st && st.k === St.Drop) && !(st && st.k === St.Go && p.si === p.plan.length - 2);
     }
     if (this.sun < 0.08 && p.goal === Goal.Hunt && this.time - p.whyAt > 30) return true;
@@ -643,7 +644,7 @@ export class Society {
   /** The body: hunger, thirst, tiredness, cold, loneliness and health, every step. */
   private body(p: Person, dt: number): void {
     const st = this.stage(p), days = dt / DAY_SECONDS, b = this.band(p);
-    const working = (p.goal >= Goal.Gather && p.goal <= Goal.Wood) || p.goal === Goal.Hut || p.goal === Goal.Pit, asleep = p.goal === Goal.Sleep && p.anim === Anim.Sleep;
+    const working = (p.goal >= Goal.Gather && p.goal <= Goal.Wood) || p.goal === Goal.Hut || p.goal === Goal.Pit || p.goal === Goal.Construct || p.goal === Goal.Quarry, asleep = p.goal === Goal.Sleep && p.anim === Anim.Sleep;
     const moving = p.anim === Anim.Walk || p.anim === Anim.Carry || p.anim === Anim.CaneWalk, running = p.anim === Anim.Run || p.anim === Anim.Play;
     const T = this.tempC(p.x, p.y);
     if (st === "baby") {
@@ -1459,11 +1460,14 @@ export class Society {
   worksSnap(): WorkSnap[] {
     return this.works.map(w => {
       const o: WorkSnap = { id: w.id, kind: w.kind, x: w.x, y: w.y, wx: w.wx, wy: w.wy, state: Math.round(w.state * 20) / 20, food: Math.round(w.food), crop: w.crop };
-      if (w.kind === Work.Hut) {
+      if (w.kind === Work.Hut || w.kind >= 4 || (w.tier ?? 0) > 0) {
         const b = this.bandById.get(w.band), c = this.cultures[b ? b.culture : 0];
         o.prog = Math.round((w.prog ?? 1) * 20) / 20; o.style = w.style; o.look = w.look; o.size = w.size ?? 1; o.hide = c.hide; o.trim = c.dyes[0];
-      } else if (w.kind === Work.Pit) { o.food = Math.round(pitFood(w)); o.open = this.time - (w.opened ?? 0) < DAY_SECONDS * 0.3; }
+        o.pitch = c.build.pitch; o.windows = c.build.windows; o.decor = c.build.decor;
+      }
+      if (w.kind === Work.Pit) { o.food = Math.round(pitFood(w)); o.open = this.time - (w.opened ?? 0) < DAY_SECONDS * 0.3; }
       else if (w.kind === Work.Plot) { o.fallow = !!w.fallow; o.tame = Math.round((w.tame ?? 0) * 20) / 20; }
+      if (w.tier) o.tier = w.tier; if (w.def) o.def = w.def; if (w.walls) o.walls = w.walls; if (w.roof) o.roof = w.roof; if (w.owner) o.owner = w.owner; if (w.up) o.up = Math.round(w.up.prog * 20) / 20;
       return o;
     });
   }

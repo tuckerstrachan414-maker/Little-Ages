@@ -6,6 +6,8 @@ import { Work, addWork, worksAround, workById } from "./works.ts";
 import { knows, practice } from "./ideas.ts";
 import { Idea } from "../tech/tree.ts";
 import { householdAppetite, hearthOf, pass, take } from "./sharing.ts";
+import { decayOf, defOf } from "../buildings/build.ts";
+import { houseWords } from "../buildings/defs.ts";
 import type { Society } from "./society.ts";
 
 /*
@@ -112,7 +114,9 @@ export function pitDay(s: Society, w: Work, keep: boolean): void {
   if (!w.foods) return;
   const T = s.tempC(w.x, w.y), f = w.foods, lone = s.time - (w.opened ?? w.t) > DAY_SECONDS * 20 ? 0.998 : 1;
   const rot = T < -2 ? 0.995 : T > 20 ? 0.65 : T > 10 ? 0.8 : T > 5 ? 0.9 : 0.96;
-  f.meat *= rot; f.fish *= rot; f.plant *= 0.996 * lone; f.dried *= 0.999 * lone;
+  /* a granary on posts keeps plant food drier and out of reach of the mice */
+  const plantKeep = defOf(w).effects.keep ?? 0.996;
+  f.meat *= rot; f.fish *= rot; f.plant *= plantKeep * lone; f.dried *= Math.max(0.999, plantKeep) * lone;
   if (!keep) w.state -= 0.004;
 }
 
@@ -137,7 +141,7 @@ const HUT_WORDS: Record<string, string> = {
   "cone|plain": "tall cone of poles sheathed in bark and hides", "cone|cold": "earth lodge of poles heaped with turf", "cone|wet": "cone of poles raised on stilts", "cone|hot": "tall cone of thatch",
 };
 export const hutWordsOf = (style: string | undefined, look: string | undefined) => HUT_WORDS[`${style}|${look}`] ?? "hut";
-export const hutWords = (w: Work) => hutWordsOf(w.style, w.look);
+export const hutWords = (w: Work) => ((w.tier ?? 0) >= 1 ? houseWords(w.style, w.walls, w.roof) : hutWordsOf(w.style, w.look));
 /** A hut standing and sound enough to live in. */
 export const hutStands = (w: Work | undefined | null): boolean => !!w && w.kind === Work.Hut && (w.prog ?? 1) >= 1 && w.state > 0.2;
 /** How far a hut reaches from where it stands, for keeping other things clear of it. */
@@ -281,8 +285,10 @@ export function hutDay(s: Society, w: Work): boolean {
     if (!lived) w.prog = (w.prog ?? 0) - 0.02;
     return (w.prog ?? 0) > 0;
   }
+  /* a rebuild nobody is working on comes to nothing */
+  if (w.up && !lived) { w.up.prog -= 0.01; if (w.up.prog <= 0) { w.up = undefined; s.worksVersion++; } }
   const before = w.state;
-  w.state -= lived ? 0.0016 : 0.006 * (s.tempC(w.x, w.y) < 0 ? 1.3 : 1);
+  w.state -= decayOf(w, lived) * (!lived && s.tempC(w.x, w.y) < 0 ? 1.3 : 1);
   if ((before >= 0.55) !== (w.state >= 0.55) || (before >= 0.2) !== (w.state >= 0.2)) s.worksVersion++;
   return w.state > -1.4;
 }

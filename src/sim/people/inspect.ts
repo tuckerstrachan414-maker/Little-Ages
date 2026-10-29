@@ -1,3 +1,5 @@
+import { defOf } from "../buildings/build.ts";
+import { WALL_WORDS } from "../buildings/defs.ts";
 import { DAY_SECONDS, DAYS_PER_SEASON, DAYS_PER_YEAR, SEASON_NAMES, SPECIES_NAMES } from "../../shared/types.ts";
 import type { BandDetail, BandFeud, Feuding, Kin, PersonDetail, VillageDetail } from "../../shared/protocol.ts";
 import { TRAITS } from "./genetics.ts";
@@ -31,6 +33,7 @@ const GOAL_WORDS: Partial<Record<number, string>> = {
   [Goal.Kindle]: "Lighting the fire", [Goal.Ember]: "Fetching fire", [Goal.Show]: "Showing how", [Goal.Learn]: "Learning", [Goal.Dry]: "Drying meat",
   [Goal.Build]: "Building a weir", [Goal.Sow]: "Sowing",
   [Goal.Hut]: "Raising a hut", [Goal.Pit]: "Digging a storage pit", [Goal.Store]: "Putting food by", [Goal.Fetch]: "Fetching food from the pit",
+  [Goal.Quarry]: "Fetching clay and stone", [Goal.Construct]: "Building",
 };
 const TRAIT_WORDS: [string, string][] = [
   ["timid", "brave"], ["cold", "kind"], ["generous", "greedy"], ["easygoing", "ambitious"],
@@ -176,14 +179,17 @@ export const seasonYear = (t: number) => `${SEASON_NAMES[Math.floor(t / DAY_SECO
 /** The band's huts and pits at this camp, in a line. */
 function homesLine(s: Society, b: Band): string {
   if (b.moving) return "";
-  let huts = 0, going = 0, ruins = 0, bays = 0, pits = 0, food = 0;
+  let huts = 0, going = 0, ruins = 0, bays = 0, pits = 0, granaries = 0, food = 0, rebuilt = 0, rebuilding = 0, wallsOf = "";
+  const others = new Map<string, { up: number; going: number }>();
   for (const w of worksAround(s, b.x, b.y, 14)) {
-    if (w.kind === Work.Hut) { if ((w.prog ?? 1) < 1) going++; else if (w.state < 0.2) ruins++; else { huts++; bays += Math.max(0, (w.size ?? 1) - 1); } }
-    else if (w.kind === Work.Pit && w.band === b.id) { pits++; food += pitFood(w); }
+    if (w.kind === Work.Hut) { if ((w.prog ?? 1) < 1) going++; else if (w.state < 0.2) ruins++; else { huts++; bays += Math.max(0, (w.size ?? 1) - 1); if ((w.tier ?? 0) >= 1) { rebuilt++; wallsOf ||= WALL_WORDS[w.walls ?? "poles"]; } if (w.up) rebuilding++; } }
+    else if (w.kind === Work.Pit && w.band === b.id) { if ((w.tier ?? 0) >= 1) granaries++; else pits++; food += pitFood(w); }
+    else if (w.kind >= 4 && (w.band === b.id || (w.owner ?? 0) >= 1)) { const d = defOf(w), o = others.get(d.name) ?? { up: 0, going: 0 }; if ((w.prog ?? 1) < 1) o.going++; else if (w.state > 0.2) o.up++; others.set(d.name, o); }
   }
   const parts: string[] = [];
-  if (huts || going) parts.push(`${huts} ${huts === 1 ? "hut" : "huts"}${bays ? ` (${bays} added ${bays === 1 ? "bay" : "bays"})` : ""}${going ? `, ${going} going up` : ""}`);
-  if (pits) { const days = Math.round(food / Math.max(1, b.appetite)); parts.push(`${pits} storage ${pits === 1 ? "pit" : "pits"} ${food < 1 ? "standing empty" : days < 1 ? "with a little food put by" : `holding ${days} ${days === 1 ? "day" : "days"} of food`}`); }
+  if (huts || going) parts.push(`${huts} ${huts === 1 ? "hut" : "huts"}${rebuilt ? ` (${rebuilt} rebuilt in ${wallsOf})` : ""}${bays ? ` (${bays} added ${bays === 1 ? "bay" : "bays"})` : ""}${going ? `, ${going} going up` : ""}${rebuilding ? `, ${rebuilding} being rebuilt` : ""}`);
+  if (pits || granaries) { const days = Math.round(food / Math.max(1, b.appetite)); const what = [pits ? `${pits} storage ${pits === 1 ? "pit" : "pits"}` : "", granaries ? `${granaries} ${granaries === 1 ? "granary" : "granaries"}` : ""].filter(Boolean).join(" and "); parts.push(`${what} ${food < 1 ? "standing empty" : days < 1 ? "with a little food put by" : `holding ${days} ${days === 1 ? "day" : "days"} of food`}`); }
+  for (const [name, o] of others) parts.push(`${o.up ? `${o.up === 1 ? `a ${name}` : `${o.up} ${name}s`}` : ""}${o.up && o.going ? ", " : ""}${o.going ? `${o.going === 1 ? `a ${name}` : `${o.going} ${name}s`} going up` : ""}`);
   if (ruins) parts.push(`${ruins} fallen-in ${ruins === 1 ? "hut" : "huts"}`);
   return parts.join("; ");
 }

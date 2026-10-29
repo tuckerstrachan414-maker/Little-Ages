@@ -1,11 +1,14 @@
 import { Biome, Flag, DAY_SECONDS } from "../../shared/types.ts";
 import { Bubble, type HutLook, type HutStyle } from "../../shared/people.ts";
+import type { WallKind, RoofKind } from "../buildings/defs.ts";
 import { FISH_UNITS } from "../ecology.ts";
 import { Mem, type Person } from "./person.ts";
 import { homeOf, type Band, type Foods } from "./band.ts";
 import { practice, learn, ready } from "./ideas.ts";
 import { Idea } from "../tech/tree.ts";
 import { hutDay, pitDay } from "./homes.ts";
+import { buildingDay, defOf } from "../buildings/build.ts";
+import { techIx } from "../tech/tree.ts";
 import type { Society } from "./society.ts";
 
 /*
@@ -47,6 +50,12 @@ export interface Work {
   foods?: Foods; opened?: number;
   /** a field kept from year to year: how many times it has been sown, how good the soil still is, how tame the seed line sown in it, whether it lies resting between harvests, and when its household last lived by it */
   sown?: number; fert?: number; tame?: number; fallow?: boolean; kept?: number;
+  /** a building beyond the first huts and pits: its tier and def, what it is built of, whose it is (0 a household's, 1 the band's, 2 the settlement's) */
+  tier?: number; def?: string; walls?: WallKind; roof?: RoofKind; owner?: number;
+  /** materials still to be carried to the site, by Mat, and the spells of work it takes */
+  needs?: Float32Array; labor?: number;
+  /** a rebuild in place going on: the def it becomes, what that still needs, how far along, the spells it takes */
+  up?: { def: string; needs: Float32Array; prog: number; labor: number };
 }
 
 /** Something new made: the one way a work comes into the world, so the index and the renderer hear of it. */
@@ -253,6 +262,8 @@ export function worksDay(s: Society): void {
   const keep: Work[] = [];
   for (const w of s.works) {
     const T = s.tempC(w.x, w.y);
+    /* wells, kilns, pens and the rest wear by their own kind; houses and stores keep their old ways */
+    if (w.kind >= 4) { if (buildingDay(s, w)) keep.push(w); else s.worksVersion++; continue; }
     if (w.kind === Work.Hut) { if (hutDay(s, w)) keep.push(w); else s.worksVersion++; continue; }
     if (w.kind === Work.Pit) {
       const b = s.bandById.get(w.band), kept = !!b && !b.moving && Math.hypot(b.x - w.x, b.y - w.y) < 14;
@@ -311,11 +322,12 @@ export function lookAtWorks(s: Society, p: Person): void {
   const age = s.age(p); if (age < 12) return;
   for (const w of worksAround(s, p.x, p.y, 8.5)) {
     if (Math.abs(w.x - p.x) > 6 || Math.abs(w.y - p.y) > 6) continue;
-    const id = WORK_IDEA[w.kind];
+    /* a building beyond the first huts and pits teaches the know-how it was built with */
+    const id = w.kind >= 4 || (w.tier ?? 0) > 0 ? techIx(defOf(w).tech[0]) : WORK_IDEA[w.kind];
     if (p.know[id] > 0) continue;
     if (!ready(p, id)) continue;
     /* a hut teaches once there is a frame to see, even fallen in; a weir or plot while it still stands */
-    if (w.kind === Work.Hut ? (w.prog ?? 1) < 0.4 || w.state < -0.6 : w.kind === Work.Weir ? w.state < 0.2 : w.kind === Work.Plot ? w.state < 0.3 : false) continue;
+    if (w.kind === Work.Hut || w.kind >= 4 ? (w.prog ?? 1) < 0.4 || w.state < -0.6 : w.kind === Work.Weir ? w.state < 0.2 : w.kind === Work.Plot ? w.state < 0.3 : false) continue;
     if (s.rng.chance(0.004 * (0.3 + p.traits[4]))) {
       learn(s, p, id, null, "seen");
       s.remember(p, Mem.Found, 0, 0.2, id);

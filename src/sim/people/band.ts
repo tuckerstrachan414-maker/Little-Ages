@@ -60,6 +60,10 @@ export interface Band {
   outAt: number;
   /** food put by in the band's storage pits at this camp (counted again each day and whenever a pit is filled or emptied) */
   pit: number;
+  /** the band's pile of materials at camp, by Mat: clay, flint, stone and the rest, carried in and not yet used */
+  goods: Float32Array;
+  /** when pots last broke at the fire (0 if never) */
+  broke: number;
   /** the band's own seed for each crop it sows: how tame the line has grown, from 0 (wild) up */
   seed: Record<string, number>;
   /** what the band is short of, 0..1 by Problem, worked out each morning (see tech/problems.ts) */

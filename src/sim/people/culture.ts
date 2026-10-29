@@ -32,6 +32,8 @@ export interface Culture {
   namesake: number;
   /** whether first cousins may marry */
   cousins: boolean;
+  /** how a people builds once it builds to last: how steep its roofs, how many windows a wall gets, how much it decorates */
+  build: { pitch: number; windows: number; decor: number };
 }
 
 /* buckskin, tan, bleached and smoked hides; dyes from ochre, clay, charcoal, plants and bark */
@@ -58,8 +60,11 @@ export function makeCulture(id: number, seed: number): Culture {
     locality: rng.pick([0.15, 0.5, 0.5, 0.85]),
     namesake: rng.range(0, 0.35),
     cousins: rng.chance(0.45),
+    build: { pitch: 1, windows: 1, decor: 1 },
   };
   c.hut = hutStyleOf(c.shelter);
+  /* drawn after everything above, so the peoples of old seeds keep their looks */
+  c.build = { pitch: rng.range(0.6, 1.4), windows: rng.pick([0, 1, 1, 2]), decor: rng.pick([0, 1, 1, 2]) };
   return c;
 }
 /** The hut style that grows out of a people's shelters. */

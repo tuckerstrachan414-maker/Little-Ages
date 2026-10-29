@@ -3,6 +3,7 @@ import { Anim, PERSON_STRIDE, PFlag, type CampSnap, type Look, type VillageSnap,
 import { personSprite, tinySprite, animFrame, drawBubble, type View } from "./sprites/people.ts";
 import { fireSprite, shelterSprite, storeSprite, woodpileSprite, shelterVariant, rackSprite, weirSprite, plotSprite } from "./sprites/camp.ts";
 import { hutSprite, pitSprite, hutStage } from "./sprites/huts.ts";
+import { buildingSprite, buildingStage } from "./sprites/buildings.ts";
 import { isSnowy } from "../shared/seasonfx.ts";
 import type { Season, WorldData } from "../shared/types.ts";
 import type { DepthItem } from "./depth.ts";
@@ -66,13 +67,26 @@ export class PeopleLayer {
     /* plots and pits lie flat on the ground, and weirs stand in water, where nothing walks; huts stand up among the people */
     if (z >= 4) for (const w of this.works) {
       if (w.wx < v.x0 - 6 || w.wx > v.x1 + 6 || w.wy < v.y0 - 4 || w.wy > v.y1 + 6) continue;
+      const tier = w.tier ?? 0;
       if (w.kind === 1) this.stamp(ctx, cam, plotSprite(w.state, w.food, w.crop, w.fallow, w.tame ?? 0), w.x, w.y + 0.7, z / 8, 1);
-      else if (w.kind === 3) this.stamp(ctx, cam, pitSprite(!!w.open, w.food >= 3), w.x, w.y + 0.5, z / 8, 1);
-      else if (w.kind === 2) {
+      else if (w.kind === 3 && tier === 0 && w.up === undefined) this.stamp(ctx, cam, pitSprite(!!w.open, w.food >= 3), w.x, w.y + 0.5, z / 8, 1);
+      else if (w.kind === 2 && tier === 0 && w.up === undefined) {
         const i = (w.y | 0) * this.world.w + (w.x | 0), snow = isSnowy(this.world.temp[i] / 255, this.world.biome[i], season, 0.5);
         const { stage, wear } = hutStage(w.prog ?? 1, w.state);
         const spr = hutSprite({ style: w.style ?? "round", look: w.look ?? "plain", stage, wear, snow, size: w.size ?? 1, v: shelterVariant(w.x, w.y), hide: w.hide ?? "#a47b52", trim: w.trim ?? "#b4553e" });
         out.push({ x: w.x, y: w.y - 0.3, f: () => this.stamp(ctx, cam, spr, w.x, w.y, z / 8, 1) });
+      }
+      else if (w.kind >= 2) {
+        /* every building beyond the first huts and pits, and a hut or pit being rebuilt: made of parts */
+        const i = (w.y | 0) * this.world.w + (w.x | 0), snow = isSnowy(this.world.temp[i] / 255, this.world.biome[i], season, 0.5);
+        const { stage, wear } = buildingStage(w.prog ?? 1, w.state);
+        const spr = buildingSprite({ line: w.kind, tier, style: w.style ?? "round", look: w.look ?? "plain", walls: w.walls ?? "poles", roof: w.roof ?? "thatch", stage, wear, snow, size: w.size ?? 1, v: shelterVariant(w.x, w.y), hide: w.hide ?? "#a47b52", trim: w.trim ?? "#b4553e", pitch: w.pitch ?? 1, windows: w.windows ?? 1, decor: w.decor ?? 1, up: w.up });
+        /* a hut being rebuilt is still the old hut underneath */
+        if (w.up !== undefined && tier === 0 && (w.kind === 2 || w.kind === 3)) {
+          const old = w.kind === 2 ? hutSprite({ style: w.style ?? "round", look: w.look ?? "plain", stage: 2, wear: hutStage(1, w.state).wear, snow, size: w.size ?? 1, v: shelterVariant(w.x, w.y), hide: w.hide ?? "#a47b52", trim: w.trim ?? "#b4553e" }) : pitSprite(!!w.open, w.food >= 3);
+          out.push({ x: w.x, y: w.y - 0.3, f: () => { this.stamp(ctx, cam, old, w.x, w.y + (w.kind === 3 ? 0.5 : 0), z / 8, 1); ctx.globalAlpha = 0.55; this.stamp(ctx, cam, spr, w.x, w.y, z / 8, 1); ctx.globalAlpha = 1; } });
+        } else if (w.kind === 6) this.stamp(ctx, cam, spr, w.x, w.y + 0.6, z / 8, 1);   /* pens lie flat, the animals walk in them */
+        else out.push({ x: w.x, y: w.y - 0.3, f: () => this.stamp(ctx, cam, spr, w.x, w.y, z / 8, 1) });
       }
       else if (w.state > 0) this.stamp(ctx, cam, weirSprite(w.state, w.food >= 2), w.wx, w.wy + 0.6, z / 8, 1);
     }

@@ -1,6 +1,7 @@
 import type { Genome, Looks } from "./genetics.ts";
 import type { Bubble, HairStyle, Stage } from "../../shared/people.ts";
 import { DAY_SECONDS, DAYS_PER_YEAR } from "../../shared/types.ts";
+import { Mat } from "../economy/goods.ts";
 
 /*
   One person. Everything they are is here: their genes and the body those genes built,
@@ -21,6 +22,7 @@ export const Goal = {
   Ask: 27, Fight: 28, Mediate: 29, Call: 30,
   Kindle: 31, Ember: 32, Show: 33, Learn: 34, Dry: 35, Build: 36, Sow: 37,
   Hut: 38, Pit: 39, Store: 40, Fetch: 41,
+  Quarry: 42, Construct: 43,
 } as const;
 export type Goal = (typeof Goal)[keyof typeof Goal];
 
@@ -30,6 +32,7 @@ export const St = {
   Ask: 22, Fight: 23,
   Kindle: 24, Ember: 25, Dry: 26, Build: 27, Sow: 28,
   Raise: 29, Pit: 30, Store: 31, Fetch: 32,
+  Quarry: 33,
 } as const;
 export type St = (typeof St)[keyof typeof St];
 
@@ -51,7 +54,8 @@ export interface Step {
 }
 export const step = (k: St, x = 0, y = 0, id = 0, dur = 0, extra: Partial<Step> = {}): Step => ({ k, x, y, id, dur, t: 0, ...extra });
 
-export const Food = { None: 0, Plant: 1, Meat: 2, Fish: 3, Wood: 4 } as const;
+/** What a person carries: the foods, firewood, and every material the land gives up (one id space, see economy/goods.ts). */
+export const Food = Mat;
 
 export const Place = { Water: 0, Plants: 1, Fish: 2, Game: 3, Rabbits: 4, Site: 5, Carcass: 6, Camp: 7, Danger: 8, Home: 9, Deposit: 10 } as const;
 export const PLACE_NAMES = ["water", "plant food", "fish", "game", "small game", "a camp site", "a carcass", "a camp", "danger", "home", "a deposit"];

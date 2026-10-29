@@ -1,7 +1,7 @@
 import { Species, Flag, DAY_SECONDS } from "../../shared/types.ts";
 import { Anim, Bubble } from "../../shared/people.ts";
 import { Food, Goal, Mem, Place, St, Skill, YEAR, step, type Person, type Step } from "./person.ts";
-import { MEAT, type Society } from "./society.ts";
+import { MEAT, compass, type Society } from "./society.ts";
 import { HUNT_P, DANGER, SPECIES_SHORT, attraction, she, unhappy } from "./mind.ts";
 import { deposit, answer, eat, hearthOf, pass } from "./sharing.ts";
 import { endFight, talkRound, grievance } from "./feuds.ts";
@@ -12,6 +12,8 @@ import { knows, practice, inspire, inUse, learn, ready, shown, tellIdea, riverAt
 import { TECHS as IDEAS, Idea } from "../tech/tree.ts";
 import { Work, emptyWeir, buildWeir, sow, resow, seedLine, cropAt, workById, worksAround } from "./works.ts";
 import { raise, digPit, storeInPit, fetchFromPit, pitOf } from "./homes.ts";
+import { buildSpell, RAISE } from "../buildings/build.ts";
+import { Mat, MATS, isFood } from "../economy/goods.ts";
 
 /*
   Doing things. Each plan is a list of steps (walk there, gather, walk back, put it in the
@@ -77,6 +79,7 @@ export function doStep(s: Society, p: Person, dt: number): void {
     case St.Build: work(s, p, st, dt, Anim.Chop); break;
     case St.Sow: work(s, p, st, dt, Anim.Dig); break;
     case St.Raise: work(s, p, st, dt, Anim.Build); break;
+    case St.Quarry: work(s, p, st, dt, Anim.Dig); break;
     case St.Pit: work(s, p, st, dt, Anim.Dig); break;
     case St.Store: work(s, p, st, dt, Anim.Gather); break;
     case St.Fetch: work(s, p, st, dt, Anim.Dig); break;
@@ -260,7 +263,7 @@ function work(s: Society, p: Person, st: Step, dt: number, anim: number): void {
     }
     case St.Eat: {
       const greedy = p.traits[2] > 0.65 ? 1.2 : 1;
-      if (st.a === 1 && p.carryAmt > 0 && p.carryKind < Food.Wood) { const e = Math.min(p.carryAmt, Math.max(0.3, 1.6 - p.food)); p.carryAmt -= e; p.food = Math.min(2.5, p.food + e); if (p.carryAmt <= 0.01) { p.carryAmt = 0; p.carryKind = 0; } }
+      if (st.a === 1 && p.carryAmt > 0 && isFood(p.carryKind)) { const e = Math.min(p.carryAmt, Math.max(0.3, 1.6 - p.food)); p.carryAmt -= e; p.food = Math.min(2.5, p.food + e); if (p.carryAmt <= 0.01) { p.carryAmt = 0; p.carryKind = 0; } }
       else {
         /* with the fire dead, meat and fish are eaten raw, and raw they go less far */
         const raw = b.fire <= 0 && s.atCamp(p, 8);
@@ -324,7 +327,13 @@ function work(s: Society, p: Person, st: Step, dt: number, anim: number): void {
       buildWeir(s, p, { x: st.x, y: st.y, wx: st.a ?? st.x, wy: st.o ?? st.y }, mend);
       break;
     }
-    case St.Raise: raise(s, p, st); break;
+    case St.Raise: {
+      /* a hut of poles goes up the old way; anything else, and a rebuild in place, by the building's def */
+      const w = st.id ? workById(s, st.id) : undefined;
+      if ((st.a ?? 0) >= RAISE.Household || (w && (w.kind >= 4 || w.up))) buildSpell(s, p, st); else raise(s, p, st);
+      break;
+    }
+    case St.Quarry: quarry(s, p, st); break;
     case St.Pit: digPit(s, p, st); break;
     case St.Store: storeInPit(s, p, st); break;
     case St.Fetch: fetchFromPit(s, p, st); break;
@@ -376,6 +385,21 @@ function load(p: Person, kind: number, amt: number): void {
   p.carryAmt += amt;
 }
 
+/** At a deposit the people knows: a load of clay, flint or stone dug out and shouldered. The bank gives out in the end. */
+function quarry(s: Society, p: Person, st: Step): void {
+  const dep = s.resources.byId(st.id), mat = st.a ?? 0;
+  if (!dep || !mat || dep.kind !== mat) return;
+  if (dep.left <= 0) { s.learnPlace(p, Place.Deposit, dep.x, dep.y, 0, dep.id, 0, s.time, dep.kind); return; }
+  const got = s.resources.take(dep, Math.max(0, MATS[mat].load - (p.carryKind === mat ? p.carryAmt : 0)));
+  load(p, mat, got); s.stats.buildings.quarried += got;
+  s.learnPlace(p, Place.Deposit, dep.x, dep.y, dep.left / Math.max(1, dep.amount), dep.id, 0, s.time, dep.kind);
+  if (knows(p, Idea.Digging)) practice(p, Idea.Digging, 0.004);
+  if (dep.left <= 0) {
+    const b = s.band(p);
+    s.event("exhausted", Bubble.Question, `The ${MATS[mat].name} ${Math.hypot(dep.x - b.x, dep.y - b.y) < 6 ? "by" : `${compass(dep.x - b.x, dep.y - b.y)} of`} ${b.siteName} is dug out: ${p.name} of the ${b.name} came for more and found nothing left but gravel. The ${b.name} will have to look further.`, dep.x, dep.y, [p.id], b.id, mat);
+  }
+}
+
 /** Back at camp: everything carried goes into the band's store, and the band hears where the rest of a kill lies. */
 function drop(s: Society, p: Person): void {
   const b = s.band(p);
@@ -383,6 +407,7 @@ function drop(s: Society, p: Person): void {
   if (p.carryAmt <= 0 || !p.carryKind) { p.carryAmt = 0; p.carryKind = 0; return; }
   const amt = p.carryAmt, kind = p.carryKind;
   if (kind === Food.Wood) b.store.wood += amt;
+  else if (!isFood(kind)) { if (kind === Mat.Hides) b.store.hides += amt; else b.goods[kind] += amt; }
   else {
     if (kind === Food.Plant) b.today.plant += amt; else { if (kind === Food.Fish) b.today.fish += amt; else b.today.meat += amt; b.meatAt = s.time; }
     /* some into the band's pot, the rest to the household's own hearth */

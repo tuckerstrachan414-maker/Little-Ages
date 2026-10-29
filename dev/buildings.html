@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Little Ages: buildings</title>
+<style>body{margin:0;background:#7c9a4c;font:12px system-ui} canvas{image-rendering:pixelated;display:block}</style></head>
+<body><canvas id="c"></canvas>
+<script type="module">
+/* Every building of checkpoint 3A made of parts: houses of each people in each wall and roof, from frame to ruin and under snow; granaries, wells, kilns, pens; and the later ages' halls, shrines, posts, walls, monuments, docks, roads and bridges. */
+import { buildingSprite } from "/src/render/sprites/buildings.ts";
+const K = 4, c = document.getElementById("c"), x = c.getContext("2d");
+c.width = 1700; c.height = 3000; x.imageSmoothingEnabled = false;
+x.fillStyle = "#7c9a4c"; x.fillRect(0, 0, c.width, c.height);
+const draw = (cv, px, py) => x.drawImage(cv, px, py - cv.height * K, cv.width * K, cv.height * K);
+x.fillStyle = "#14110c"; x.font = "14px system-ui";
+const base = { line: 2, tier: 1, style: "round", look: "plain", walls: "mudbrick", roof: "thatch", stage: 2, wear: 0, snow: false, size: 1, v: 1, hide: "#a47b52", trim: "#b4553e", pitch: 1, windows: 1, decor: 1 };
+const cols = [["frame", { stage: 0 }], ["half", { stage: 1 }], ["done", {}], ["worn", { wear: 1 }], ["ruin", { wear: 2 }], ["snow", { snow: true }], ["rebuilding", { up: 0.6 }]];
+cols.forEach(([n], i) => x.fillText(n, 170 + i * 200, 20));
+let row = 0;
+const rowOf = (label, o) => { const y = 150 + row * 150; x.fillText(label, 10, y - 40); cols.forEach(([, d], i) => draw(buildingSprite({ ...base, ...o, ...d, v: row }), 170 + i * 200, y)); row++; };
+for (const style of ["round", "long", "cone"]) for (const [walls, roof] of [["mudbrick", "thatch"], ["daub", "thatch"], ["timber", "plank"], ["stone", "turf"]]) rowOf(`${style}, ${walls} / ${roof}`, { style, walls, roof, look: roof === "turf" ? "cold" : "plain" });
+rowOf("longhouse, 3 bays, timber / bark", { style: "long", walls: "timber", roof: "bark", size: 3 });
+rowOf("granary", { line: 3, tier: 1, walls: "timber", roof: "thatch" });
+rowOf("well", { line: 4, tier: 0, walls: "stone", roof: "none" });
+rowOf("kiln", { line: 5, tier: 1, walls: "daub", roof: "none" });
+rowOf("brush fold", { line: 6, tier: 0, walls: "brush", roof: "none" });
+rowOf("fenced pen", { line: 6, tier: 1, walls: "fence", roof: "none" });
+rowOf("hall", { line: 7, tier: 0, walls: "timber", roof: "thatch", size: 2 });
+rowOf("shrine", { line: 8, tier: 0, walls: "poles", roof: "thatch" });
+rowOf("palisade / stone wall", { line: 9, tier: 0, walls: "timber", roof: "none" });
+rowOf("watch post", { line: 10, tier: 0, walls: "poles", roof: "thatch" });
+rowOf("standing stone", { line: 13, tier: 0, walls: "stone", roof: "none" });
+rowOf("dock", { line: 12, tier: 0, walls: "timber", roof: "none" });
+rowOf("road", { line: 14, tier: 0, walls: "stone", roof: "none" });
+rowOf("log bridge", { line: 15, tier: 0, walls: "timber", roof: "none" });
+const y0 = 150 + row * 150;
+x.fillText("a kiln lit; the peoples' ways: steep and shallow roofs, no windows and many, plain and decorated", 10, y0 - 40);
+draw(buildingSprite({ ...base, line: 5, walls: "daub", roof: "none", firing: true }), 170, y0);
+[[0.6, 0, 0], [1, 1, 1], [1.4, 2, 2], [0.8, 2, 0]].forEach(([pitch, windows, decor], i) => draw(buildingSprite({ ...base, style: "cone", walls: "timber", roof: "plank", pitch, windows, decor, trim: ["#d1a646", "#6f8a44", "#4f6a8a", "#3f3733"][i] }), 300 + i * 160, y0));
+window.done = true;
+</script></body></html>
