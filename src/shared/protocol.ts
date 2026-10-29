@@ -73,6 +73,8 @@ export interface PersonDetail {
   looks: string; look: Look;
   /** what they have been eating ("eats mostly meat and fish; little plant food") */
   diet: string;
+  /** the animals the household keeps, in words ("keeps 6 goats and 3 kids"), or nothing */
+  keeps: string;
   mother: Kin | null; father: Kin | null; partner: Kin | null;
   children: Kin[]; siblings: Kin[]; friends: Kin[]; rivals: Kin[];
   memories: { text: string; ago: number; v: number }[];
@@ -111,6 +113,8 @@ export interface VillageDetail {
   call: string;
   pop: number; peak: number; huts: number; building: number; ruins: number; pits: number; pitDays: number;
   fields: { crop: string; n: number; tame: number }[]; weirs: number;
+  /** the animals kept in the village, in words, or nothing */
+  herds: string;
   /** empty since (0 if lived in) and given up (0 if not) */
   empty: number; abandoned: number;
   events: ChronicleEvent[];
@@ -139,6 +143,8 @@ export interface BandDetail {
   works: { kind: "weir" | "plot"; text: string; x: number; y: number }[];
   /** huts, pits and fields at this camp, in a line ("7 huts (2 going up), 5 storage pits holding 140 days of food"), and how long they have stayed and what holds them */
   homes: string; stay: string;
+  /** the animals the band's households keep, in words, or nothing */
+  herds: string;
   /** what the band is short of, in a few words ("little to eat, cold nights") */
   needs: string;
   /** the village the band lives in ("" if none) */

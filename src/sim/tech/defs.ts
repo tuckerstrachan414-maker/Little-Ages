@@ -23,6 +23,8 @@ export interface Ctx {
   grain?: boolean; pots?: boolean; sick?: boolean;
   /** herding: young animals nursing, animals kept a long while, wolves about, an animal lost; hunting: a throw that missed; water far off; a slow harvest */
   young?: boolean; kept?: boolean; wolves?: boolean; lost?: boolean; missed?: boolean; farWater?: boolean; slow?: boolean;
+  /** herding: which beasts are in hand (goats and sheep, cattle, pigs), and wolf pups being raised at the hearth */
+  goats?: boolean; cattle?: boolean; pigs?: boolean; pups?: boolean;
 }
 
 /** A node as it is written in the branch files. */
@@ -42,6 +44,8 @@ export interface TechSrc {
   any?: string[];
   /** the kinds of work during which it can come to mind, each with a rank for the order they are weighed in */
   during?: { step: number; rank?: number }[];
+  /** of these flags of the moment, at least one must be set for it to come to mind (keeping cattle comes to someone with a calf, not a piglet) */
+  ctx?: (keyof Ctx)[];
   /** the wants it answers, weighted: how badly it is needed is the band's problems weighed by these (see tech/problems.ts) */
   problems?: Partial<Record<string, number>>;
   /** the story of its finding, a template with slots: {name} {band} {she} {her} {problem} {context} {season} {where} {how} */
@@ -76,6 +80,7 @@ export interface TechDef {
   needs: number[]; needKeys: string[];
   any: number[]; anyKeys: string[];
   during: { step: number; rank: number }[];
+  ctx?: (keyof Ctx)[];
   problems?: Partial<Record<string, number>>;
   story?: string;
   near?: string[];

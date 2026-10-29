@@ -9,6 +9,8 @@ import { hutOf, hutStands, stayHope, clearAt } from "../people/homes.ts";
 import { Mat, MATS } from "../economy/goods.ts";
 import type { Society } from "../people/society.ts";
 import { techIx } from "../tech/tree.ts";
+import { flocksOf, capacityOf, flockWords } from "../people/herding.ts";
+import { Species } from "../../shared/types.ts";
 export const WELLS = () => techIx("wells");
 
 /*
@@ -40,10 +42,10 @@ export function materialsInReach(s: Society, b: Band, def: BuildingDef, needs?: 
 /** The one material a site still wants most, if any. */
 export function nextMaterial(needs: Float32Array | undefined): number { let best = -1, bv = 0; if (needs) for (let m = 0; m < needs.length; m++) if (needs[m] > bv) { bv = needs[m]; best = m; } return best; }
 
-/** Somewhere near the camp's fire for a building the band or village shares: a few tiles out, on clear dry ground. */
+/** Somewhere near the camp's fire for a building the band or village shares: a few tiles out, on clear dry ground; a big camp, ringed with huts, looks a little further out. */
 export function communalSite(s: Society, b: Band, def: BuildingDef, seed: number): [number, number] | null {
-  for (let k = 0; k < 14; k++) {
-    const a = (seed * 0.73 + k * 0.9) % (Math.PI * 2), r = 3.5 + (k % 4) * 0.9, x = Math.floor(b.x + Math.cos(a) * r) + 0.5, y = Math.floor(b.y + Math.sin(a) * r * 0.85) + 0.5;
+  for (let k = 0; k < 28; k++) {
+    const a = (seed * 0.73 + k * 0.9) % (Math.PI * 2), r = 3.5 + (k % 6) * 0.9, x = Math.floor(b.x + Math.cos(a) * r) + 0.5, y = Math.floor(b.y + Math.sin(a) * r * 0.85) + 0.5;
     if (clearAt(s, b, x, y, def.reach, 0) && s.walker.reach(b.x, b.y, x, y)) return [x, y];
   }
   return null;
@@ -105,7 +107,20 @@ export function wants(s: Society, p: Person, b: Band): Want[] {
       if (at) out.push({ def, x: at[0], y: at[1], v: 0.4, owner: "household", home, why: `${p.name} is building a kiln beside the hut, because too many pots crack on the open fire.` });
     }
   }
-  /* herds: animals kept and no fold for them (a later checkpoint keeps the flocks) */
+  /* herds: animals kept and no fold for them, or a fold grown too small */
+  const flocks = flocksOf(s, b, home).filter(f => f.sp !== Species.Dog && f.n + f.young >= 4);
+  if (flocks.length) {
+    const pen = buildingOf(s, b, Line.Pen, home), lost = flocks.some(f => f.lostAt > 0 && s.time - f.lostAt < DAY_SECONDS * 20), biggest = flocks.slice().sort((a, c) => c.n + c.young - a.n - a.young)[0];
+    if (!pen || !(standing(pen) || (pen.prog ?? 1) < 1)) {
+      const def = defById("pen0");
+      if (canStart(p, def) && materialsInReach(s, b, def)) {
+        const at = householdSite(s, b, def, home);
+        if (at) out.push({ def, x: at[0], y: at[1], v: 0.3 + pr[Problem.HerdLoss] * 0.4 + (lost ? 0.2 : 0), owner: "household", home, why: `${p.name} is weaving a fold of brush beside the hut for the family's ${flockWords(biggest)}, ${lost ? "after the ones that were lost in the night" : "so they stay in at night where the wolves cannot get at them"}.` });
+      }
+    } else if (standing(pen) && (pen.tier ?? 0) === 0 && !pen.up && flocks.reduce((n, f) => n + f.n + f.young, 0) > capacityOf(s, biggest) * 0.8) {
+      for (const def of upgradesFor(s, p, b, pen)) out.push({ def, x: pen.x, y: pen.y, up: pen, v: 0.3 + pr[Problem.HerdLoss] * 0.3, owner: "household", home, why: `${p.name} is rebuilding the family's fold as a ${def.name}, because the animals have grown too many for the brush fold.` });
+    }
+  }
   void Place;
   return out.sort((a, c) => c.v - a.v);
 }

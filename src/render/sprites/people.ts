@@ -447,6 +447,7 @@ const ICONS: Record<number, { c: Record<string, string>; px: string[] }> = {
   22: { c: { a: "#6f9a44", b: "#4e7a34", d: "#8a6a3a" }, px: ["..a.a", ".aba.", "a.b..", "..d.."] },   /* peace: a green sprig */
   23: { c: { a: "#a47b52", b: "#6e5442", d: "#d9a277" }, px: ["....d", "...d.", "abbba", ".aaa."] },   /* asking: an empty bowl held out */
   24: { c: { a: "#b5603a", b: "#7a3a22", d: "#d08a5a" }, px: ["a...a", ".dba.", ".aba.", "..b.."] },   /* a pot */
+  25: { c: { a: "#a89272", b: "#5a4a3a" }, px: ["b...b", ".b.b.", ".aaa.", "a.a.a"] },                /* a goat's head: horns and a beard */
 };
 /** A speech bubble with a little picture, its tail pointing down at (x, y). Drawn at screen scale `k` (1 at true size). */
 export function drawBubble(ctx: CanvasRenderingContext2D, x: number, y: number, icon: number, k: number): void {

@@ -54,6 +54,6 @@ export const DAY_SECONDS = 60;          /* real seconds per day at 1x */
 export const DAYS_PER_SEASON = 10;
 export const DAYS_PER_YEAR = DAYS_PER_SEASON * 4;
 
-export const Species = { Deer: 0, Aurochs: 1, Mammoth: 2, Horse: 3, Wolf: 4, Bear: 5 } as const;
+export const Species = { Deer: 0, Aurochs: 1, Mammoth: 2, Horse: 3, Wolf: 4, Bear: 5, Goat: 6, Sheep: 7, Boar: 8, Dog: 9 } as const;
 export type Species = (typeof Species)[keyof typeof Species];
-export const SPECIES_NAMES = ["Red deer", "Aurochs", "Woolly mammoth", "Wild horses", "Wolves", "Brown bear"];
+export const SPECIES_NAMES = ["Red deer", "Aurochs", "Woolly mammoth", "Wild horses", "Wolves", "Brown bear", "Wild goats", "Wild sheep", "Wild boar", "Dogs"];

@@ -24,6 +24,7 @@ import { villagesDay, noteSite, friendly, roomFor, tiesTo, VILLAGE_R, type Villa
 import { Resources, type Deposit } from "../resources.ts";
 import { Weather } from "../weather.ts";
 import { settlementsDay, isChief } from "./settlements.ts";
+import { flocksDay, flocksArrive, carryFlocks, releaseFlocks, hasDogs, flockQuads, type Flock } from "./herding.ts";
 import { buildingsNear, standing } from "../buildings/build.ts";
 import { WELLS } from "../buildings/wants.ts";
 import { Mat, MATS, MAT_COUNT, isFood } from "../economy/goods.ts";
@@ -40,7 +41,7 @@ import { Line } from "../buildings/defs.ts";
 */
 
 export interface StartOptions { start: "bands" | "cradle"; bands: number; }
-export interface Carcass { id: number; x: number; y: number; sp: number; meat: number; hides: number; t: number; by: number; mocked?: boolean; }
+export interface Carcass { id: number; x: number; y: number; sp: number; meat: number; hides: number; t: number; by: number; mocked?: boolean; /** young of the animal, left standing by the kill, that someone might take home */ young?: number; }
 
 /** How a find is told, by material. */
 const FOUND_WORDS: Partial<Record<number, string>> = {
@@ -51,7 +52,7 @@ const FOUND_WORDS: Partial<Record<number, string>> = {
 const PLACE_TYPICAL = [1, 4, 4, 10, 2, 8, 6, 1, 3, 1, 2];
 export const FOOD_DAY: Record<Stage, number> = { baby: 0, toddler: 0.45, child: 0.65, teen: 0.95, adult: 1, elder: 0.8 };
 /** Meat on one animal, in days of food for one person. */
-export const MEAT = [25, 100, 400, 60, 0, 60];
+export const MEAT = [25, 100, 400, 60, 0, 60, 14, 16, 30, 0];
 const BAND_COLORS = ["#c0563f", "#4f74a8", "#c99a32", "#7d5a96", "#4e8a5c", "#b5683a", "#3f8a8c", "#a8456a", "#6e7d3a", "#8a5a3a", "#5a6ab0", "#b0804a", "#507a8c", "#9a4a8a", "#6a9a4a", "#c07a5a"];
 
 export class Society {
@@ -71,7 +72,7 @@ export class Society {
   seen = new Map<string, number>();
   /** looks that changed since the renderer last asked */
   dirty = new Set<number>();
-  stats = { births: 0, deaths: 0, causes: new Map<string, number>(), couples: 0, partings: 0, moves: 0, splits: 0, merges: 0, kills: new Array(6).fill(0) as number[], food: { plant: 0, meat: 0, fish: 0, small: 0, weir: 0, crop: 0, dried: 0 }, contacts: 0, attacks: 0, learned: 0, maxPop: 0,
+  stats = { births: 0, deaths: 0, causes: new Map<string, number>(), couples: 0, partings: 0, moves: 0, splits: 0, merges: 0, kills: new Array(SPECIES_NAMES.length).fill(0) as number[], food: { plant: 0, meat: 0, fish: 0, small: 0, weir: 0, crop: 0, dried: 0 }, contacts: 0, attacks: 0, learned: 0, maxPop: 0,
     /* sharing, feuds and leaders: food put in the pot and kept, asks and their answers, feuds begun and ended */
     social: { eaten: 0, shared: 0, kept: 0, rounds: 0, family: 0, asks: 0, given: 0, refused: 0, repaid: 0, feuds: 0, peace: 0, cooled: 0, fights: 0, inherited: 0, driven: 0, leaders: 0, contests: 0, mocked: 0, gifts: 0, leftFor: 0, factionSplits: 0 },
     /* ideas worked out, lost by a band, and passed on by each way; fires gone out, relit by a fire-maker, and fetched from another band */
@@ -83,10 +84,15 @@ export class Society {
     homes: { pits: 0, huts: 0, stored: 0, fetched: 0, eaten: 0, firstHut: 0, firstPit: 0 },
     buildings: { started: 0, built: 0, upgrades: 0, delivered: 0, quarried: 0, firstOf: {} as Record<number, number> },
     health: { tended: 0 }, pots: { made: 0, broke: 0, kiln: 0 },
+    /* animals kept: young carried home and pups taken in, born in keeping, lost to wolves, escaped, dogs that strayed, milk drunk, animals killed for meat; when the first was kept and when the first came when called */
+    herds: { kept: 0, pups: 0, born: 0, lost: 0, escaped: 0, strayed: 0, died: 0, milk: 0, slaughtered: 0, spells: 0, firstFlock: 0, firstTame: 0 },
     /* gatherings told of, villages founded, and when the first one was */
     places: { gatherings: 0, villages: 0, firstVillage: 0, abandoned: 0, returns: 0 },
     /* each chance someone had to see a new way at work: how many, and the odds before the idea's rarity (expected finds = spark x odds) */
     inspire: { tries: new Array(IDEA_COUNT).fill(0) as number[], odds: new Array(IDEA_COUNT).fill(0) as number[] } };
+  /** the animals households keep (see herding.ts), and the kinds each people has tamed (culture * 16 + species) */
+  flocks: Flock[] = [];
+  tamed = new Set<number>();
   /** feuds still burning, between two people and the families behind them */
   feuds: Feud[] = [];
   nextFeud = 1;
@@ -288,7 +294,7 @@ export class Society {
     const id = this.bands.length ? Math.max(...this.bands.map(b => b.id)) + 1 : 1;
     const name = placeName(this.cultures[culture].lang, this.rng);
     const b: Band = { id, name, culture, color: BAND_COLORS[(id - 1) % BAND_COLORS.length], x, y, fire: 0.8, store: { ...noFood(), wood: 2, hides: 0 }, hearths: new Map(),
-      members: [], founded: this.time, movedAt: this.time, moves: 0, homes: new Map(), busy: new Map(), respected: 0, followers: 0, ledSince: this.time, contender: 0, parent, met: new Set(), appetite: 1, moving: null, siteName: placeName(this.cultures[culture].lang, this.rng), water: [x, y], past: [], today: newDay(), yesterday: newDay(), can: new Int32Array(IDEA_COUNT), keeper: new Int32Array(IDEA_COUNT), outAt: 0, pit: 0, seed: {}, problems: newProblems(), meatAt: this.time, regrownAt: 0, goods: new Float32Array(MAT_COUNT), broke: 0, hgoods: new Map(), dryDays: 0, droughtAt: 0, well: 0 };
+      members: [], founded: this.time, movedAt: this.time, moves: 0, homes: new Map(), busy: new Map(), respected: 0, followers: 0, ledSince: this.time, contender: 0, parent, met: new Set(), appetite: 1, moving: null, siteName: placeName(this.cultures[culture].lang, this.rng), water: [x, y], past: [], today: newDay(), yesterday: newDay(), can: new Int32Array(IDEA_COUNT), keeper: new Int32Array(IDEA_COUNT), outAt: 0, pit: 0, seed: {}, problems: newProblems(), meatAt: this.time, regrownAt: 0, goods: new Float32Array(MAT_COUNT), broke: 0, hgoods: new Map(), dryDays: 0, droughtAt: 0, well: 0, keptAt: 0, herdAt: 0, pupsAt: 0 };
     this.bands.push(b); this.bandById.set(id, b);
     return b;
   }
@@ -423,7 +429,7 @@ export class Society {
   /** Moves a person (and any baby or young children they look after) to another band. */
   moveTo(p: Person, to: Band): void {
     const move = (q: Person) => {
-      const from = this.bandById.get(q.band); if (from) { from.members = from.members.filter(id => id !== q.id); carryHearth(from, to, q.id); }
+      const from = this.bandById.get(q.band); if (from) { from.members = from.members.filter(id => id !== q.id); carryHearth(from, to, q.id); carryFlocks(this, from, to, q.id); }
       q.band = to.id; to.members.push(q.id); abandon(this, q); this.dirty.add(q.id); q.follows = q.id; q.joined = this.time; q.came = from?.id ?? 0;
       for (const id of to.members) { const o = this.byId.get(id); if (o && o !== q) { const r = this.rel(q, id); r.fam = Math.max(r.fam, 0.3); this.rel(o, q.id).fam = Math.max(this.rel(o, q.id).fam, 0.3); } }
       this.learnPlace(q, Place.Camp, to.x, to.y, 1, to.id, 0);
@@ -638,6 +644,7 @@ export class Society {
   }
   herdsNear(x: number, y: number, r: number): Herd[] {
     const out: Herd[] = [];
+    if (this.time - this.herdGridAt > 1) this.rebuildHerdGrid();
     const x0 = Math.floor((x - r) / 16), x1 = Math.floor((x + r) / 16), y0 = Math.floor((y - r) / 16), y1 = Math.floor((y + r) / 16);
     for (let gy = y0; gy <= y1; gy++) for (let gx = x0; gx <= x1; gx++) { const a = this.herdGrid.get(gy * 4096 + gx); if (a) for (const h of a) if (h.n > 0 && Math.hypot(h.x - x, h.y - y) <= r) out.push(h); }
     return out;
@@ -783,7 +790,9 @@ export class Society {
       }
       /* wolves try a lone or weak person only when they are hungry; bears go for anyone who gets too close */
       const weak = young || p.injury > 0.3 || st === "elder";
-      const pAttack = h.sp === Species.Bear ? (d < 2.5 ? 0.012 : 0) : h.hunger > 0.75 && company === 0 && d < 4 ? (weak ? 0.004 : this.sun < 0.2 ? 0.0012 : 0.0004) * h.n : 0;
+      let pAttack = h.sp === Species.Bear ? (d < 2.5 ? 0.012 : 0) : h.hunger > 0.75 && company === 0 && d < 4 ? (weak ? 0.004 : this.sun < 0.2 ? 0.0012 : 0.0004) * h.n : 0;
+      /* dogs about the camp bark the wolves off before they come close */
+      if (pAttack > 0 && !bear) { const b = this.bandById.get(p.band); if (b && Math.hypot(b.x - p.x, b.y - p.y) < 12 && hasDogs(this, b)) pAttack *= 0.3; }
       if (pAttack > 0 && this.rng.chance(pAttack)) this.attacked(p, h);
       else if (p.fear > 0.45 + p.traits[0] * 0.35 && p.goal !== Goal.Flee) { abandon(this, p); decide(this, p, Goal.Flee); }
     }
@@ -937,6 +946,7 @@ export class Society {
     worksDay(this);
     this.landDay();
     for (const b of this.bands) problemsDay(this, b);
+    flocksDay(this);
     for (const b of this.bands.slice()) this.bandDay(b);
     villagesDay(this);
     settlementsDay(this);
@@ -1058,6 +1068,7 @@ export class Society {
   }
   /** `announce` is false when something else (a merge) has already told the story. */
   endBand(b: Band, how: string, announce = true): void {
+    releaseFlocks(this, b);
     this.bands = this.bands.filter(o => o !== b); this.bandById.delete(b.id);
     for (const o of this.bands) o.met.delete(b.id);
     if (announce) this.event("band-end", Bubble.Sad, `The ${b.name} ${how}.`, b.x, b.y, [], b.id);
@@ -1258,6 +1269,7 @@ export class Society {
     if (!b.moving) return;
     const m = b.moving; b.moving = null; b.siteName = m.name;
     this.settleCamp(b, m.x, m.y);
+    flocksArrive(this, b);
     for (const id of b.members) { const q = this.byId.get(id); if (q) { q.moveWish = 0; q.tripYield = 2.4; this.learnSurroundings(q, 28); } }
   }
 
@@ -1337,7 +1349,7 @@ export class Society {
     nb.store.wood = 2; nb.respected = founder.id; nb.ledSince = this.time; nb.fire = b.fire > 0 ? 0.8 : 0;
     const share = goers.size / ms.length;
     for (const k of ["plant", "meat", "fish", "dried", "hides"] as const) { const t = b.store[k] * share; b.store[k] -= t; nb.store[k] += t; }
-    for (const id of goers) { const q = this.byId.get(id)!; b.members = b.members.filter(x => x !== id); carryHearth(b, nb, id); q.band = nb.id; nb.members.push(id); abandon(this, q); this.remember(q, Mem.Split, founder.id, 0.2); this.dirty.add(id); }
+    for (const id of goers) { const q = this.byId.get(id)!; b.members = b.members.filter(x => x !== id); carryHearth(b, nb, id); carryFlocks(this, b, nb, id); q.band = nb.id; nb.members.push(id); abandon(this, q); this.remember(q, Mem.Split, founder.id, 0.2); this.dirty.add(id); }
     nb.x = b.x; nb.y = b.y; nb.seed = { ...b.seed };
     leaveBehind(this, nb, b.store);
     countBand(this, nb);
@@ -1476,7 +1488,7 @@ export class Society {
       const racks: number[] = [];
       for (const [head, h] of b.hearths) if (h.dried >= 1) { const at = b.homes.get(head); if (at) racks.push(at[0] + 1.3, at[1] + 0.1); }
       if (b.store.dried >= 2) racks.push(b.x - 2.2, b.y + 1);
-      return { id: b.id, name: b.name, x: b.x, y: b.y, color: b.color, pop: b.members.length, fire: b.fire, shelters: sh, huts, shelter: this.cultures[b.culture].shelter, food: Math.round(campFood(b)), racks };
+      return { id: b.id, name: b.name, x: b.x, y: b.y, color: b.color, pop: b.members.length, fire: b.fire, shelters: sh, huts, shelter: this.cultures[b.culture].shelter, food: Math.round(campFood(b)), racks, flocks: flockQuads(this, b) };
     });
   }
   worksSnap(): WorkSnap[] {

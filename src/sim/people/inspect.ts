@@ -19,6 +19,7 @@ import { feudsWith, sideOf } from "./feuds.ts";
 import { followersOf, leads } from "./leaders.ts";
 import type { Society } from "./society.ts";
 import { needsLine } from "../tech/problems.ts";
+import { keepsWords, herdsLine, flocksOf, flockWords, speciesWords } from "./herding.ts";
 
 /*
   Turning a mind into words for the pinned tag: what someone is doing and why, how they
@@ -36,7 +37,7 @@ const GOAL_WORDS: Partial<Record<number, string>> = {
   [Goal.Kindle]: "Lighting the fire", [Goal.Ember]: "Fetching fire", [Goal.Show]: "Showing how", [Goal.Learn]: "Learning", [Goal.Dry]: "Drying meat",
   [Goal.Build]: "Building a weir", [Goal.Sow]: "Sowing",
   [Goal.Hut]: "Raising a hut", [Goal.Pit]: "Digging a storage pit", [Goal.Store]: "Putting food by", [Goal.Fetch]: "Fetching food from the pit",
-  [Goal.Quarry]: "Fetching clay and stone", [Goal.Construct]: "Building", [Goal.Pot]: "Making pots",
+  [Goal.Quarry]: "Fetching clay and stone", [Goal.Construct]: "Building", [Goal.Pot]: "Making pots", [Goal.Herd]: "Minding the animals",
 };
 const TRAIT_WORDS: [string, string][] = [
   ["timid", "brave"], ["cold", "kind"], ["generous", "greedy"], ["easygoing", "ambitious"],
@@ -123,7 +124,7 @@ export function personDetail(s: Society, id: number): PersonDetail | null {
     traits: traits.slice(0, 3).map(t => ({ word: t.word, v: t.v, key: t.key })),
     skills: p.skills.map((v, i) => ({ name: SKILL_NAMES[i], v })),
     knows: IDEAS.filter(d => p.know[d.id] > 0).map(d => ({ id: d.id, name: d.name, m: p.know[d.id], how: howKnown(s, p, d.id), start: d.start })),
-    looks: s.describeLooks(p), look: s.look_(p), diet: age < 2 ? "" : dietWords(p),
+    looks: s.describeLooks(p), look: s.look_(p), diet: age < 2 ? "" : dietWords(p), keeps: keepsWords(s, p),
     mother: kin(s, p, p.mother), father: kin(s, p, p.father), partner: kin(s, p, p.partner),
     children: p.children.map(c => kin(s, p, c)!).filter(Boolean), siblings, friends, rivals, memories,
     pregnant: !!p.pregnantBy, carrying, prestige: p.prestige, respected: b.respected === p.id,
@@ -197,6 +198,13 @@ function homesLine(s: Society, b: Band): string {
   if (ruins) parts.push(`${ruins} fallen-in ${ruins === 1 ? "hut" : "huts"}`);
   return parts.join("; ");
 }
+/** The animals kept across a village's bands: "14 goats and 6 kids, 3 dogs". */
+function villageHerds(s: Society, bands: Band[]): string {
+  const bySp = new Map<number, { n: number; young: number }>();
+  for (const b of bands) for (const f of flocksOf(s, b)) { const o = bySp.get(f.sp) ?? { n: 0, young: 0 }; o.n += f.n; o.young += f.young; bySp.set(f.sp, o); }
+  void speciesWords;
+  return [...bySp].filter(([, o]) => o.n + o.young > 0).map(([sp, o]) => flockWords({ sp, n: o.n, young: o.young } as Parameters<typeof flockWords>[0])).join(", ");
+}
 /** How long the band has been at this camp, and what keeps it there. */
 function stayLine(s: Society, b: Band): string {
   if (b.moving) return "";
@@ -229,7 +237,7 @@ export function villageDetail(s: Society, id: number): VillageDetail | null {
     chief: v.chief && s.byId.get(v.chief) ? { id: v.chief, name: s.byId.get(v.chief)!.name, n: count.get(v.chief) ?? 0, since: v.chiefSince } : null,
     tier: v.tier, call: v.call ? (s.works.find(w => w.id === v.call!.work) ? defOf(s.works.find(w => w.id === v.call!.work)!).name : "") : "",
     pop: v.pop, peak: v.peak, huts, building, ruins, pits, pitDays: appetite ? food / appetite : 0,
-    fields: [...fields].map(([crop, f]) => ({ crop, n: f.n, tame: f.tame })), weirs,
+    fields: [...fields].map(([crop, f]) => ({ crop, n: f.n, tame: f.tame })), weirs, herds: villageHerds(s, bands),
     empty: v.empty, abandoned: v.abandoned,
     events: s.events.filter(e => Math.hypot(e.x - v.x, e.y - v.y) < 18 && (e.t >= v.founded - DAY_SECONDS * DAYS_PER_YEAR || e.kind === "hut")).slice(-8).reverse(),
     x: v.x, y: v.y,
@@ -260,7 +268,7 @@ export function bandDetail(s: Society, id: number): BandDetail | null {
       return { id: d.id, name: d.name, start: d.start, n: who.length, who: who.slice(0, 3).map(q => ({ id: q.id, name: q.name })) };
     }),
     works: worksAround(s, b.x, b.y, 18).filter(w => (w.kind === Work.Weir || w.kind === Work.Plot) && (w.band === b.id || !s.bandById.has(w.band))).map(w => ({ kind: w.kind === Work.Weir ? "weir" as const : "plot" as const, text: workText(s, b.id, w), x: w.x, y: w.y })),
-    homes: homesLine(s, b), stay: stayLine(s, b), needs: needsLine(b), village: villageOf(s, b)?.name ?? "",
+    homes: homesLine(s, b), stay: stayLine(s, b), herds: herdsLine(s, b), needs: needsLine(b), village: villageOf(s, b)?.name ?? "",
     days: campFood(b) / Math.max(1, b.appetite), fire: b.fire, moves: b.moves, camp: b.siteName,
     yesterday: { brought: Math.round(b.yesterday.plant + b.yesterday.meat + b.yesterday.fish), eaten: Math.round(b.yesterday.eaten) },
     shelter: cult.shelter, sharing: cult.sharing, cousins: cult.cousins,

@@ -35,7 +35,7 @@ describe("the tree", () => {
     /* the old ways are the only things known at the start; nothing new is */
     expect(TECHS.filter(d => d.start).map(d => d.id)).toEqual([0, 1, 2, 3, 4]);
     /* the sixteen old ways and the nodes this checkpoint brings to life are active; everything else is only listed, and can never come to anyone */
-    const ACTIVE = new Set(["pottery", "kiln-firing", "grinding-grain", "porridge", "herb-lore", "wells", "granary", "mud-brick", "wattle-and-daub", "timber-framing"]);
+    const ACTIVE = new Set(["pottery", "kiln-firing", "grinding-grain", "porridge", "herb-lore", "wells", "granary", "mud-brick", "wattle-and-daub", "timber-framing", "taming-dogs", "herding-goats-and-sheep", "herding-cattle", "herding-pigs", "milking", "penning"]);
     for (const d of TECHS) { expect(d.active, d.key).toBe(d.id < 16 || ACTIVE.has(d.key)); if (!d.active) expect(d.spark).toBe(0); else if (!d.start) expect(d.spark).toBeGreaterThan(0); }
     /* what they build on, as before */
     expect(TECHS[Idea.MakeFire].needs).toEqual([Idea.KeepFire]); expect(TECHS[Idea.Blades].needs).toEqual([Idea.Spear]); expect(TECHS[Idea.Axe].needs).toEqual([Idea.Blades]);

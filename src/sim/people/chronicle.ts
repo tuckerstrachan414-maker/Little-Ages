@@ -30,6 +30,7 @@ const BASE: Record<string, [number, string]> = {
   village: [0.84, "A village is born"], villagegrow: [0.45, "A village grows"], abandon: [0.6, "A village abandoned"], return: [0.5, "Back to the old village"],
   drought: [0.4, "A dry year"], found: [0.3, "A deposit found"], exhausted: [0.38, "A deposit dug out"], regrown: [0.2, "The wood comes back"],
   pots: [0.3, "The first pots"], communal: [0.44, "The village builds"], chief: [0.5, "A chief"], tier: [0.5, "A settlement grows"], age: [0.7, "A new age"], well: [0.4, "A well"], granary: [0.34, "A granary"], kiln: [0.3, "A kiln"], pen: [0.3, "A pen"], upgrade: [0.3, "A house rebuilt"], built: [0.3, "Something new built"],
+  kept: [0.22, "Young animals kept"], tamed: [0.5, "Animals tamed"], herd: [0.3, "A flock thinned"],
 };
 /** Every kind of event the simulation tells of. */
 export const KINDS = Object.keys(BASE);
@@ -88,6 +89,9 @@ export function weigh(s: Society, kind: string, who: number[], band: number, hin
     case "communal": title = hint === 1 ? "The village raises a granary" : "The village digs a well"; break;
     case "well": case "granary": case "kiln": case "pen": case "built": if (hint === 1) { sig += 0.15; title = `The first ${kind === "built" ? "of its kind" : kind} anywhere`; } break;
     case "upgrade": if (hint === 1) { sig += 0.12; title = "A house built to last"; } break;
+    case "kept": title = hint === 1 ? "Wolf pups taken in" : n === 0 ? "The first young animals carried home" : title; break;
+    case "tamed": if (hint === 2) { sig += 0.3; title = "The first tame animals anywhere"; } else title = "A people takes to herding"; break;
+    case "herd": title = hint === 1 ? "Wolves among the flock" : "Animals wander off"; break;
     case "found": { const m = MATS[hint]; if (m) { title = `${m.name.charAt(0).toUpperCase()}${m.name.slice(1)} found`; if (hint >= 15) sig += 0.08; } break; }
     case "exhausted": { const m = MATS[hint]; if (m) title = `The ${m.name} runs out`; break; }
     case "feud": if (hint === 1) { sig += 0.04; title = "A feud passes down"; } break;

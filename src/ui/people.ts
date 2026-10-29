@@ -255,7 +255,7 @@ export class PeopleUI {
   }
   private familyView(d: PersonDetail): HTMLElement {
     const box = el("div", "family");
-    box.append(el("p", "looks", esc(d.looks) + (d.diet ? ` ${esc(d.name)} ${esc(d.diet)}.` : "")));
+    box.append(el("p", "looks", esc(d.looks) + (d.diet ? ` ${esc(d.name)} ${esc(d.diet)}.` : "") + (d.keeps ? ` ${esc(d.name)} ${esc(d.keeps)}.` : "")));
     const sec = (title: string, list: (Kin | null)[]) => { const l = list.filter(Boolean); if (!l.length) return; box.append(el("h4", "", title)); box.append(this.kinRow(l)); };
     sec("Parents", [d.mother, d.father]);
     sec(d.partner ? (d.sex === "f" ? "Husband" : "Wife") : "Partner", [d.partner]);
@@ -315,12 +315,12 @@ export class PeopleUI {
   }
 
   private renderBand(t: HTMLElement, d: BandDetail): void {
-    const key = `b${d.id}|${d.pop}|${d.events.length}|${d.respected?.id}|${d.contender?.id}|${d.feuds.map(f => f.a.id + "-" + f.b.id).join()}|${d.hearths.length}|${d.ideas.map(i => i.id + ":" + i.n).join()}|${d.works.map(w => w.text).join()}|${d.homes}|${d.needs}`;
+    const key = `b${d.id}|${d.pop}|${d.events.length}|${d.respected?.id}|${d.contender?.id}|${d.feuds.map(f => f.a.id + "-" + f.b.id).join()}|${d.hearths.length}|${d.ideas.map(i => i.id + ":" + i.n).join()}|${d.works.map(w => w.text).join()}|${d.homes}|${d.herds}|${d.needs}`;
     if (key !== this.renderedKey) {
       this.renderedKey = key;
       t.innerHTML = `${this.chrome()}
         <div class="nm">The ${esc(d.name)}</div><div class="sub">A band of the ${esc(d.people)} people, in the ${esc(d.age)}, ${d.village ? `living in the village of ${esc(d.village)}` : `camped at ${esc(d.camp)}`}</div>
-        <p class="stats"></p><p class="voices"></p>${d.needs ? `<p class="needs-b"><b>Short of:</b> ${esc(d.needs)}.</p>` : ""}${d.homes ? `<h4>Homes and stores</h4><p class="homes"></p>` : ""}<div class="needs"></div><h4>Hearths</h4><div class="hearths"></div><p class="sharing"></p>${d.feuds.length ? `<h4>Bad blood</h4><ul class="mem feuds-b"></ul>` : ""}<h4>Know-how</h4><ul class="mem ideas-b"></ul>${d.works.length ? `<h4>Weirs and plots</h4><ul class="mem works-b"></ul>` : ""}<h4>People</h4><div class="members"></div><div class="chips"><button type="button" data-act="journal">Journal</button></div>${d.events.length ? `<h4>Lately</h4><ul class="mem">${d.events.map(e => `<li>${esc(e.text)} <em>${when(e.t, this.time)}</em></li>`).join("")}</ul>` : ""}`;
+        <p class="stats"></p><p class="voices"></p>${d.needs ? `<p class="needs-b"><b>Short of:</b> ${esc(d.needs)}.</p>` : ""}${d.homes || d.herds ? `<h4>Homes and stores</h4><p class="homes"></p>` : ""}<div class="needs"></div><h4>Hearths</h4><div class="hearths"></div><p class="sharing"></p>${d.feuds.length ? `<h4>Bad blood</h4><ul class="mem feuds-b"></ul>` : ""}<h4>Know-how</h4><ul class="mem ideas-b"></ul>${d.works.length ? `<h4>Weirs and plots</h4><ul class="mem works-b"></ul>` : ""}<h4>People</h4><div class="members"></div><div class="chips"><button type="button" data-act="journal">Journal</button></div>${d.events.length ? `<h4>Lately</h4><ul class="mem">${d.events.map(e => `<li>${esc(e.text)} <em>${when(e.t, this.time)}</em></li>`).join("")}</ul>` : ""}`;
       this.bindChrome(t);
       t.querySelector<HTMLButtonElement>("[data-act=journal]")!.onclick = () => this.cb.journal({ band: d.id, name: `The ${d.name}`, note: "their story" });
       const m = t.querySelector(".members")!;
@@ -350,19 +350,19 @@ export class PeopleUI {
     voices.querySelectorAll<HTMLButtonElement>("[data-pin]").forEach(b => b.onclick = () => this.cb.pin(+b.dataset.pin!, 0));
     t.querySelector(".stats")!.innerHTML = `<b>${d.pop}</b> people: ${d.adults} adults, ${d.children} children, ${d.couples} couples.${d.moving ? " <b>On the move.</b>" : ""} ${d.moves ? `Moved camp ${d.moves === 1 ? "once" : `${d.moves} times`}.` : "Has never moved camp."} Brought in ${d.yesterday.brought} and ate ${d.yesterday.eaten} yesterday.${d.dried >= 1 ? ` ${d.dried} days of dried meat and fish put by.` : ""}${d.fire <= 0 ? " <b>The fire is out.</b>" : ""}`;
     t.querySelector(".needs")!.innerHTML = bars([["ALL FOOD", Math.min(1, d.days / 4), "#c97a3a"], ["THE POT", Math.min(1, d.pot / 4), "#b5683a"], ["FIRE", d.fire, "#d0653a"]]);
-    const homes = t.querySelector(".homes"); if (homes) homes.textContent = `${d.homes}.${d.stay ? ` ${d.stay}` : ""}`;
+    const homes = t.querySelector(".homes"); if (homes) homes.textContent = `${[d.homes, d.herds ? `${d.herds.charAt(0).toUpperCase()}${d.herds.slice(1)}` : ""].filter(Boolean).join(". ")}.${d.stay ? ` ${d.stay}` : ""}`;
     t.querySelector(".hearths")!.innerHTML = `<div class="needs">${bars(d.hearths.slice(0, 8).map(h => [`${h.name.slice(0, 9).toUpperCase()} ${h.people}`, Math.min(1, h.days / 4), "#8a6a3a"] as [string, number, string]))}</div>${d.hearths.length > 8 ? `<p class="muted">and ${d.hearths.length - 8} more</p>` : ""}`;
     t.querySelector(".sharing")!.textContent = d.yesterday.brought > 0 ? `Yesterday ${Math.round(d.sharedYesterday * 100)}% of the food brought in went into the pot; the rest stayed at the hearths of those who brought it.` : "";
   }
 
   private renderVillage(t: HTMLElement, d: VillageDetail): void {
-    const key = `v${d.id}|${d.pop}|${d.events.length}|${d.bands.map(b => b.id + ":" + (b.leader?.id ?? 0)).join()}|${d.huts}|${d.building}|${d.ruins}|${d.pits}|${d.fields.map(f => f.crop + f.n).join()}|${d.listened?.id}|${d.chief?.id}|${d.tier}|${d.call}|${d.abandoned}|${d.empty}`;
+    const key = `v${d.id}|${d.pop}|${d.events.length}|${d.bands.map(b => b.id + ":" + (b.leader?.id ?? 0)).join()}|${d.huts}|${d.building}|${d.ruins}|${d.pits}|${d.fields.map(f => f.crop + f.n).join()}|${d.listened?.id}|${d.chief?.id}|${d.tier}|${d.call}|${d.herds}|${d.abandoned}|${d.empty}`;
     if (key === this.renderedKey) return;
     this.renderedKey = key;
     const founder = d.founder.alive ? `<button type="button" class="lnk" data-pin="${d.founder.id}">${esc(d.founder.name)}</button>` : esc(d.founder.name);
     const state = d.abandoned ? `Nobody has lived here since ${dateOf(d.abandoned)}.` : d.empty ? `Its people are away; the huts wait for them.` : `<b>${d.pop}</b> people live here${d.peak > d.pop + 3 ? ` (once ${d.peak})` : ""}.`;
     const fields = d.fields.map(f => `${f.n} ${f.n === 1 ? "field" : "fields"} of ${esc(f.crop)}${f.tame >= 0.25 ? `, the seed grown ${f.tame >= 0.5 ? "tame" : "plump"} from years of sowing` : ""}`);
-    const built = [`${d.huts} ${d.huts === 1 ? "hut" : "huts"}${d.building ? `, ${d.building} going up` : ""}${d.ruins ? `, ${d.ruins} fallen in` : ""}`, d.pits ? `${d.pits} storage ${d.pits === 1 ? "pit" : "pits"} ${pitWords(d.pitDays)}` : "", ...fields, d.weirs ? `${d.weirs} fish ${d.weirs === 1 ? "weir" : "weirs"}` : ""].filter(Boolean);
+    const built = [`${d.huts} ${d.huts === 1 ? "hut" : "huts"}${d.building ? `, ${d.building} going up` : ""}${d.ruins ? `, ${d.ruins} fallen in` : ""}`, d.pits ? `${d.pits} storage ${d.pits === 1 ? "pit" : "pits"} ${pitWords(d.pitDays)}` : "", ...fields, d.weirs ? `${d.weirs} fish ${d.weirs === 1 ? "weir" : "weirs"}` : "", d.herds ? `animals kept: ${esc(d.herds)}` : ""].filter(Boolean);
     t.innerHTML = `${this.chrome()}
       <div class="nm">${esc(d.name)}</div><div class="sub">"${esc(d.gloss)}": a ${["hamlet", "village", "town", "city"][d.tier] ?? "village"} of the ${esc(d.people)}, named ${esc(d.why)}</div>
       <p class="stats">${state} It began in ${dateOf(d.founded)}, when ${esc(d.story)}; ${founder} raised the first hut.</p>

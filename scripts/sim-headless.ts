@@ -79,6 +79,12 @@ const report = (label: string) => {
         let pots = 0; for (const b of people.bands) for (const g of b.hgoods.values()) pots += g[11];
         line += `\n${"".padEnd(16)} health: diet ${mean(adults.map(p => dietScore(p))).toFixed(2)} (plant share ${mean(adults.map(p => p.diet[0])).toFixed(2)}), illness deaths ${people.stats.causes.get("illness") ?? 0}, tended with herbs ${hs.tended} | pots: ${Math.round(pots)} in use, ${ps.made} made (${ps.kiln} in kilns), ${ps.broke} cracked`;
       }
+      {
+        const hs = people.stats.herds, bySp = new Map<number, number>(), tame = new Map<number, number>();
+        for (const f of people.flocks) { bySp.set(f.sp, (bySp.get(f.sp) ?? 0) + f.n + f.young); tame.set(f.sp, Math.max(tame.get(f.sp) ?? 0, f.tame)); }
+        const pens = people.works.filter(w => w.kind === 6 && (w.prog ?? 1) >= 1 && w.state > 0.2).length;
+        line += `\n${"".padEnd(16)} herds: ${people.flocks.length} flocks${bySp.size ? ` (${[...bySp].map(([sp, n]) => `${n} ${SPECIES_NAMES[sp].replace("Wild ", "").toLowerCase()}, tame ${(tame.get(sp) ?? 0).toFixed(2)}`).join("; ")})` : ""} | ${hs.kept} young carried home, ${hs.pups} pups taken in, ${hs.born} born in keeping, ${hs.lost} taken by wolves, ${hs.escaped} escaped, ${hs.died} died in keeping, ${hs.strayed} dogs strayed, ${hs.slaughtered} killed for meat, ${Math.round(hs.milk)} milk drunk | ${hs.spells} spells of herding | ${pens} folds standing`;
+      }
       line += `\n${"".padEnd(16)} homes: ${huts} huts standing, ${going} going up, ${ruins} fallen in (${h.huts} raised) | ${pits} pits holding ${Math.round(inPits)} (${h.pits} dug; ${Math.round(h.stored)} put by, ${Math.round(h.fetched)} fetched, ${Math.round(h.eaten)} eaten from them) | ${Math.round(c.left)} food left behind on moves, ${c.home} moves home`;
     }
     line += `\n${"".padEnd(16)} shared ${(o.shared / Math.max(1, o.shared + o.kept) * 100).toFixed(0)}% into the pot | ${Math.round(o.given)} food passed between hearths (${Math.round(o.rounds)} in the evening rounds, ${Math.round(o.family)} eaten at family hearths), ${o.asks} asked for, ${o.refused} refused, ${Math.round(o.repaid)} paid back | feuds ${o.feuds} begun (${people.feuds.length} burning, ${o.peace} settled, ${o.cooled} cooled, ${o.inherited} passed down), fights ${o.fights}, families driven out ${o.driven}, feud/faction splits ${o.factionSplits} | ${led}/${people.bands.length} bands led, new leaders ${o.leaders}, two voices ${o.contests}, mocked ${o.mocked} | gifts ${o.gifts}, left for another ${o.leftFor}`;
@@ -138,6 +144,9 @@ if (people && summary) {
     towns: people.villages.filter(v => !v.abandoned && v.tier >= 2).length, maxSettlement: Math.max(0, ...people.villages.filter(v => !v.abandoned).map(v => v.pop)), maxEra: Math.max(0, ...people.cultures.map(c => c.age)), chiefs: people.villages.filter(v => !v.abandoned && v.chief).length,
     droughtDays: people.weather.stats.droughtDays, wells: people.works.filter(w => w.kind === 4 && (w.prog ?? 1) >= 1 && w.state > 0.2).length,
     felled: people.resources.stats.felled, regrown: people.resources.stats.regrown, found: people.resources.stats.found, exhausted: people.resources.stats.exhausted,
+    flocks: people.flocks.length, animals: people.flocks.reduce((n, f) => n + f.n + f.young, 0), tameFlocks: people.flocks.filter(f => f.tame >= 0.3).length, dogs: people.flocks.filter(f => f.sp === 9).reduce((n, f) => n + f.n, 0),
+    kept: people.stats.herds.kept, herdLoss: people.stats.herds.lost, milk: Math.round(people.stats.herds.milk), pens: people.works.filter(w => w.kind === 6 && (w.prog ?? 1) >= 1 && w.state > 0.2).length,
+    firstFlock: people.stats.herds.firstFlock ? +(people.stats.herds.firstFlock / 2400 + 1).toFixed(1) : 0, firstTame: people.stats.herds.firstTame ? +(people.stats.herds.firstTame / 2400 + 1).toFixed(1) : 0,
     secs: +((performance.now() - tr) / 1000).toFixed(1),
   };
   console.log("SUMMARY " + JSON.stringify(out));

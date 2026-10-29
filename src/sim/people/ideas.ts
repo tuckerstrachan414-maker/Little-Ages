@@ -4,7 +4,7 @@ import { Goal, Mem, St, type Person } from "./person.ts";
 import type { Band } from "./band.ts";
 import { feudOf } from "./feuds.ts";
 import type { Society } from "./society.ts";
-import { TECHS, TECH_COUNT, Idea, DURING, packHint, type Ctx } from "../tech/tree.ts";
+import { TECHS, TECH_COUNT, Idea, DURING, packHint, techIx, type Ctx } from "../tech/tree.ts";
 import { HOOKS } from "../tech/hooks.ts";
 import { genericPressure, fillStory } from "../tech/engine.ts";
 
@@ -45,6 +45,8 @@ const her = (p: Person) => (p.sex === "f" ? "her" : "his");
 const herObj = (p: Person) => (p.sex === "f" ? "her" : "him");
 
 export const knows = (p: Person, id: number) => p.know[id] > 0;
+/** The ways of keeping animals, for whoever watches a herder at work. */
+const HERDING = () => ["taming-dogs", "herding-goats-and-sheep", "herding-cattle", "herding-pigs", "milking", "penning"].map(k => techIx(k));
 /** Keeps someone's list of known ideas in step with `know`, in rising order. */
 export function noteKnown(p: Person, id?: number): void {
   if (id === undefined) { p.knownIds = []; for (let i = 0; i < TECH_COUNT; i++) if (p.know[i] > 0) p.knownIds.push(i); return; }
@@ -97,6 +99,9 @@ export function inspire(s: Society, p: Person, k: number, c: Ctx = {}): boolean 
   const age = s.age(p); if (age < 12) return false;
   for (const id of list) {
     if (p.know[id] > 0 || !ready(p, id)) continue;
+    /* some come only in a particular moment: keeping cattle to someone with a calf in hand, milking to someone whose animals have young */
+    const flags = TECHS[id].ctx;
+    if (flags && !flags.some(f => c[f])) continue;
     /* some things cannot come to mind without the stuff of them within reach: no pots where no clay is known */
     const near = TECHS[id].near;
     if (near) { const b = s.band(p); if (!near.every(m => s.resources.knownNear(b.culture, b.x, b.y, NEAR_REACH, m))) continue; }
@@ -191,6 +196,7 @@ export function inUse(q: Person): number[] {
     case St.Raise: return [Idea.Huts];
     case St.Pit: case St.Store: return [Idea.Pits];
     case St.Cook: return [Idea.KeepFire];
+    case St.Herd: return HERDING().filter(has);
   }
   return [];
 }

@@ -136,7 +136,8 @@ describe("herbs", () => {
   it("one kind of food alone makes illness likelier", () => {
     for (let d = 0; d < 40; d++) { noteMeal(p, { plant: 0, meat: 1, fish: 0, dried: 0 }); dietDay(p); }
     /* a small child, whose chance of falling ill is high enough to count */
-    const count = () => { let n = 0; for (let k = 0; k < 12000; k++) { p.sick = 0; p.food = 1; p.warmth = 1; illness(s, p, 0.5, "baby"); if (p.sick > 0) n++; } return n; };
+    /* enough trials that the gap (about a third more illness on one food alone) stands well clear of chance */
+    const count = () => { let n = 0; for (let k = 0; k < 40000; k++) { p.sick = 0; p.food = 1; p.warmth = 1; illness(s, p, 0.5, "baby"); if (p.sick > 0) n++; } return n; };
     const poor = count();
     for (let d = 0; d < 60; d++) { noteMeal(p, { plant: 0.6, meat: 0.4, fish: 0, dried: 0 }); dietDay(p); }
     const good = count();

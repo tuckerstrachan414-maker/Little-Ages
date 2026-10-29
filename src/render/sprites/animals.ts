@@ -3,7 +3,8 @@ import { Species } from "../../shared/types.ts";
 import { grid, put, rect, hline, outlined, toCanvas, SpriteCache, type Grid } from "./grid.ts";
 
 /*
-  Wildlife, side view, at the same 8-pixels-per-tile scale as trees and people.
+  Wildlife, side view, at the same 8-pixels-per-tile scale as trees and people; the goats,
+  sheep, boar and dogs people come to keep are drawn the same way, at pens and in the fields.
   Frames: 0-1 grazing (head down / up), 2-5 walking or running.
 */
 
@@ -53,6 +54,34 @@ function build(sp: number, f: number, winter: boolean): HTMLCanvasElement {
       rect(g, 8, 1, 2, 2, c); put(g, 10, 2, d); put(g, 8, 0, d); put(g, 9, 0, d); put(g, 9, 1, FN.outline);
       legs(g, [2, 3, 6, 7], 4, 3, c, d, f, run); break;
     }
+    case Species.Goat: {
+      /* a short body, a beard, horns swept back */
+      const c = winter ? "#b8ad98" : "#a89272", d = shade(c, 0.15), l = shade(c, -0.12), horn = "#5a4a3a";
+      g = grid(10, 8); rect(g, 2, 3, 5, 3, c); hline(g, 3, 3, 3, l); hline(g, 2, 5, 5, d); put(g, 1, 3, d);
+      const hy = grazing && !walking ? 4 : 2; rect(g, 7, hy, 2, 2, c); put(g, 9, hy + 1, d); put(g, 8, hy + 2, d); put(g, 8, hy - 1, horn); put(g, 7, hy - 2, horn); put(g, 8, hy, FN.outline);
+      legs(g, [2, 3, 5, 6], 6, 2, c, d, f, run); break;
+    }
+    case Species.Sheep: {
+      /* a woolly oval on dark legs, a dark face */
+      const c = winter ? "#efeae0" : "#e4dccb", d = shade(c, -0.12), face = "#3e342c";
+      g = grid(10, 8); rect(g, 2, 2, 6, 4, c); hline(g, 3, 2, 4, "#f6f2ea"); hline(g, 2, 5, 6, d); put(g, 1, 3, c); put(g, 1, 4, d);
+      const hy = grazing && !walking ? 4 : 2; rect(g, 8, hy, 2, 2, face); put(g, 9, hy, "#5a4e44"); put(g, 8, hy - 1, c);
+      legs(g, [2, 3, 6, 7], 6, 2, face, face, f, run); break;
+    }
+    case Species.Boar: {
+      /* dark, humped at the shoulder, a pale tusk */
+      const c = "#4a3a2e", d = shade(c, 0.18), l = shade(c, -0.15), tusk = "#efe6d2";
+      g = grid(11, 8); rect(g, 2, 3, 6, 3, c); rect(g, 4, 2, 3, 1, c); hline(g, 2, 5, 6, d); hline(g, 4, 2, 2, l); put(g, 1, 4, d);
+      const hy = grazing && !walking ? 5 : 4; rect(g, 8, hy - 1, 3, 2, c); put(g, 10, hy, d); put(g, 10, hy + 1, tusk); put(g, 9, hy - 1, FN.outline); put(g, 8, hy - 2, c);
+      legs(g, [2, 3, 6, 7], 6, 2, c, d, f, run); break;
+    }
+    case Species.Dog: {
+      /* smaller than a wolf, tail up, ears pricked */
+      const c = winter ? "#c8b89a" : "#b89c74", d = shade(c, 0.15), l = shade(c, -0.1);
+      g = grid(10, 7); rect(g, 2, 3, 5, 2, c); hline(g, 3, 3, 3, l); hline(g, 2, 4, 5, d); put(g, 1, 2, c); put(g, 0, 1, c);
+      rect(g, 7, 2, 2, 2, c); put(g, 9, 3, d); put(g, 7, 1, d); put(g, 8, 1, d); put(g, 8, 2, FN.outline);
+      legs(g, [2, 3, 5, 6], 5, 2, c, d, f, run); break;
+    }
     default: {   /* bear */
       const c = FN.bear, d = shade(c, 0.12), l = shade(c, -0.12);
       g = grid(13, 9); rect(g, 2, 2, 8, 4, c); hline(g, 3, 2, 6, l); hline(g, 2, 5, 8, d); rect(g, 4, 1, 3, 1, c);
@@ -68,7 +97,7 @@ export function animalSprite(sp: number, frame: number, winter: boolean): HTMLCa
   return cache.get(`${sp}|${frame}|${winter ? 1 : 0}`, () => build(sp, frame, winter));
 }
 /** Map dot colors for far zooms. */
-export const ANIMAL_DOT = ["#a8784a", "#3a2a20", "#5e3e2a", "#b08a5a", "#9a9890", "#4a3020"];
+export const ANIMAL_DOT = ["#a8784a", "#3a2a20", "#5e3e2a", "#b08a5a", "#9a9890", "#4a3020", "#a89272", "#e4dccb", "#4a3a2e", "#b89c74"];
 
 /*
   Birds and small game, tiny on purpose. Flying birds are seen from above, wings up in

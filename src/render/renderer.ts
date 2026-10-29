@@ -374,7 +374,7 @@ export class Renderer {
       const pk = prevPos.get(id); if (pk !== undefined && prev) { const po = pk * HERD_STRIDE; x = prev.data[po + 2] + (x - prev.data[po + 2]) * a; y = prev.data[po + 3] + (y - prev.data[po + 3]) * a; }
       const count = cur.data[o + 4], heading = cur.data[o + 5], state = cur.data[o + 6];
       if (x < v.x0 - 6 || x > v.x1 + 6 || y < v.y0 - 6 || y > v.y1 + 6) continue;
-      const spread = sp === 2 ? 1.6 : sp >= 4 ? 1 : 1.25;
+      const spread = sp === 2 ? 1.6 : sp === 4 || sp === 5 ? 1 : sp >= 6 ? 0.9 : 1.25;
       for (let m = 0; m < count; m++) {
         /* members keep loose formation; each wanders a little on its own */
         const r = Math.sqrt(m + 0.5) * spread * 0.9, ang = m * 2.399 + id;

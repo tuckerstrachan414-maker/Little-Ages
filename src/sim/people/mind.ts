@@ -4,6 +4,7 @@ import { storeFood, estimate, homeOf, keepingDays } from "./band.ts";
 import { Goal, Place, St, Skill, step, kinWord, type KnownPlace, type Person, type Step } from "./person.ts";
 import { MEAT, compass, type Society } from "./society.ts";
 import { askTarget, reachFood, familyDays, householdAppetite } from "./sharing.ts";
+import { flocksOf, pastureFor, flockWords } from "./herding.ts";
 import { feudOf, peaceToMake } from "./feuds.ts";
 import { visitTarget } from "./friends.ts";
 import { knows, bandKnows, showTarget } from "./ideas.ts";
@@ -260,7 +261,7 @@ export function decide(s: Society, p: Person, forced?: Goal): void {
   /* --- children: play, and tag along to learn --- */
   if ((st === "child" || (st === "teen" && age < 14)) && !dark) {
     add({ g: Goal.Play, v: 0.48 + (1 - tr[7]) * 0.14 + tr[5] * 0.16, plan: () => [step(St.Play, b.x + Math.cos(p.id * 7 + s.time / 60) * 3, b.y + Math.sin(p.id * 7 + s.time / 60) * 2.2, 0, 9)], why: () => playWhy(s, p), icon: Bubble.Sun });
-    const parent = [s.byId.get(p.mother), s.byId.get(p.father)].find(q => q && q.band === p.band && (q.goal === Goal.Gather || q.goal === Goal.Fish || q.goal === Goal.Snare || q.goal === Goal.Wood || q.goal === Goal.Craft || q.goal === Goal.Dry || q.goal === Goal.Sow || q.goal === Goal.Build || q.goal === Goal.Kindle || q.goal === Goal.Hut || q.goal === Goal.Pit || q.goal === Goal.Construct || q.goal === Goal.Pot));
+    const parent = [s.byId.get(p.mother), s.byId.get(p.father)].find(q => q && q.band === p.band && (q.goal === Goal.Gather || q.goal === Goal.Fish || q.goal === Goal.Snare || q.goal === Goal.Wood || q.goal === Goal.Craft || q.goal === Goal.Dry || q.goal === Goal.Sow || q.goal === Goal.Build || q.goal === Goal.Kindle || q.goal === Goal.Hut || q.goal === Goal.Pit || q.goal === Goal.Construct || q.goal === Goal.Pot || q.goal === Goal.Herd));
     if (parent && age >= 5) add({ g: Goal.Follow, v: 0.42 + tr[4] * 0.3, plan: () => [step(St.Follow, 0, 0, parent.id, 24)], why: () => `${p.name} is tagging along with ${her(p)} ${parent.id === p.mother ? "mother" : "father"} to learn ${LEARN[parent.goal] ?? "how things are done"}.` });
   }
 
@@ -345,6 +346,19 @@ export function decide(s: Society, p: Person, forced?: Goal): void {
           plan: () => [...(q && dep ? [step(St.Go, q[0], q[1]), step(St.Quarry, q[0], q[1], dep.id, 8, { a: Mat.Clay })] : []), step(St.Go, hx2, hy2), step(St.Shape, hx2, hy2, 0, 12, { a: kiln ? 8 : 4 }), ...(kiln ? [step(St.Go, kiln.x, kiln.y + 1), step(St.Bake, kiln.x, kiln.y + 1, kiln.id, 10)] : [step(St.Go, fx, fy), step(St.Bake, fx, fy, 0, 10)])],
           why: () => `${p.name} is ${dep ? "fetching clay from the bank and " : ""}shaping pots to bake ${kiln ? "in the kiln" : "in the fire"}, because ${hg[Mat.Pots] < 1 ? `${her(p)} family has nothing to boil food in or keep it from the mice` : "the family's pots are too few for all the food put by"}.` });
       }
+    }
+  }
+  /* --- the family's animals: fed and watched, and led out to grass when the ground by camp is cropped bare --- */
+  if (!dark && !b.moving && age >= 8 && age < 70 && p.injury < 0.4 && p.sick <= 0) {
+    for (const f of flocksOf(s, b, homeOf(p, s.byId, s.time))) {
+      if (f.n + f.young <= 0 || (f.herder && f.herder !== p.id)) continue;
+      const pasture = f.sp !== Species.Dog && f.cond < 0.55 ? pastureFor(s, b, f) : null;
+      /* a family that keeps animals minds them, the children most readily of all; once seen to for the day, the animals can wait while the rest gets done */
+      const minded = s.time - f.mindedAt < DAY_SECONDS * 0.35;
+      const v = (0.38 + (f.cond < 0.5 ? 0.25 : 0) + (f.young > 0 && f.tame < 0.3 ? 0.1 : 0)) * (worker ? 1 : 1.1) * (1 - foodDrive * 0.3) * (minded ? 0.35 : 1) / (1 + busy(Goal.Herd));
+      add({ g: Goal.Herd, v, icon: Bubble.Goat,
+        plan: () => pasture ? [step(St.Go, pasture[0], pasture[1]), step(St.Herd, pasture[0], pasture[1], f.id, 10, { a: 1 })] : [step(St.Go, f.x, f.y), step(St.Herd, f.x, f.y, f.id, 6)],
+        why: () => pasture ? `${p.name} is leading the family's ${flockWords(f)} out to better grass, because the ground by camp is cropped bare and they are going thin.` : f.sp === Species.Dog ? `${p.name} is feeding the family's ${flockWords(f)} and seeing they stay by the fire.` : `${p.name} is feeding the family's ${flockWords(f)} and keeping an eye on them, so they stay ${f.tame < 0.3 ? "and grow used to people" : "close"}.` });
     }
   }
   /* --- buildings: what the household or the band is short of and someone knows how to build, or a hand lent to one going up --- */
@@ -527,10 +541,10 @@ function explorePlan(s: Society, p: Person): Step[] | null {
 
 /* ---------------- helpers ---------------- */
 
-export const HUNT_P = [0.42, 0.24, 0.17, 0.32, 0, 0.12];
-export const DANGER = [0.004, 0.04, 0.05, 0.01, 0, 0.12];
-export const SPECIES_SHORT = ["deer", "aurochs", "mammoth", "horses", "wolves", "bear"];
-const LEARN: Partial<Record<number, string>> = { [Goal.Gather]: "which plants are good to eat", [Goal.Fish]: "how to fish", [Goal.Snare]: "how to set snares", [Goal.Wood]: "how to keep a fire", [Goal.Craft]: "how to work hides", [Goal.Dry]: "how to dry meat", [Goal.Sow]: "how to plant", [Goal.Build]: "how to build a weir", [Goal.Kindle]: "how to make fire", [Goal.Hut]: "how to raise a hut", [Goal.Pit]: "how to dig a storage pit", [Goal.Construct]: "how to build", [Goal.Quarry]: "where the good clay and stone are", [Goal.Pot]: "how to shape a pot" };
+export const HUNT_P = [0.42, 0.24, 0.17, 0.32, 0, 0.12, 0.36, 0.4, 0.3, 0];
+export const DANGER = [0.004, 0.04, 0.05, 0.01, 0, 0.12, 0.002, 0.001, 0.03, 0];
+export const SPECIES_SHORT = ["deer", "aurochs", "mammoth", "horses", "wolves", "bear", "goats", "sheep", "boar", "dogs"];
+const LEARN: Partial<Record<number, string>> = { [Goal.Gather]: "which plants are good to eat", [Goal.Fish]: "how to fish", [Goal.Snare]: "how to set snares", [Goal.Wood]: "how to keep a fire", [Goal.Craft]: "how to work hides", [Goal.Dry]: "how to dry meat", [Goal.Sow]: "how to plant", [Goal.Build]: "how to build a weir", [Goal.Kindle]: "how to make fire", [Goal.Hut]: "how to raise a hut", [Goal.Pit]: "how to dig a storage pit", [Goal.Construct]: "how to build", [Goal.Quarry]: "where the good clay and stone are", [Goal.Pot]: "how to shape a pot", [Goal.Herd]: "how to mind the animals" };
 
 function canHunt(s: Society, p: Person, age: number): boolean {
   if (age < 15 || age > 62 || p.spear < 0.1 || !knows(p, Idea.Spear) || p.injury > 0.25) return false;

@@ -57,7 +57,8 @@ function villageOf(s: Society, b: Band): Village {
 describe("tiers", () => {
   it("a village is a hamlet until thirty people live there, a town once a hundred share a well and a kiln", () => {
     const { s } = fresh();
-    const b = s.bands.slice().sort((a, c) => c.members.length - a.members.length)[0];
+    /* the biggest band that is not yet thirty strong, so the village begins as a hamlet */
+    const b = s.bands.filter(o => o.members.length < 30).sort((a, c) => c.members.length - a.members.length)[0];
     const v = villageOf(s, b);
     settlementsDay(s);
     expect(v.tier).toBe(b.members.length >= 30 ? 1 : 0);

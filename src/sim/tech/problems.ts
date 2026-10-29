@@ -86,6 +86,8 @@ export const CTX_PROBLEMS: Partial<Record<ProblemKey, (c: Ctx) => number | undef
   Pots: c => (c.pots === undefined ? undefined : c.pots ? 1 : 0),
   Storage: c => (c.overflow ? 1 : undefined),
   Wet: c => (c.damp ? 1 : undefined),
+  /* animals kept so long they come when called are meat that need not be hunted, whatever came in yesterday */
+  Meat: c => (c.kept ? 1 : undefined),
 };
 
 /** The three wants that press hardest, in words, for a band's card. */

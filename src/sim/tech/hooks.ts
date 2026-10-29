@@ -2,7 +2,9 @@ import { DAY_SECONDS } from "../../shared/types.ts";
 import { Mem, St, type Person } from "../people/person.ts";
 import { keepingDays } from "../people/band.ts";
 import type { Society } from "../people/society.ts";
-import { Idea, type TechHooks } from "./tree.ts";
+import { Idea, techIx, type TechHooks } from "./tree.ts";
+import { genericPressure } from "./engine.ts";
+import { TECHS } from "./tree.ts";
 
 /*
   What the data cannot say: for a few nodes, how badly someone needs them right now and the
@@ -18,6 +20,8 @@ const potShort = (s: Society, p: Person) => { const b = s.band(p); return clamp0
 const stayAt = (s: Society, p: Person) => clamp01((s.time - s.band(p).movedAt) / (DAY_SECONDS * 25));
 
 export const HOOKS: Partial<Record<number, TechHooks>> = {
+  /* dogs: someone with wolf pups grown at the hearth needs no other want to see what they are; without them, only the band's wants and wolves about speak for it */
+  [techIx("taming-dogs")]: { pressure(s, p, _k, c) { const d = TECHS[techIx("taming-dogs")]; return c.pups ? Math.max(0.5, genericPressure(s, p, d, c)) : c.wolves ? genericPressure(s, p, d, c) * 0.5 : 0; } },
   [Idea.MakeFire]: {
     pressure(s, p, k) {
       const b = s.band(p), out = b.fire <= 0;

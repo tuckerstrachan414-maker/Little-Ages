@@ -78,6 +78,8 @@ export interface Band {
   meatAt: number;
   /** when the wood coming back around this camp was last told */
   regrownAt: number;
+  /** herding: when young animals were last kept and told of, when animals were last lost to wolves and told of, and when wolf pups were last taken in */
+  keptAt: number; herdAt: number; pupsAt: number;
 }
 export { newProblems };
 /** Food brought in, how much of it went into the pot, what was eaten, what passed between hearths, and fresh meat and fish lost to rot. */

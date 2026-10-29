@@ -22,7 +22,7 @@ export const Goal = {
   Ask: 27, Fight: 28, Mediate: 29, Call: 30,
   Kindle: 31, Ember: 32, Show: 33, Learn: 34, Dry: 35, Build: 36, Sow: 37,
   Hut: 38, Pit: 39, Store: 40, Fetch: 41,
-  Quarry: 42, Construct: 43, Pot: 44,
+  Quarry: 42, Construct: 43, Pot: 44, Herd: 45,
 } as const;
 export type Goal = (typeof Goal)[keyof typeof Goal];
 
@@ -32,7 +32,7 @@ export const St = {
   Ask: 22, Fight: 23,
   Kindle: 24, Ember: 25, Dry: 26, Build: 27, Sow: 28,
   Raise: 29, Pit: 30, Store: 31, Fetch: 32,
-  Quarry: 33, Shape: 34, Bake: 35,
+  Quarry: 33, Shape: 34, Bake: 35, Herd: 36,
 } as const;
 export type St = (typeof St)[keyof typeof St];
 

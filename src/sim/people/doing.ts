@@ -1,9 +1,9 @@
 import { Species, Flag, DAY_SECONDS } from "../../shared/types.ts";
 import { Anim, Bubble } from "../../shared/people.ts";
 import { Food, Goal, Mem, Place, St, Skill, YEAR, step, type Person, type Step } from "./person.ts";
-import { MEAT, compass, type Society } from "./society.ts";
+import { MEAT, compass, type Society, type Carcass } from "./society.ts";
 import { HUNT_P, DANGER, SPECIES_SHORT, attraction, she, unhappy } from "./mind.ts";
-import { deposit, answer, eat, hearthOf, pass } from "./sharing.ts";
+import { deposit, answer, eat, hearthOf, pass, familyDays } from "./sharing.ts";
 import { endFight, talkRound, grievance } from "./feuds.ts";
 import { mock } from "./leaders.ts";
 import { gift } from "./friends.ts";
@@ -21,6 +21,7 @@ import { Line } from "../buildings/defs.ts";
 import { standing } from "../buildings/build.ts";
 import { pitRoom, pitFood } from "./homes.ts";
 import { Biome } from "../../shared/types.ts";
+import { keepYoung, youngOf, herdSpell, hasDogs } from "./herding.ts";
 
 /*
   Doing things. Each plan is a list of steps (walk there, gather, walk back, put it in the
@@ -92,6 +93,7 @@ export function doStep(s: Society, p: Person, dt: number): void {
     case St.Pit: work(s, p, st, dt, Anim.Dig); break;
     case St.Store: work(s, p, st, dt, Anim.Gather); break;
     case St.Fetch: work(s, p, st, dt, Anim.Dig); break;
+    case St.Herd: work(s, p, st, dt, Anim.Gather); break;
   }
 }
 
@@ -251,7 +253,9 @@ function work(s: Society, p: Person, st: Step, dt: number, anim: number): void {
         const blades = knows(p, Idea.Blades), big = c.meat > 40;
         const take = Math.min(c.meat, (blades ? 7.5 : 6) - (p.carryKind === Food.Meat ? p.carryAmt : 0));
         if (blades) practice(p, Idea.Blades, 0.005);
-        inspire(s, p, St.Butcher, { big });
+        /* the young of the kill, standing by it: a well-fed, soft-hearted family carries them home */
+        if (c.young && familyDays(s, p) > 2.5 && s.rng.chance(0.25 + p.traits[1] * 0.3)) keepYoung(s, p, c);
+        inspire(s, p, St.Butcher, { big, wolves: s.herdsNear(c.x, c.y, 14).some(h => h.sp === Species.Wolf && h.n > 0) });
         c.meat -= take; load(p, Food.Meat, take); s.stats.food.meat += take;
         if (c.hides > 0) { c.hides--; p.hides++; }
         /* tell yourself where the rest is, to come back for it or send others */
@@ -354,6 +358,7 @@ function work(s: Society, p: Person, st: Step, dt: number, anim: number): void {
     case St.Pit: { digPit(s, p, st); const i = (st.y | 0) * s.w.w + (st.x | 0); inspire(s, p, St.Pit, { clayNear: s.resources.knownNear(b.culture, b.x, b.y, 20, "clay"), damp: s.w.biome[i] === Biome.Swamp || s.w.rain[i] > 160 }); break; }
     case St.Store: { const w = workById(s, st.id); const overflow = !!w && w.foods ? pitRoom(w) - pitFood(w) < 4 : false; storeInPit(s, p, st); inspire(s, p, St.Store, { overflow, clayNear: s.resources.knownNear(b.culture, b.x, b.y, 20, "clay") }); break; }
     case St.Fetch: fetchFromPit(s, p, st); inspire(s, p, St.Fetch); break;
+    case St.Herd: herdSpell(s, p, st); break;
     case St.Sow: {
       /* the seed comes from the household's own store of plant food, or what it put by in its pit */
       const h = hearthOf(s, p), pit = pitOf(s, b, homeOf(p, s.byId, s.time)), field = st.id ? workById(s, st.id) : undefined;
@@ -474,7 +479,8 @@ function stalk(s: Society, p: Person, st: Step, dt: number): void {
   st.a = (st.a ?? 0) + 1;
   const party = s.near(p.x, p.y, 6).filter(q => q.party === p.id);
   const cover = s.w.tree[(h.y | 0) * s.w.w + (h.x | 0)] ? 0.85 : 1;
-  const chance = HUNT_P[h.sp] * (0.5 + p.skills[Skill.Hunt]) * (1 + 0.45 * (party.length - 1)) * (h.cond < 0.6 ? 1.3 : 1) * cover;
+  /* dogs run the quarry down and hold it at bay */
+  const chance = HUNT_P[h.sp] * (0.5 + p.skills[Skill.Hunt]) * (1 + 0.45 * (party.length - 1)) * (h.cond < 0.6 ? 1.3 : 1) * cover * (hasDogs(s, s.band(p)) ? 1.2 : 1);
   /* a point struck as a blade breaks less often */
   p.spear -= knows(p, Idea.Blades) ? 0.075 : 0.12;
   /* the big ones fight back */
@@ -510,7 +516,7 @@ function giveUpHunt(s: Society, p: Person): void {
 function kill(s: Society, lead: Person, h: { id: number; sp: number; x: number; y: number; n: number }, party: Person[]): void {
   h.n--;
   s.stats.kills[h.sp]++;
-  const c = { id: s.nextId++, x: h.x, y: h.y, sp: h.sp, meat: MEAT[h.sp], hides: h.sp === Species.Mammoth ? 2 : 1, t: s.time, by: lead.id };
+  const c: Carcass = { id: s.nextId++, x: h.x, y: h.y, sp: h.sp, meat: MEAT[h.sp], hides: h.sp === Species.Mammoth ? 2 : 1, t: s.time, by: lead.id, young: youngOf(s, h.sp) };
   /* the carcass lies on dry ground */
   if (!s.walker.dry(c.x, c.y)) { c.x = lead.x; c.y = lead.y; }
   s.carcasses.push(c);

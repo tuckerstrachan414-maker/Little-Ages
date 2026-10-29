@@ -14,7 +14,7 @@ export type AnimName = (typeof ANIM_NAMES)[number];
 export const Bubble = {
   None: 0, Berries: 1, Fish: 2, Deer: 3, Heart: 4, Angry: 5, Sun: 6, Baby: 7, Fire: 8, Drop: 9, Meat: 10, Cold: 11,
   Sad: 12, Move: 13, Fear: 14, Zzz: 15, Star: 16, Question: 17, Wolf: 18, Mammoth: 19, Home: 20,
-  Gift: 21, Peace: 22, Ask: 23, Pot: 24,
+  Gift: 21, Peace: 22, Ask: 23, Pot: 24, Goat: 25,
 } as const;
 export type Bubble = (typeof Bubble)[keyof typeof Bubble];
 
@@ -42,8 +42,8 @@ export interface Look {
   tall: number;
 }
 
-/** A band's camp, sent every tick. `shelters` are [x, y] pairs of households without a hut, `huts` [x, y] pairs of those with one; `racks` are [x, y] pairs of drying racks hung with meat. */
-export interface CampSnap { id: number; name: string; x: number; y: number; color: string; pop: number; fire: number; shelters: number[]; huts: number[]; shelter: "tent" | "leanto" | "dome"; food: number; racks: number[]; }
+/** A band's camp, sent every tick. `shelters` are [x, y] pairs of households without a hut, `huts` [x, y] pairs of those with one; `racks` are [x, y] pairs of drying racks hung with meat; `flocks` are [x, y, species, count] for the animals households keep, at their folds or out with a herder. */
+export interface CampSnap { id: number; name: string; x: number; y: number; color: string; pop: number; fire: number; shelters: number[]; huts: number[]; shelter: "tent" | "leanto" | "dome"; food: number; racks: number[]; flocks: number[]; }
 /**
   A fish weir (kind 0), planted plot (1), hut (2) or storage pit (3): where it stands, how it is (repair, or
   growth to ripe at 1), and what it holds. Huts add how far built they are, their style and look, their bays

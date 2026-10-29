@@ -2,6 +2,7 @@ import type { Camera } from "./camera.ts";
 import { Anim, PERSON_STRIDE, PFlag, type CampSnap, type Look, type VillageSnap, type WorkSnap } from "../shared/people.ts";
 import { personSprite, tinySprite, animFrame, drawBubble, type View } from "./sprites/people.ts";
 import { fireSprite, shelterSprite, storeSprite, woodpileSprite, shelterVariant, rackSprite, weirSprite, plotSprite } from "./sprites/camp.ts";
+import { animalSprite, ANIMAL_DOT } from "./sprites/animals.ts";
 import { hutSprite, pitSprite, hutStage } from "./sprites/huts.ts";
 import { buildingSprite, buildingStage } from "./sprites/buildings.ts";
 import { isSnowy } from "../shared/seasonfx.ts";
@@ -102,6 +103,16 @@ export class PeopleLayer {
         if (c.food > 0) out.push({ x: c.x + 1.6, y: c.y - 0.6, f: () => this.stamp(ctx, cam, storeSprite(c.food * 0.6, c.food * 0.4), c.x + 1.6, c.y - 0.6, z / 8, 1) });
         out.push({ x: c.x - 1.6, y: c.y - 0.9, f: () => this.stamp(ctx, cam, woodpileSprite(3), c.x - 1.6, c.y - 0.8, z / 8, 1) });
         for (let k = 0; k < c.racks.length; k += 2) { const rx = c.racks[k], ry = c.racks[k + 1]; out.push({ x: rx, y: ry, f: () => this.stamp(ctx, cam, rackSprite(k === 0 || c.racks.length > 4), rx, ry, z / 8, 1) }); }
+        /* the animals households keep: a huddle at the fold or beside the hut, or out at grass with the herder */
+        for (let k = 0; k < c.flocks.length; k += 4) {
+          const fx = c.flocks[k], fy = c.flocks[k + 1], sp = c.flocks[k + 2], n = Math.min(10, c.flocks[k + 3]);
+          for (let m = 0; m < n; m++) {
+            const rr = Math.sqrt(m + 0.5) * 0.55, ang = m * 2.399 + sp + c.id * 0.3, ax = fx + Math.cos(ang) * rr, ay = fy + Math.sin(ang) * rr * 0.6;
+            if (z < 6) { out.push({ x: ax, y: ay, f: () => { const [sx, sy] = cam.toScreen(ax, ay); ctx.fillStyle = ANIMAL_DOT[sp] ?? "#8a7a5a"; ctx.fillRect(Math.round(sx), Math.round(sy), Math.max(2, Math.round(z / 2)), Math.max(2, Math.round(z / 2))); } }); continue; }
+            const f = Math.floor(now / 900 + m * 0.37 + c.id) % 5 === 0 ? 1 : 0, facing = (m + sp) % 2 ? 1 : -1;
+            out.push({ x: ax, y: ay, f: () => { const spr = animalSprite(sp, f, season === 3), k2 = z / 8 * 0.9, w = spr.width * k2, h = spr.height * k2, [sx, sy] = cam.toScreen(ax, ay); ctx.save(); ctx.translate(Math.round(sx), Math.round(sy)); if (facing < 0) ctx.scale(-1, 1); ctx.drawImage(spr, Math.round(-w / 2), Math.round(-h), Math.round(w), Math.round(h)); ctx.restore(); } });
+          }
+        }
         if (z >= 8 && c.fire > 0.05 && Math.random() < dtReal * 6) this.parts.push({ x: c.x + (Math.random() - 0.5) * 0.3, y: c.y - 0.4, vx: (Math.random() - 0.5) * 0.3, vy: -0.9 - Math.random() * 0.6, life: 1.6, age: 0, c: Math.random() < 0.25 ? "#ffdf7e" : "#d9d8d0", g: 0 });
       }
     }
