@@ -1,7 +1,7 @@
 import { Bubble, type Look } from "../../shared/people.ts";
 import type { Society } from "./society.ts";
 import type { Person } from "./person.ts";
-import { IDEAS } from "./ideas.ts";
+import { TECHS as IDEAS } from "../tech/tree.ts";
 
 /*
   Finding things by name: the living and the dead, bands and their camps, whole peoples. The

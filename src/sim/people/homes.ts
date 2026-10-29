@@ -3,7 +3,8 @@ import { Bubble, type HutLook } from "../../shared/people.ts";
 import { Food, Place, Skill, type Person, type Step } from "./person.ts";
 import { homeOf, storeFood, noFood, keepingDays, type Band, type Foods } from "./band.ts";
 import { Work, addWork, worksAround, workById } from "./works.ts";
-import { Idea, knows, practice } from "./ideas.ts";
+import { knows, practice } from "./ideas.ts";
+import { Idea } from "../tech/tree.ts";
 import { householdAppetite, hearthOf, pass, take } from "./sharing.ts";
 import type { Society } from "./society.ts";
 

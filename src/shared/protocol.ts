@@ -1,7 +1,7 @@
 import type { MapMode, Season, SizeKey, WorldData } from "./types.ts";
 import type { CampSnap, ChronicleEvent, Look, Stage, VillageSnap, WorkSnap } from "./people.ts";
 import type { SearchItem } from "../sim/people/search.ts";
-import type { IdeaSummary } from "../sim/people/ideas.ts";
+import type { TechDefLite, TechGroup, TechPanelData, TechNodeDetail } from "./tech.ts";
 
 /* Messages between the page and the simulation worker. */
 
@@ -16,8 +16,10 @@ export type ToWorker =
   | { type: "search"; q: string; seq: number }
   /** relationship threads for everyone in this stretch of map (off turns them off) */
   | { type: "bonds"; on: boolean; view: { x0: number; y0: number; x1: number; y1: number } }
-  /** what the world knows: answered with `ideas` */
-  | { type: "ideas" };
+  /** the tree of knowledge for a group (the world, a people, a settlement): answered with `tech` */
+  | { type: "tech"; group: TechGroup }
+  /** one node of it, for the card: answered with `technode` */
+  | { type: "technode"; id: number; group: TechGroup };
 
 export type FromWorker =
   | { type: "progress"; stage: number; pct: number }
@@ -32,7 +34,10 @@ export type FromWorker =
   | { type: "results"; seq: number; items: SearchItem[] }
   /** triples of [person a, person b, bond] (see Bond) */
   | { type: "bonds"; edges: Int32Array }
-  | { type: "ideas"; list: IdeaSummary[] }
+  /** the tree itself, once after the world */
+  | { type: "techtree"; defs: TechDefLite[] }
+  | { type: "tech"; data: TechPanelData }
+  | { type: "technode"; detail: TechNodeDetail | null }
   | { type: "person"; detail: PersonDetail | null; id: number }
   | { type: "band"; detail: BandDetail | null; id: number }
   | { type: "village"; detail: VillageDetail | null; id: number };
@@ -118,6 +123,8 @@ export interface BandDetail {
   works: { kind: "weir" | "plot"; text: string; x: number; y: number }[];
   /** huts, pits and fields at this camp, in a line ("7 huts (2 going up), 5 storage pits holding 140 days of food"), and how long they have stayed and what holds them */
   homes: string; stay: string;
+  /** what the band is short of, in a few words ("little to eat, cold nights") */
+  needs: string;
   /** the village the band lives in ("" if none) */
   village: string;
   days: number; fire: number; moves: number; camp: string;

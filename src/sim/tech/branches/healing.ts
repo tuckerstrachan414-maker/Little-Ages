@@ -1,0 +1,37 @@
+import { Branch, Era, branch } from "../defs.ts";
+
+const E = Era, n = branch(Branch.Healing);
+/** Healing: what people do for the sick and hurt, from herbs to surgery. */
+export const HEALING = [
+  n("herb-lore", "herb lore", "which herbs ease fever, pain and wounds", E.OldStone, []),
+  n("bone-setting", "setting bones", "how to set a broken bone", E.NewStone, ["herb-lore"]),
+  n("midwifery", "midwifery", "how to help a birth", E.NewStone, ["herb-lore"]),
+  n("wound-binding", "binding wounds", "how to bind a wound", E.NewStone, ["hides"]),
+  n("splints", "splints", "how to splint a limb", E.NewStone, ["bone-setting"]),
+  n("trepanning", "trepanning", "how to open a skull to let an ill out", E.Copper, ["bone-setting"]),
+  n("bandages", "bandages", "how to bandage with clean cloth", E.Copper, ["weaving"]),
+  n("medical-texts", "books of healing", "how to write down what heals", E.Bronze, ["writing"]),
+  n("physicians", "physicians", "how to train a physician", E.Bronze, ["herb-lore", "medical-texts"]),
+  n("healing-temples", "healing temples", "how to care for the sick at a temple", E.Iron, ["temple"]),
+  n("quarantine", "quarantine", "how to keep the sick apart", E.Iron, ["physicians"]),
+  n("anatomy", "anatomy", "how the body is made inside", E.Classical, ["physicians"]),
+  n("humoral-medicine", "the humors", "how to treat by the humors", E.Classical, ["anatomy"]),
+  n("public-baths", "bathing", "how to keep a city clean with baths", E.Classical, ["baths"]),
+  n("apothecaries", "apothecaries", "how to keep an apothecary's shop", E.Medieval, ["universities"]),
+  n("hospitals", "hospitals", "how to run a hospital", E.Medieval, ["physicians"]),
+  n("plague-quarantine", "plague quarantine", "how to shut a town against the plague", E.Medieval, ["quarantine"]),
+  n("dissection", "dissection", "how to learn the body by dissection", E.EarlyModern, ["anatomy"]),
+  n("inoculation", "inoculation", "how to give a mild pox to prevent the bad", E.EarlyModern, ["physicians"]),
+  n("vaccination", "vaccination", "how to vaccinate", E.Industrial, ["inoculation"]),
+  n("anaesthesia", "anesthesia", "how to put a patient to sleep for the knife", E.Industrial, ["chemistry"]),
+  n("antiseptics", "antiseptics", "how to keep a wound clean of rot", E.Industrial, ["chemistry"]),
+  n("germ-theory", "germs", "how sickness spreads by living things too small to see", E.Industrial, ["microscope"]),
+  n("nursing", "nursing", "how to nurse the sick in wards", E.Industrial, ["hospitals"]),
+  n("public-health", "public health", "how to keep a whole city well", E.Industrial, ["sewers"]),
+  n("antibiotics", "antibiotics", "how to kill germs inside the body", E.Modern, ["germ-theory"]),
+  n("x-rays", "x-rays", "how to see bones through flesh", E.Modern, ["electricity"]),
+  n("transfusion", "transfusion", "how to give blood", E.Modern, ["germ-theory"]),
+  n("modern-surgery", "surgery", "how to operate inside the body", E.Modern, ["anaesthesia", "antiseptics"]),
+  n("genetic-medicine", "medicine by genes", "how to heal by the genes", E.Space, ["computer"]),
+  n("prosthetics", "prosthetics", "how to make a limb", E.Space, ["plastics"]),
+];

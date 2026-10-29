@@ -3,7 +3,8 @@ import { Bubble, type HutLook, type HutStyle } from "../../shared/people.ts";
 import { FISH_UNITS } from "../ecology.ts";
 import { Mem, type Person } from "./person.ts";
 import { homeOf, type Band, type Foods } from "./band.ts";
-import { IDEAS, Idea, practice, learn } from "./ideas.ts";
+import { practice, learn, ready } from "./ideas.ts";
+import { Idea } from "../tech/tree.ts";
 import { hutDay, pitDay } from "./homes.ts";
 import type { Society } from "./society.ts";
 
@@ -312,7 +313,7 @@ export function lookAtWorks(s: Society, p: Person): void {
     if (Math.abs(w.x - p.x) > 6 || Math.abs(w.y - p.y) > 6) continue;
     const id = WORK_IDEA[w.kind];
     if (p.know[id] > 0) continue;
-    if (IDEAS[id].needs.some(n => p.know[n] <= 0)) continue;
+    if (!ready(p, id)) continue;
     /* a hut teaches once there is a frame to see, even fallen in; a weir or plot while it still stands */
     if (w.kind === Work.Hut ? (w.prog ?? 1) < 0.4 || w.state < -0.6 : w.kind === Work.Weir ? w.state < 0.2 : w.kind === Work.Plot ? w.state < 0.3 : false) continue;
     if (s.rng.chance(0.004 * (0.3 + p.traits[4]))) {

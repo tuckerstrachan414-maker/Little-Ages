@@ -5,6 +5,7 @@ import { DAY_SECONDS, DAYS_PER_SEASON, DAYS_PER_YEAR, SEASON_NAMES } from "../sh
 import { personSprite } from "../render/sprites/people.ts";
 import { CREATURE_SCALE } from "../render/scale.ts";
 import { frameURL } from "./hud.ts";
+import { Idea } from "../sim/tech/tree.ts";
 import type { Camera } from "../render/camera.ts";
 import type { Dock } from "./dock.ts";
 import { el, esc, eventIcon } from "./dom.ts";
@@ -314,19 +315,19 @@ export class PeopleUI {
   }
 
   private renderBand(t: HTMLElement, d: BandDetail): void {
-    const key = `b${d.id}|${d.pop}|${d.events.length}|${d.respected?.id}|${d.contender?.id}|${d.feuds.map(f => f.a.id + "-" + f.b.id).join()}|${d.hearths.length}|${d.ideas.map(i => i.id + ":" + i.n).join()}|${d.works.map(w => w.text).join()}|${d.homes}`;
+    const key = `b${d.id}|${d.pop}|${d.events.length}|${d.respected?.id}|${d.contender?.id}|${d.feuds.map(f => f.a.id + "-" + f.b.id).join()}|${d.hearths.length}|${d.ideas.map(i => i.id + ":" + i.n).join()}|${d.works.map(w => w.text).join()}|${d.homes}|${d.needs}`;
     if (key !== this.renderedKey) {
       this.renderedKey = key;
       t.innerHTML = `${this.chrome()}
         <div class="nm">The ${esc(d.name)}</div><div class="sub">A band of the ${esc(d.people)} people, ${d.village ? `living in the village of ${esc(d.village)}` : `camped at ${esc(d.camp)}`}</div>
-        <p class="stats"></p><p class="voices"></p>${d.homes ? `<h4>Homes and stores</h4><p class="homes"></p>` : ""}<div class="needs"></div><h4>Hearths</h4><div class="hearths"></div><p class="sharing"></p>${d.feuds.length ? `<h4>Bad blood</h4><ul class="mem feuds-b"></ul>` : ""}<h4>Know-how</h4><ul class="mem ideas-b"></ul>${d.works.length ? `<h4>Weirs and plots</h4><ul class="mem works-b"></ul>` : ""}<h4>People</h4><div class="members"></div><div class="chips"><button type="button" data-act="journal">Journal</button></div>${d.events.length ? `<h4>Lately</h4><ul class="mem">${d.events.map(e => `<li>${esc(e.text)} <em>${when(e.t, this.time)}</em></li>`).join("")}</ul>` : ""}`;
+        <p class="stats"></p><p class="voices"></p>${d.needs ? `<p class="needs-b"><b>Short of:</b> ${esc(d.needs)}.</p>` : ""}${d.homes ? `<h4>Homes and stores</h4><p class="homes"></p>` : ""}<div class="needs"></div><h4>Hearths</h4><div class="hearths"></div><p class="sharing"></p>${d.feuds.length ? `<h4>Bad blood</h4><ul class="mem feuds-b"></ul>` : ""}<h4>Know-how</h4><ul class="mem ideas-b"></ul>${d.works.length ? `<h4>Weirs and plots</h4><ul class="mem works-b"></ul>` : ""}<h4>People</h4><div class="members"></div><div class="chips"><button type="button" data-act="journal">Journal</button></div>${d.events.length ? `<h4>Lately</h4><ul class="mem">${d.events.map(e => `<li>${esc(e.text)} <em>${when(e.t, this.time)}</em></li>`).join("")}</ul>` : ""}`;
       this.bindChrome(t);
       t.querySelector<HTMLButtonElement>("[data-act=journal]")!.onclick = () => this.cb.journal({ band: d.id, name: `The ${d.name}`, note: "their story" });
       const m = t.querySelector(".members")!;
       for (const p of d.members) { const b = el("button", "mb" + (d.respected?.id === p.id ? " lead" : "")); b.type = "button"; b.title = `${p.name}, ${p.age}${d.respected?.id === p.id ? ", leads the band" : ""}`; b.append(portrait(p.look, 24)); b.onclick = () => this.cb.pin(p.id, 0); m.append(b); }
       /* what the band knows that the old ways did not teach, and who holds it */
       const il = t.querySelector(".ideas-b")!;
-      const fresh = d.ideas.filter(i => !i.start), fire = d.ideas.find(i => i.name === "making fire");
+      const fresh = d.ideas.filter(i => !i.start), fire = d.ideas.find(i => i.id === Idea.MakeFire);
       for (const i of fresh) {
         const names = i.who.map(w => `<button type="button" class="lnk" data-pin="${w.id}">${esc(w.name)}</button>`);
         const who = i.n === 1 ? `only ${names[0]} knows it` : i.n <= 3 ? names.slice(0, -1).join(", ") + " and " + names[names.length - 1] : `${names.slice(0, 2).join(", ")} and ${i.n - 2} more`;

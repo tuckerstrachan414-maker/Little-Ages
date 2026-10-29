@@ -2,7 +2,8 @@ import { Biome, DAY_SECONDS, Flag, SPECIES_NAMES } from "../../shared/types.ts";
 import { Bubble, type VillageSnap } from "../../shared/people.ts";
 import type { Band } from "./band.ts";
 import { compound, lexeme } from "./language.ts";
-import { IDEAS } from "./ideas.ts";
+import { TECHS as IDEAS } from "../tech/tree.ts";
+import { unpackHint } from "../tech/tree.ts";
 import { Work, worksAround } from "./works.ts";
 import { hutStands, pitFood } from "./homes.ts";
 import type { Society } from "./society.ts";
@@ -117,18 +118,13 @@ function eventName(s: Society, x: number, y: number): { words: string[]; gloss: 
     case "fireout": case "ember": return { words: ["cold", "hearth"], gloss: "Cold Hearth", why: `for the night the fire went out there` };
     case "hut": return { words: ["first", "roof"], gloss: "First Roof", why: `for the first hut anyone ever raised, ${who ? `${who}'s, ` : ""}which stood there` };
     case "discover": {
-      const d = IDEAS[best.hint % 100]; if (!d) return null;
-      const g = IDEA_PLACE[d.id]; if (!g) return null;
+      const d = IDEAS[unpackHint(best.hint).id]; if (!d) return null;
+      const g = d.place; if (!g) return null;
       return { words: g[0], gloss: g[1], why: `for ${who || "someone"}, who worked out ${d.how} there` };
     }
   }
   return null;
 }
-const IDEA_PLACE: Record<number, [string[], string]> = {
-  5: [["spark", "hill"], "Spark Hill"], 6: [["flint", "edge"], "Flint Edge"], 7: [["axe", "wood"], "Axe Wood"], 8: [["root", "ground"], "Root Ground"],
-  9: [["basket", "reeds"], "Basket Reeds"], 10: [["net", "water"], "Net Water"], 11: [["weir", "water"], "Weir Water"], 12: [["smoke", "rack"], "Smoke Racks"],
-  13: [["seed", "ground"], "Seed Ground"], 14: [["deep", "store"], "Deep Store"], 15: [["first", "roof"], "First Roof"],
-};
 /** The lie of the land at a place, for naming it: a ford, a shore, a bay, a hill, a wood, a meadow. */
 function landform(s: Society, x: number, y: number): string {
   const W = s.w.w; let river = false, lake = false, sea = false, hill = false;

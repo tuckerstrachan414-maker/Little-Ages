@@ -1,0 +1,37 @@
+import { Branch, Era, branch } from "../defs.ts";
+
+const E = Era, n = branch(Branch.Animals);
+/** Animals and herding: the beasts people keep, and what they give. */
+export const ANIMALS = [
+  n("taming-dogs", "dogs", "how to raise a wolf pup into a dog", E.OldStone, []),
+  n("herding-goats-and-sheep", "keeping goats and sheep", "how to keep goats and sheep", E.NewStone, ["snares"]),
+  n("herding-cattle", "keeping cattle", "how to keep cattle", E.NewStone, ["spear", "taming-dogs"]),
+  n("herding-pigs", "keeping pigs", "how to keep pigs", E.NewStone, ["snares"]),
+  n("milking", "milking", "how to milk the animals one keeps", E.NewStone, [], { any: ["herding-goats-and-sheep", "herding-cattle"] }),
+  n("penning", "pens and folds", "how to pen animals for the night", E.NewStone, ["huts"], { any: ["herding-goats-and-sheep", "herding-cattle", "herding-pigs"] }),
+  n("wool-shearing", "shearing", "how to shear wool", E.NewStone, ["herding-goats-and-sheep", "blades"]),
+  n("cheese", "cheese", "how to make cheese", E.NewStone, ["milking", "pottery"]),
+  n("butter", "butter", "how to churn butter", E.NewStone, ["milking", "pottery"]),
+  n("ox-yoke", "the ox yoke", "how to yoke oxen to pull", E.Copper, ["herding-cattle", "woodworking"]),
+  n("donkey-packing", "pack donkeys", "how to load donkeys", E.Copper, ["herding-goats-and-sheep"]),
+  n("horse-taming", "taming horses", "how to tame horses", E.Copper, ["herding-cattle"]),
+  n("riding", "riding", "how to ride a horse", E.Copper, ["horse-taming"]),
+  n("chariotry", "chariots", "how to drive a chariot", E.Bronze, ["riding", "wheel"]),
+  n("horse-breeding", "breeding horses", "how to breed horses for speed and strength", E.Bronze, ["horse-taming"]),
+  n("camel-packing", "pack camels", "how to load and ride camels", E.Bronze, ["donkey-packing"]),
+  n("beekeeping-hives", "beehives", "how to keep bees in hives", E.Bronze, ["beekeeping"]),
+  n("horseshoes", "horseshoes", "how to shoe a horse", E.Iron, ["iron-tools", "riding"]),
+  n("saddle", "the saddle", "how to make a saddle", E.Iron, ["riding", "leather-tanning"]),
+  n("poultry", "keeping fowl", "how to keep fowl for eggs", E.Iron, ["penning"]),
+  n("stud-farms", "stud farms", "how to run a stud farm", E.Classical, ["horse-breeding"]),
+  n("stirrup", "the stirrup", "how to ride with stirrups", E.Classical, ["saddle"]),
+  n("heavy-horse", "the heavy horse", "how to breed a horse that carries armor", E.Medieval, ["stud-farms"]),
+  n("falconry", "falconry", "how to hunt with a hawk", E.Medieval, ["poultry"]),
+  n("silk-moths", "silk", "how to raise silk moths", E.Medieval, ["weaving"]),
+  n("selective-breeding-stock", "breeding stock", "how to breed stock for meat and milk", E.EarlyModern, ["stud-farms"]),
+  n("merino-wool", "fine wool", "how to breed sheep for fine wool", E.EarlyModern, ["selective-breeding-stock"]),
+  n("veterinary-medicine", "animal doctoring", "how to doctor animals", E.Industrial, ["physicians"]),
+  n("dairy-industry", "dairies", "how to run a dairy at scale", E.Industrial, ["refrigeration"]),
+  n("artificial-insemination", "breeding by science", "how to breed stock by science", E.Modern, ["veterinary-medicine"]),
+  n("factory-farming", "factory farms", "how to raise animals by the thousand", E.Modern, ["dairy-industry"]),
+];

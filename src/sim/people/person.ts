@@ -88,6 +88,7 @@ export const Mem = {
   Paired: 11, Parted: 12, Moved: 13, Split: 14, Learned: 15, Found: 16, Cold: 17, Rejected: 18, Freeloader: 19, Helped: 20, Feast: 21,
   Refused: 22, Fight: 23, Peace: 24, Gift: 25, Mocked: 26, Left: 27, Feud: 28, Repaid: 29, Stingy: 30,
   Discovered: 31, FireOut: 32, Taught: 33, Harvest: 34,
+  HerdLoss: 35, Kept: 36,
 } as const;
 export interface Memory { t: number; k: number; who: number; v: number; x: number; y: number; n: number; }
 
@@ -97,10 +98,12 @@ export interface Person {
   /** bravery, kindness, greed, ambition, curiosity, sociability, temper, diligence */
   traits: number[];
   skills: number[];
-  /** how well they know each idea (see ideas.ts), 0 for not at all */
-  know: number[];
+  /** how well they know each idea (see tech/tree.ts), 0 for not at all */
+  know: Float32Array;
   /** where each idea came from: whoever they learned it from, -1 if they worked it out, -2 if they worked it out from something others made, 0 if they grew up with it */
-  from: number[];
+  from: Int32Array;
+  /** the ideas they know, by index in rising order (kept beside `know`, so loops over what someone knows stay short) */
+  knownIds: number[];
   mother: number; father: number; partner: number; children: number[];
   /** who looks after a child whose parents are gone */
   guardian: number;

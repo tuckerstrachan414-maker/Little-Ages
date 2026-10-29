@@ -3,7 +3,8 @@ import type { BandDetail, BandFeud, Feuding, Kin, PersonDetail, VillageDetail } 
 import { TRAITS } from "./genetics.ts";
 import { Goal, Mem, SKILL_NAMES, St, kinWord, type Person } from "./person.ts";
 import { storeFood, campFood, homeOf, type Band } from "./band.ts";
-import { IDEAS, Idea, howKnown } from "./ideas.ts";
+import { howKnown } from "./ideas.ts";
+import { TECHS as IDEAS, Idea } from "../tech/tree.ts";
 import { Work, worksAround } from "./works.ts";
 import { pitFood, pitOf, hutOf, hutWords } from "./homes.ts";
 import { villageOf } from "./villages.ts";
@@ -12,6 +13,7 @@ import { hearthDays, household, appetiteOf, householdAppetite } from "./sharing.
 import { feudsWith, sideOf } from "./feuds.ts";
 import { followersOf, leads } from "./leaders.ts";
 import type { Society } from "./society.ts";
+import { needsLine } from "../tech/problems.ts";
 
 /*
   Turning a mind into words for the pinned tag: what someone is doing and why, how they
@@ -246,7 +248,7 @@ export function bandDetail(s: Society, id: number): BandDetail | null {
       return { id: d.id, name: d.name, start: d.start, n: who.length, who: who.slice(0, 3).map(q => ({ id: q.id, name: q.name })) };
     }),
     works: worksAround(s, b.x, b.y, 18).filter(w => (w.kind === Work.Weir || w.kind === Work.Plot) && (w.band === b.id || !s.bandById.has(w.band))).map(w => ({ kind: w.kind === Work.Weir ? "weir" as const : "plot" as const, text: workText(s, b.id, w), x: w.x, y: w.y })),
-    homes: homesLine(s, b), stay: stayLine(s, b), village: villageOf(s, b)?.name ?? "",
+    homes: homesLine(s, b), stay: stayLine(s, b), needs: needsLine(b), village: villageOf(s, b)?.name ?? "",
     days: campFood(b) / Math.max(1, b.appetite), fire: b.fire, moves: b.moves, camp: b.siteName,
     yesterday: { brought: Math.round(b.yesterday.plant + b.yesterday.meat + b.yesterday.fish), eaten: Math.round(b.yesterday.eaten) },
     shelter: cult.shelter, sharing: cult.sharing, cousins: cult.cousins,

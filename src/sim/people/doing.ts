@@ -8,7 +8,8 @@ import { endFight, talkRound, grievance } from "./feuds.ts";
 import { mock } from "./leaders.ts";
 import { gift } from "./friends.ts";
 import { storeFood, homeOf } from "./band.ts";
-import { IDEAS, Idea, knows, practice, inspire, inUse, learn, ready, shown, tellIdea, riverAt, rootsAt } from "./ideas.ts";
+import { knows, practice, inspire, inUse, learn, ready, shown, tellIdea, riverAt, rootsAt } from "./ideas.ts";
+import { TECHS as IDEAS, Idea } from "../tech/tree.ts";
 import { Work, emptyWeir, buildWeir, sow, resow, seedLine, cropAt, workById, worksAround } from "./works.ts";
 import { raise, digPit, storeInPit, fetchFromPit, pitOf } from "./homes.ts";
 
@@ -380,7 +381,7 @@ function drop(s: Society, p: Person): void {
   const amt = p.carryAmt, kind = p.carryKind;
   if (kind === Food.Wood) b.store.wood += amt;
   else {
-    if (kind === Food.Plant) b.today.plant += amt; else if (kind === Food.Fish) b.today.fish += amt; else b.today.meat += amt;
+    if (kind === Food.Plant) b.today.plant += amt; else { if (kind === Food.Fish) b.today.fish += amt; else b.today.meat += amt; b.meatAt = s.time; }
     /* some into the band's pot, the rest to the household's own hearth */
     deposit(s, p, kind, amt);
     p.gave = p.gave * 0.98 + amt * 0.02 * 40; p.gaveToday += amt;

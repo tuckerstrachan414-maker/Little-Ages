@@ -10,7 +10,7 @@ import { Ecology } from "../src/sim/ecology.ts";
 import { Birds, Bird } from "../src/sim/birds.ts";
 import { settle } from "../src/sim/settle.ts";
 import { Society } from "../src/sim/people/society.ts";
-import { IDEAS } from "../src/sim/people/ideas.ts";
+import { TECHS as IDEAS } from "../src/sim/tech/tree.ts";
 import { DAY_SECONDS, DAYS_PER_SEASON, SEASON_NAMES, SPECIES_NAMES, type SizeKey } from "../src/shared/types.ts";
 
 const arg = (k: string, d: string) => { const i = process.argv.indexOf(`--${k}`); return i >= 0 ? process.argv[i + 1] : d; };

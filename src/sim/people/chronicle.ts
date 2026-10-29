@@ -1,6 +1,7 @@
 import { Species } from "../../shared/types.ts";
 import type { Society } from "./society.ts";
-import { IDEAS } from "./ideas.ts";
+import { TECHS as IDEAS } from "../tech/tree.ts";
+import { unpackHint } from "../tech/tree.ts";
 
 /*
   How much an event matters, and a headline for it. Nothing is scripted: weight comes from
@@ -37,7 +38,7 @@ const RARITY = 0.3;
   another language or a move into unknown land, 2 for twins; 1 for a feud passed down, a fight where someone
   was hurt, peace made by a go-between, a family driven out by a feud, a split along a feud or a following,
   gifts between two peoples. For know-how, `hint` is 100 times a level plus the idea: a discovery first in the
-  world (level 2) or first among a people (1); know-how crossing between peoples (1); lost to the world (1).
+  world (level 2) or first among a people (1); know-how crossing between peoples (1); lost to the world (1); see packHint.
 */
 export function weigh(s: Society, kind: string, who: number[], band: number, hint: number): Weighed {
   const [base, name] = BASE[kind] ?? [0.2, "Something happened"];
@@ -85,14 +86,14 @@ export function weigh(s: Society, kind: string, who: number[], band: number, hin
     case "gift": if (hint === 1) { sig += 0.2; title = "Gifts between peoples"; } break;
     case "refused": if (hint === 1) sig += 0.06; break;
     case "discover": {
-      const level = Math.floor(hint / 100), d = IDEAS[hint % 100];
+      const { level, id } = unpackHint(hint), d = IDEAS[id];
       if (level === 2) { sig += 0.42; title = d?.title || title; }
       else if (level === 1) { sig += 0.16; title = `New to a people: ${d?.name ?? "a way of doing things"}`; }
       else title = `Worked out again: ${d?.name ?? "a way of doing things"}`;
       break;
     }
-    case "spread": { const d = IDEAS[hint % 100]; if (hint >= 100) { sig += 0.12; title = `Across peoples: ${d?.name ?? "know-how"}`; } else title = `Know-how spreads: ${d?.name ?? ""}`; break; }
-    case "lost": { const d = IDEAS[hint % 100]; if (hint >= 100) { sig += 0.42; title = `Lost to the world: ${d?.name ?? "know-how"}`; } else title = `Know-how lost: ${d?.name ?? ""}`; break; }
+    case "spread": { const { level, id } = unpackHint(hint), d = IDEAS[id]; if (level >= 1) { sig += 0.12; title = `Across peoples: ${d?.name ?? "know-how"}`; } else title = `Know-how spreads: ${d?.name ?? ""}`; break; }
+    case "lost": { const { level, id } = unpackHint(hint), d = IDEAS[id]; if (level >= 1) { sig += 0.42; title = `Lost to the world: ${d?.name ?? "know-how"}`; } else title = `Know-how lost: ${d?.name ?? ""}`; break; }
     case "fireout": if (hint === 1) sig += 0.08; break;
     case "harvest": if (hint === 1) { sig += 0.3; title = "The first harvest anywhere"; } break;
   }

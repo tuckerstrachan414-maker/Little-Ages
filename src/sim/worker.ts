@@ -9,7 +9,7 @@ import { Society } from "./people/society.ts";
 import { personDetail, bandDetail, villageDetail } from "./people/inspect.ts";
 import { villageSnaps } from "./people/villages.ts";
 import { searchWorld, bondEdges } from "./people/search.ts";
-import { ideaSummary } from "./people/ideas.ts";
+import { techTree, techPanel, techNode } from "./people/../tech/summary.ts";
 import { DAY_SECONDS, DAYS_PER_SEASON, type MapMode, type Season, type WorldData } from "../shared/types.ts";
 import type { ToWorker, FromWorker } from "../shared/protocol.ts";
 
@@ -56,13 +56,15 @@ self.onmessage = (e: MessageEvent<ToWorker>) => {
     const w = world;
     const out: WorldData = { ...w, elev: copy(w.elev), biome: copy(w.biome), flags: copy(w.flags), tree: copy(w.tree), temp: copy(w.temp), rain: copy(w.rain), depth: copy(w.depth) };
     post({ type: "world", world: out }, [out.elev.buffer, out.biome.buffer, out.flags.buffer, out.tree.buffer, out.temp.buffer, out.rain.buffer, out.depth.buffer]);
+    post({ type: "techtree", defs: techTree() });
     sendBake(); sendFields();
   } else if (m.type === "speed") speed = m.speed;
   else if (m.type === "mode") { mode = m.mode; sendBake(); }
   else if (m.type === "settime") { time = m.time; const s = seasonAt(time); if (s !== lastSeason) { lastSeason = s; sendBake(); } }
   else if (m.type === "search") post({ type: "results", seq: m.seq, items: people ? searchWorld(people, m.q) : [] });
   else if (m.type === "bonds") { bonds = { on: m.on, view: m.view }; if (m.on) bondsAt = 0; }
-  else if (m.type === "ideas") { if (people) post({ type: "ideas", list: ideaSummary(people) }); }
+  else if (m.type === "tech") { if (people) post({ type: "tech", data: techPanel(people, m.group) }); }
+  else if (m.type === "technode") { if (people) post({ type: "technode", detail: techNode(people, m.id, m.group) }); }
   else if (m.type === "inspect") { inspect = { person: m.person, band: m.band, village: m.village ?? 0 }; if (people) people.selected = m.person; inspectAt = 0; }
 };
 

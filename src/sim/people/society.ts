@@ -7,7 +7,8 @@ import { ancestryFor, founderGenome, inherit, looksOf, temperament, hairAt, idea
 import { makeCulture, pickStyle, type Culture } from "./culture.ts";
 import { personName, placeName } from "./language.ts";
 import { Walker } from "./walk.ts";
-import { type Band, homeOf, storeDays, keepingDays, storeFood, campFood, siteValue, estimate, newDay, noFood } from "./band.ts";
+import { type Band, homeOf, storeDays, keepingDays, storeFood, campFood, siteValue, estimate, newDay, noFood, newProblems } from "./band.ts";
+import { problemsDay } from "../tech/problems.ts";
 import { Goal, Mem, Place, St, YEAR, ageOf, stageOf, type Archived, type KnownPlace, type Person, type Rel } from "./person.ts";
 import { decide, isInterruptible } from "./mind.ts";
 import { doStep, abandon } from "./doing.ts";
@@ -15,7 +16,8 @@ import { weigh } from "./chronicle.ts";
 import { eat, household, appetiteOf, reconcileHearths, carryHearth, spoil, forgetDebts, shareRound, reachFood } from "./sharing.ts";
 import { type Feud, feudDay, feudsOnDeath, feudLeave, feudOf, grievance, handDown, maybeFight, sideOf, fadeGrudges } from "./feuds.ts";
 import { chooseLeaders } from "./leaders.ts";
-import { IDEA_COUNT, Idea, type IdeaLog, newIdeaLog, founderKnow, growUp, ideasDay, countBand, watch, bandKnows } from "./ideas.ts";
+import { type IdeaLog, newIdeaLog, founderKnow, growUp, ideasDay, countBand, watch, bandKnows, noteKnown } from "./ideas.ts";
+import { TECH_COUNT as IDEA_COUNT, Idea } from "../tech/tree.ts";
 import { Work, worksDay, lookAtWorks, plotHope, workById, worksAround } from "./works.ts";
 import { layoutCamp, recountPits, hutStands, stakeDays, leaveBehind, pitFood, hutHomes } from "./homes.ts";
 import { villagesDay, noteSite, friendly, roomFor, tiesTo, VILLAGE_R, type Village, type Gathering, type Notable } from "./villages.ts";
@@ -93,6 +95,12 @@ export class Society {
   private herdGridAt = -1;
   /** people near the camera get step-by-step attention; others are still simulated in full */
   selected = 0;
+  /** the land's resources and the weather, once they are part of the world (later checkpoints fill these) */
+  resources?: { knownNear(culture: number, x: number, y: number, r: number, what: string): boolean };
+  weather?: { moistAt(x: number, y: number): number };
+  /** each people's refinement of each idea, and how often it has done each (later checkpoints fill these) */
+  refine?: Map<number, Float32Array>;
+  uses?: Map<number, Uint32Array>;
 
   constructor(w: WorldData, eco: Ecology, wild: Wildlife, seed: number, start: StartOptions, time: number) {
     this.w = w; this.eco = eco; this.wild = wild; this.walker = new Walker(w);
@@ -256,7 +264,7 @@ export class Society {
     const id = this.bands.length ? Math.max(...this.bands.map(b => b.id)) + 1 : 1;
     const name = placeName(this.cultures[culture].lang, this.rng);
     const b: Band = { id, name, culture, color: BAND_COLORS[(id - 1) % BAND_COLORS.length], x, y, fire: 0.8, store: { ...noFood(), wood: 2, hides: 0 }, hearths: new Map(),
-      members: [], founded: this.time, movedAt: this.time, moves: 0, homes: new Map(), busy: new Map(), respected: 0, followers: 0, ledSince: this.time, contender: 0, parent, met: new Set(), appetite: 1, moving: null, siteName: placeName(this.cultures[culture].lang, this.rng), water: [x, y], past: [], today: newDay(), yesterday: newDay(), can: new Array(IDEA_COUNT).fill(0), keeper: new Array(IDEA_COUNT).fill(0), outAt: 0, pit: 0, seed: {} };
+      members: [], founded: this.time, movedAt: this.time, moves: 0, homes: new Map(), busy: new Map(), respected: 0, followers: 0, ledSince: this.time, contender: 0, parent, met: new Set(), appetite: 1, moving: null, siteName: placeName(this.cultures[culture].lang, this.rng), water: [x, y], past: [], today: newDay(), yesterday: newDay(), can: new Int32Array(IDEA_COUNT), keeper: new Int32Array(IDEA_COUNT), outAt: 0, pit: 0, seed: {}, problems: newProblems(), meatAt: this.time };
     this.bands.push(b); this.bandById.set(id, b);
     return b;
   }
@@ -319,7 +327,7 @@ export class Society {
     }
     const p: Person = {
       id: this.nextId++, name, sex, born, genome, noise, looks, traits: temperament(genome, rng),
-      skills: [0, 0, 0, 0].map(() => adult * rng.range(0.15, 0.75)), know: founderKnow(age, adult), from: new Array(IDEA_COUNT).fill(0),
+      skills: [0, 0, 0, 0].map(() => adult * rng.range(0.15, 0.75)), know: founderKnow(age, adult), knownIds: [], from: new Int32Array(IDEA_COUNT),
       mother, father, partner: 0, children: [], guardian: 0, band: b.id,
       x: b.x, y: b.y, dir: 0,
       food: 1.3 + rng.next() * 0.4, condition: 1.2, dayFood: 0, water: 0.7 + rng.next() * 0.3, rest: 0.7 + rng.next() * 0.3, warmth: 0.9, company: 0.7, fear: 0, health: 1, mood: 0.3, skin: age >= 6 ? 1 : 0,
@@ -332,6 +340,7 @@ export class Society {
       rel: new Map(), mem: [], places: [], moveWish: 0, leaveWish: 0, lost: 0, tripYield: 2.5, nextLook: 0, nextDanger: 0, party: 0,
       style: "short", lookKey: "", learning: -1,
     };
+    noteKnown(p);
     p.style = pickStyle(cult, sex, looks.curl, rng);
     p.follows = p.id;
     /* someone grown has standing earned over a life already lived: good hunters most, then good providers, and age */
@@ -877,6 +886,7 @@ export class Society {
     feudDay(this);
     ideasDay(this);
     worksDay(this);
+    for (const b of this.bands) problemsDay(this, b);
     for (const b of this.bands.slice()) this.bandDay(b);
     villagesDay(this);
     /* carcasses spoil, and scavengers find them */

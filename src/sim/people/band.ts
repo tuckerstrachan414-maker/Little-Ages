@@ -1,4 +1,5 @@
 import { Place, type Person } from "./person.ts";
+import { newProblems } from "../tech/problems.ts";
 
 /*
   A band: the people who share a fire. It has a camp, a fire someone has to keep fed, and
@@ -53,15 +54,20 @@ export interface Band {
   today: Day;
   yesterday: Day;
   /** how many of the band know each idea, and the one who knows it best (counted each morning) */
-  can: number[];
-  keeper: number[];
+  can: Int32Array;
+  keeper: Int32Array;
   /** when the fire last went out */
   outAt: number;
   /** food put by in the band's storage pits at this camp (counted again each day and whenever a pit is filled or emptied) */
   pit: number;
   /** the band's own seed for each crop it sows: how tame the line has grown, from 0 (wild) up */
   seed: Record<string, number>;
+  /** what the band is short of, 0..1 by Problem, worked out each morning (see tech/problems.ts) */
+  problems: Float32Array;
+  /** when meat or fish last came into camp */
+  meatAt: number;
 }
+export { newProblems };
 /** Food brought in, how much of it went into the pot, what was eaten, what passed between hearths, and fresh meat and fish lost to rot. */
 export interface Day { plant: number; meat: number; fish: number; eaten: number; shared: number; given: number; spoiled: number; }
 export const newDay = (): Day => ({ plant: 0, meat: 0, fish: 0, eaten: 0, shared: 0, given: 0, spoiled: 0 });
