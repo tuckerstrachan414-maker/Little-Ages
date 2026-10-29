@@ -33,7 +33,7 @@ const CTX_WORDS: [keyof Ctx, string][] = [
   ["clayNear", "where the bank was all clay"], ["damp", "in ground that sweated damp"], ["overflow", "with more to put by than the pit would take"], ["broke", "with half the batch cracked in the ashes"],
   ["grain", "with hard grain to cook"], ["pots", "with a pot on the fire"], ["sick", "sitting with the sick"],
   ["young", "with the kid of the animal {she} had killed bleating at {her} feet"], ["kept", "with animals kept so long they came when called"], ["wolves", "with wolves howling close"], ["lost", "after an animal had wandered off in the night"],
-  ["missed", "after a throw that fell short"], ["farWater", "with the water a long walk off"], ["slow", "with the harvest going slowly"],
+  ["missed", "after a throw that fell short"], ["farWater", "after a long walk for a drink"], ["slow", "with the harvest going slowly"],
 ];
 const SEASON_WORDS = ["in spring", "in the heat of summer", "in autumn", "in the dead of winter"];
 

@@ -75,7 +75,7 @@ export function hud(world: WorldData, dock: Dock, cb: { onSpeed: (s: number) => 
   const SPEEDS = [0, 1, 3, 10, 30, 100];
   time.innerHTML = `<span id="hud-date">...</span><div class="seg" role="group" aria-label="Speed">${SPEEDS.map(s => `<button type="button" data-speed="${s}" aria-pressed="${s === 1}" aria-label="${s ? s + " times speed" : "Pause"}">${s ? s + "X" : "II"}</button>`).join("")}</div>`;
   const modes = el("div", "paper"); modes.id = "hud-modes";
-  const MODES: [MapMode, string][] = [["terrain", "TERRAIN"], ["elevation", "HEIGHT"], ["temperature", "HEAT"], ["rainfall", "RAIN"], ["biomes", "BIOMES"], ["resources", "LAND"]];
+  const MODES: [MapMode, string][] = [["terrain", "TERRAIN"], ["elevation", "HEIGHT"], ["temperature", "HEAT"], ["rainfall", "RAIN"], ["biomes", "BIOMES"], ["resources", "LAND"], ["dryness", "SOIL"]];
   /* the LAND mode's key: what each color in the ground is */
   const LEGEND = [8, 9, 10, 13, 14, 15, 16, 17, 18, 19, 20];
   modes.innerHTML = `<h3>Map mode</h3><div class="seg modes" role="group" aria-label="Map mode">${MODES.map(([m, l]) => `<button type="button" data-mode="${m}" aria-pressed="${m === "terrain"}">${l}</button>`).join("")}</div><div class="legend" id="hud-legend" hidden>${LEGEND.map(k => `<span><i style="background:${MAT_COLORS[k]}"></i>${MAT_NAMES[k].replace(/ ore$/, "")}</span>`).join("")}<span><i style="background:#60884f"></i>wood standing</span><span><i style="background:#beb08e"></i>bare ground</span><small>Deposits darken as they are dug out; the ring is the peoples who know of them.</small></div><div class="foot"><button type="button" class="pbtn" id="new-world">NEW WORLD</button></div>`;
@@ -108,7 +108,7 @@ export function hud(world: WorldData, dock: Dock, cb: { onSpeed: (s: number) => 
   const date = time.querySelector("#hud-date")!, life = cap.querySelector("#hud-life")!;
   const mctx = mini.getContext("2d")!;
   let base: HTMLCanvasElement | null = null;
-  let fields: { gw: number; cell: number; rabbits: Uint8Array; fish: Uint8Array; left?: Uint8Array } | null = null;
+  let fields: { gw: number; cell: number; rabbits: Uint8Array; fish: Uint8Array; left?: Uint8Array; moist?: Uint8Array } | null = null;
   let deposits: DepositSnap[] = [];
   const plenty = (v: number) => v > 0.66 ? "plenty" : v > 0.33 ? "some" : v > 0.08 ? "scarce" : "none";
   const dugWord = (left: number) => left > 0.95 ? "untouched" : left > 0.6 ? "a little dug" : left > 0.3 ? "half dug" : left > 0.02 ? "nearly dug out" : "dug out";
@@ -124,7 +124,7 @@ export function hud(world: WorldData, dock: Dock, cb: { onSpeed: (s: number) => 
       life.textContent = `${l.people.toLocaleString()} PEOPLE · ${k(l.animals + l.birds + l.rabbits)} ANIMALS`;
       life.setAttribute("title", `${l.animals.toLocaleString()} large animals, ${l.birds.toLocaleString()} birds, about ${l.rabbits.toLocaleString()} rabbits and hares, about ${l.fish.toLocaleString()} fish`);
     },
-    setFields(f: { gw: number; cell: number; rabbits: Uint8Array; fish: Uint8Array; left?: Uint8Array }) { fields = f; },
+    setFields(f: { gw: number; cell: number; rabbits: Uint8Array; fish: Uint8Array; left?: Uint8Array; moist?: Uint8Array }) { fields = f; },
     setDeposits(list: DepositSnap[]) { deposits = list; },
     setMinimap(src: HTMLCanvasElement) { base = document.createElement("canvas"); base.width = mw; base.height = mh; const b = base.getContext("2d")!; b.imageSmoothingEnabled = true; b.imageSmoothingQuality = "high"; b.drawImage(src, 0, 0, mw, mh); },
     drawMinimap(view: { x0: number; y0: number; x1: number; y1: number }) {
@@ -143,6 +143,7 @@ export function hud(world: WorldData, dock: Dock, cb: { onSpeed: (s: number) => 
       if (fields) {
         const c = Math.floor(y / fields.cell) * fields.gw + Math.floor(x / fields.cell);
         game = f & Flag.Water ? `<dt>FISH</dt><dd>${plenty(fields.fish[c] / 255)}</dd>` : fields.rabbits[c] ? `<dt>RABBITS</dt><dd>${plenty(fields.rabbits[c] / 255)}</dd>` : "";
+        if (!(f & Flag.Water) && fields.moist) { const m = fields.moist[c] / 255; game += `<dt>SOIL</dt><dd>${m < 0.15 ? "parched" : m < 0.35 ? "dry" : m < 0.65 ? "damp" : "wet"}</dd>`; }
       }
       /* what lies in the ground here */
       for (const d of deposits) {

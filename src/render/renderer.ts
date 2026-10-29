@@ -8,7 +8,7 @@ import { FN } from "../shared/palette.ts";
 import { hash2 } from "../shared/rng.ts";
 import { isSnowy } from "../shared/seasonfx.ts";
 import { fineGround } from "./ground.ts";
-import { drawBirds, drawFish, drawRabbits, type Fields, type FlockSnap } from "./life.ts";
+import { drawBirds, drawFish, drawRabbits, drawDryness, type Fields, type FlockSnap } from "./life.ts";
 import { PeopleLayer } from "./people.ts";
 import { paintInDepth, type DepthItem } from "./depth.ts";
 import { CREATURE_SCALE } from "./scale.ts";
@@ -157,6 +157,7 @@ export class Renderer {
     const detail = z >= 4 && this.mode === "terrain";
     if (detail && this.bucketFor(z) >= 8) this.drawChunks(now, z);   /* below sprite scale the ground is just the map itself */
     if (z >= 6 && this.mode === "terrain") this.drawWater(now, z, this.bucketFor(z) < 8);
+    if (this.fields && this.mode === "terrain" && z >= 2) drawDryness(ctx, cam, this.world, this.fields);
     if (this.fields && this.mode === "terrain") drawFish(ctx, cam, this.world, this.fields, now, this.season);
     /* 3. everything that stands on the ground, painted in depth order */
     const ba = Math.min(1, (now - this.herdT) / 100);

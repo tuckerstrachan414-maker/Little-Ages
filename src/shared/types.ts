@@ -31,7 +31,7 @@ export type Flag = (typeof Flag)[keyof typeof Flag];
 
 export type Season = 0 | 1 | 2 | 3;   /* spring, summer, autumn, winter */
 export const SEASON_NAMES = ["Spring", "Summer", "Autumn", "Winter"];
-export type MapMode = "terrain" | "elevation" | "temperature" | "rainfall" | "biomes" | "resources";
+export type MapMode = "terrain" | "elevation" | "temperature" | "rainfall" | "biomes" | "resources" | "dryness";
 
 export interface WorldData {
   w: number; h: number; seed: number; size: SizeKey;

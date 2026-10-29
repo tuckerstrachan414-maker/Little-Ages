@@ -285,7 +285,12 @@ function work(s: Society, p: Person, st: Step, dt: number, anim: number): void {
       for (const cid of p.children) { const c = s.byId.get(cid); if (c && s.age(c) >= 1 && s.age(c) < 7 && c.food < 1 && Math.hypot(c.x - p.x, c.y - p.y) < 3) s.eatFromStore(c, b, 0.8); }
       break;
     }
-    case St.Drink: p.water = 1; if (s.age(p) >= 6) p.skin = 1; break;
+    case St.Drink: {
+      p.water = 1; if (s.age(p) >= 6) p.skin = 1;
+      const far = Math.hypot(st.x - b.x, st.y - b.y) > 8, i = (st.y | 0) * s.w.w + (st.x | 0);
+      if (far || s.weather.moistAt(b.x, b.y) < 0.3) inspire(s, p, St.Drink, { farWater: far, damp: s.w.biome[i] === Biome.Swamp });
+      break;
+    }
     case St.Look: {
       s.learnSurroundings(p, 26);
       const wat = s.waterNear(p.x, p.y, 6);

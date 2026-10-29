@@ -22,6 +22,9 @@ import { Work, worksDay, lookAtWorks, plotHope, workById, worksAround } from "./
 import { layoutCamp, recountPits, hutStands, stakeDays, leaveBehind, pitFood, hutHomes } from "./homes.ts";
 import { villagesDay, noteSite, friendly, roomFor, tiesTo, VILLAGE_R, type Village, type Gathering, type Notable } from "./villages.ts";
 import { Resources, type Deposit } from "../resources.ts";
+import { Weather } from "../weather.ts";
+import { buildingsNear, standing } from "../buildings/build.ts";
+import { WELLS } from "../buildings/wants.ts";
 import { Mat, MATS, MAT_COUNT, isFood } from "../economy/goods.ts";
 import { newDiet, dietDay, dietScore, recoveryFactor } from "../economy/diet.ts";
 import { illness } from "./health.ts";
@@ -109,8 +112,8 @@ export class Society {
   selected = 0;
   /** what the land holds: deposits, and the wood standing on every tile */
   readonly resources: Resources;
-  /** the weather, once it is part of the world (a later checkpoint fills this) */
-  weather?: { moistAt(x: number, y: number): number };
+  /** the weather: the soil's moisture per patch, and the slow swing of wet and dry years */
+  readonly weather: Weather;
   /** each people's refinement of each idea, and how often it has done each (later checkpoints fill these) */
   refine?: Map<number, Float32Array>;
   uses?: Map<number, Uint32Array>;
@@ -118,6 +121,8 @@ export class Society {
   constructor(w: WorldData, eco: Ecology, wild: Wildlife, seed: number, start: StartOptions, time: number) {
     this.w = w; this.eco = eco; this.wild = wild; this.walker = new Walker(w);
     this.resources = new Resources(w, seed);
+    this.weather = new Weather(w, seed);
+    eco.setMoisture(this.weather.moist, this.weather.normal);
     this.rng = new Rng(seed * 31 + 101);
     this.start = start;
     this.time = time; this.day = Math.floor(time / DAY_SECONDS); this.lastDay = this.day;
@@ -189,13 +194,17 @@ export class Society {
     }
   }
   /** A good camp near (x, y): dry ground with room for shelters, close to fresh water. */
-  campSpot(x: number, y: number, r: number, from?: [number, number]): [number, number] | null {
+  campSpot(x: number, y: number, r: number, from?: [number, number], band?: Band): [number, number] | null {
     let best: [number, number] | null = null, bs = -1;
+    /* a people that digs wells can camp further from the river, though it costs them until the well is dug */
+    const wells = !!band && bandKnows(band, WELLS());
     for (let k = 0; k < 60; k++) {
       const tx = Math.round(x + (this.rng.next() - 0.5) * 2 * r), ty = Math.round(y + (this.rng.next() - 0.5) * 2 * r);
       if (!this.roomy(tx, ty) || from && !this.walker.reach(from[0], from[1], tx + 0.5, ty + 0.5)) continue;
-      const wat = this.waterNear(tx, ty, 5); if (!wat) continue;
-      const s = this.habitability(ty * this.w.w + tx) * 2 - Math.hypot(wat[0] - tx, wat[1] - ty) * 0.15 - Math.hypot(tx - x, ty - y) * 0.03;
+      const wat = this.waterNear(tx, ty, wells ? 12 : 5); if (!wat) continue;
+      const far = Math.hypot(wat[0] - tx, wat[1] - ty);
+      if (far > 5 && !wells) continue;
+      const s = this.habitability(ty * this.w.w + tx) * 2 - far * 0.15 - (far > 5 ? 0.6 : 0) - Math.hypot(tx - x, ty - y) * 0.03;
       if (s > bs) { bs = s; best = [tx + 0.5, ty + 0.5]; }
     }
     return best;
@@ -278,7 +287,7 @@ export class Society {
     const id = this.bands.length ? Math.max(...this.bands.map(b => b.id)) + 1 : 1;
     const name = placeName(this.cultures[culture].lang, this.rng);
     const b: Band = { id, name, culture, color: BAND_COLORS[(id - 1) % BAND_COLORS.length], x, y, fire: 0.8, store: { ...noFood(), wood: 2, hides: 0 }, hearths: new Map(),
-      members: [], founded: this.time, movedAt: this.time, moves: 0, homes: new Map(), busy: new Map(), respected: 0, followers: 0, ledSince: this.time, contender: 0, parent, met: new Set(), appetite: 1, moving: null, siteName: placeName(this.cultures[culture].lang, this.rng), water: [x, y], past: [], today: newDay(), yesterday: newDay(), can: new Int32Array(IDEA_COUNT), keeper: new Int32Array(IDEA_COUNT), outAt: 0, pit: 0, seed: {}, problems: newProblems(), meatAt: this.time, regrownAt: 0, goods: new Float32Array(MAT_COUNT), broke: 0, hgoods: new Map() };
+      members: [], founded: this.time, movedAt: this.time, moves: 0, homes: new Map(), busy: new Map(), respected: 0, followers: 0, ledSince: this.time, contender: 0, parent, met: new Set(), appetite: 1, moving: null, siteName: placeName(this.cultures[culture].lang, this.rng), water: [x, y], past: [], today: newDay(), yesterday: newDay(), can: new Int32Array(IDEA_COUNT), keeper: new Int32Array(IDEA_COUNT), outAt: 0, pit: 0, seed: {}, problems: newProblems(), meatAt: this.time, regrownAt: 0, goods: new Float32Array(MAT_COUNT), broke: 0, hgoods: new Map(), dryDays: 0, droughtAt: 0, well: 0 };
     this.bands.push(b); this.bandById.set(id, b);
     return b;
   }
@@ -438,7 +447,7 @@ export class Society {
   settleCamp(b: Band, x: number, y: number, first = false): void {
     b.x = x; b.y = y;
     b.past.push([x, y]); if (b.past.length > 8) b.past.shift();
-    b.water = this.waterNear(x, y, 8) ?? [x, y];
+    b.water = this.waterNear(x, y, 8) ?? this.wellSpot(x, y, 12) ?? this.waterNear(x, y, 14) ?? [x, y];
     if (!first) {
       const stay = (this.time - b.movedAt) / DAY_SECONDS, c = this.stats.camp;
       c.stays[stay < 5 ? 0 : stay < 10 ? 1 : stay < 20 ? 2 : stay < 40 ? 3 : stay < 80 ? 4 : 5]++; c.stayDays += stay;
@@ -446,6 +455,17 @@ export class Society {
     }
     this.layoutHomes(b);
     for (const id of b.members) { const p = this.byId.get(id); if (p) this.learnPlace(p, Place.Camp, x, y, 1, b.id, 0); }
+  }
+  /** The nearest well standing within r of (x, y), if there is one. */
+  wellNear(x: number, y: number, r: number): Work | null {
+    const wells = buildingsNear(this, x, y, r, Line.Well).filter(w => standing(w));
+    if (!wells.length) return null;
+    return wells.sort((a, c) => Math.hypot(a.x - x, a.y - y) - Math.hypot(c.x - x, c.y - y))[0];
+  }
+  /** Where to stand at a well standing within r of (x, y), if there is one. */
+  wellSpot(x: number, y: number, r: number): [number, number] | null {
+    const w = this.wellNear(x, y, r);
+    return w ? [w.x, w.y + 1] : null;
   }
   /** The households of a band, by head, in a steady order. */
   heads(b: Band): number[] {
@@ -927,7 +947,18 @@ export class Society {
   /** The land, once a day: dead trees fall, cleared ground grows back, and the patches whose trees changed are counted again. */
   private landDay(): void {
     const res = this.resources;
-    res.daily(this.time, this.weather ? (x, y) => this.weather!.moistAt(x, y) : undefined);
+    this.weather.daily(this.time, this.season);
+    res.daily(this.time, (x, y) => this.weather.moistAt(x, y));
+    /* a dry year, felt at a camp whose ground has gone dry for days on end; and the well, once one stands by the camp, is where the band drinks */
+    for (const b of this.bands) {
+      if (b.moving) continue;
+      const well = this.wellNear(b.x, b.y, 12);
+      b.well = well ? well.id : 0;
+      if (well && Math.hypot(well.x - b.x, well.y + 1 - b.y) < Math.hypot(b.water[0] - b.x, b.water[1] - b.y)) b.water = [well.x, well.y + 1];
+      const c = this.weather.cellOf(b.x, b.y);
+      b.dryDays = this.weather.droughtAt(c) ? b.dryDays + 1 : 0;
+      if (b.dryDays === 10 && this.time - b.droughtAt > YEAR) { b.droughtAt = this.time; this.event("drought", Bubble.Sun, `The grass has gone brown around ${b.siteName} and the roots are hard to find: a dry year for the ${b.name}.`, b.x, b.y, [], b.id, 0); }
+    }
     for (const c of res.takeDirty()) this.eco.recount(c);
     /* a wood coming back around a long-lived camp is worth telling, now and then */
     for (const i of res.regrownToday) {
@@ -1000,6 +1031,8 @@ export class Society {
     const what = cause === "old age" ? "died of old age" : cause === "childbirth" ? "died in childbirth" : cause === "illness" ? (age < 5 ? "died of a fever" : "died of an illness") : cause === "wolves" || cause === "a bear" ? `was killed by ${cause}` : cause.startsWith("hunting") ? `was killed ${cause}` : `died of ${cause}`;
     const ageText = age < 1 ? `${Math.max(1, Math.round(age * 12))} months old` : `aged ${Math.floor(age)}`;
     this.event("death", Bubble.Sad, `${p.name} of the ${b?.name ?? "wilds"} ${what}${word ? `, a ${word} ` : ", "}${ageText}.`, p.x, p.y, [p.id], p.band);
+    /* a band whose leader has died has no leader until it settles on another */
+    if (b && b.respected === p.id) { b.respected = 0; b.followers = 0; b.ledSince = this.time; }
     if (b) { relayout(this, b); if (b.members.length === 0) this.endBand(b, "is no more"); }
   }
   private fosterBaby(baby: Person, b: Band | undefined): void {
@@ -1189,7 +1222,7 @@ export class Society {
     const inHuts = [...b.homes.values()].some(h => h[2] > 0);
     for (const o of tries.slice(0, 6)) {
       /* going home is going back to the very fire, among the huts */
-      const sp = o.home && this.walker.dry(o.at[0], o.at[1]) ? o.at : this.campSpot(o.at[0], o.at[1], 12, [b.x, b.y]); if (!sp) continue;
+      const sp = o.home && this.walker.dry(o.at[0], o.at[1]) ? o.at : this.campSpot(o.at[0], o.at[1], 12, [b.x, b.y], b); if (!sp) continue;
       if (!roomFor(this, b, sp[0], sp[1])) continue;
       /* a band living in huts does not shift its fire a short way and leave them standing empty: it stays, or goes somewhere new (unless hunger drives it out) */
       if (inHuts && o.by && !o.home && Math.hypot(sp[0] - b.x, sp[1] - b.y) < 22) continue;
@@ -1274,7 +1307,7 @@ export class Society {
     }
     let spot: [number, number] | null = null, route: number[] | null = null;
     for (const o of known.slice(0, 6)) {
-      const sp = this.campSpot(o.at[0], o.at[1], 12, [b.x, b.y]); if (!sp) continue;
+      const sp = this.campSpot(o.at[0], o.at[1], 12, [b.x, b.y], b); if (!sp) continue;
       const r = this.walker.route(b.x, b.y, sp[0], sp[1], 40000); if (!r) continue;
       spot = sp; route = r; break;
     }

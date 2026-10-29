@@ -8,6 +8,8 @@ import { Problem } from "../tech/problems.ts";
 import { hutOf, hutStands, stayHope, clearAt } from "../people/homes.ts";
 import { Mat, MATS } from "../economy/goods.ts";
 import type { Society } from "../people/society.ts";
+import { techIx } from "../tech/tree.ts";
+export const WELLS = () => techIx("wells");
 
 /*
   What a household, a band or a village is short of, and could build about it: a granary

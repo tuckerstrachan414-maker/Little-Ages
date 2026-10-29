@@ -30,7 +30,7 @@ export type FromWorker =
       /* weirs, plots, huts and pits, sent only when they have changed; villages and gatherings likewise */
       works?: WorkSnap[]; villages?: VillageSnap[] }
   /* small game and fish per 16x16-tile patch, 0..255, and what is left of each deposit, sent once a game day */
-  | { type: "fields"; gw: number; gh: number; cell: number; rabbits: Uint8Array; fish: Uint8Array; rabbitTotal: number; fishTotal: number; left: Uint8Array }
+  | { type: "fields"; gw: number; gh: number; cell: number; rabbits: Uint8Array; fish: Uint8Array; rabbitTotal: number; fishTotal: number; left: Uint8Array; moist: Uint8Array }
   /** what lies in the ground, once after the world; `left` in `fields` says how much of each remains */
   | { type: "deposits"; list: DepositSnap[] }
   /** tiles whose tree changed (felled, fallen, grown back), as [tile index, tree] pairs, sent once a game day when any */

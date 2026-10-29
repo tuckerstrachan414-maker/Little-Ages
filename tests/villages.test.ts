@@ -304,7 +304,7 @@ describe("putting food by, of their own accord", () => {
     const { s, run } = fresh();
     const b = s.bands[0];
     for (const id of b.members) { const q = s.byId.get(id)!; if (s.age(q) >= 14) learn(s, q, Idea.Pits, null, "seen"); }
-    for (let d = 0; d < 10; d++) { for (const h of s.heads(b)) { const hh = b.hearths.get(h) ?? (b.hearths.set(h, noFood()), b.hearths.get(h)!); hh.plant = Math.max(hh.plant, 30); } run(1 / 40); }
+    for (let d = 0; d < 20; d++) { for (const h of s.heads(b)) { const hh = b.hearths.get(h) ?? (b.hearths.set(h, noFood()), b.hearths.get(h)!); hh.plant = Math.max(hh.plant, 30); } run(1 / 40); }
     expect(s.stats.homes.pits).toBeGreaterThan(0);
     expect(s.stats.homes.stored).toBeGreaterThan(0);
   });

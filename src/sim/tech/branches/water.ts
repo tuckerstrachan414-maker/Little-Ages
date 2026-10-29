@@ -1,9 +1,13 @@
 import { Branch, Era, branch } from "../defs.ts";
+import { St, Skill } from "../../people/person.ts";
+import { Anim, Bubble } from "../../../shared/people.ts";
 
 const E = Era, n = branch(Branch.Water);
 /** Water and land: wells, ditches, mines and everything dug out of the ground. */
 export const WATER = [
-  n("wells", "digging wells", "how to dig a well", E.NewStone, ["digging-sticks"]),
+  n("wells", "digging wells", "how to dig a well", E.NewStone, ["digging-sticks"], { title: "The first well", during: [{ step: St.Drink, rank: 1 }, { step: St.Pit, rank: 2 }], problems: { Water: 0.8, Dry: 0.4 },
+    story: "{name} of the {band}, {problem}, {context}, dug down where the ground stayed damp in the hollow until water seeped into the hole; by morning it had cleared, and it was sweet. A well.",
+    age: 13, child: 0.03, watch: 0.008, show: 0.45, skill: Skill.Gather, worth: 0.7, spark: 0.005, anim: Anim.Dig, icon: Bubble.Drop, place: [["sweet", "water"], "Sweet Water"], active: true }),
   n("irrigation-ditches", "irrigation", "how to lead water to fields in ditches", E.NewStone, ["planting", "wells"]),
   n("cisterns", "cisterns", "how to store rain in a cistern", E.NewStone, ["pottery"]),
   n("salt-gathering", "gathering salt", "how to gather salt from pans and shores", E.NewStone, []),

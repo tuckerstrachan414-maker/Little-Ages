@@ -42,7 +42,8 @@ function sendBake() {
   if (!world) return;
   const s = seasonAt(time);
   /* the resources mode paints the deposits and who knows of them over the land */
-  const extra = mode === "resources" && people ? { deposits: people.resources.deposits.map((d, k) => ({ kind: d.kind, x: d.x, y: d.y, r: d.r, amount: d.amount, left: d.left, knownBy: people!.resources.knownBy()[k] })), colors: people.cultures.map(c => peopleColor(people!, c.id)) } : undefined;
+  const extra = mode === "resources" && people ? { deposits: people.resources.deposits.map((d, k) => ({ kind: d.kind, x: d.x, y: d.y, r: d.r, amount: d.amount, left: d.left, knownBy: people!.resources.knownBy()[k] })), colors: people.cultures.map(c => peopleColor(people!, c.id)) }
+    : mode === "dryness" && people ? { deposits: [], colors: [], moist: people.weather.moist, cell: CELL, gw: people.weather.gw } : undefined;
   const px = bake(world, s, mode, undefined, extra);
   post({ type: "baked", season: s, mode, pixels: px }, [px.buffer]);
 }
@@ -80,8 +81,8 @@ self.onmessage = (e: MessageEvent<ToWorker>) => {
 function sendFields() {
   if (!eco) return;
   const { rabbits, fish } = eco.snapshot(), t = eco.total();
-  const left = people ? people.resources.leftSnap() : new Uint8Array(0);
-  post({ type: "fields", gw: eco.gw, gh: eco.gh, cell: CELL, rabbits, fish, rabbitTotal: t.rabbits, fishTotal: t.fish, left }, [rabbits.buffer, fish.buffer, left.buffer]);
+  const left = people ? people.resources.leftSnap() : new Uint8Array(0), moist = people ? people.weather.snapshot() : new Uint8Array(0);
+  post({ type: "fields", gw: eco.gw, gh: eco.gh, cell: CELL, rabbits, fish, rabbitTotal: t.rabbits, fishTotal: t.fish, left, moist }, [rabbits.buffer, fish.buffer, left.buffer, moist.buffer]);
   /* trees felled, fallen or grown back since yesterday */
   const changes = people?.resources.takeChanges();
   if (changes) post({ type: "tiles", changes }, [changes.buffer]);

@@ -42,7 +42,7 @@ export function problemsDay(s: Society, b: Band): void {
   const i = (b.y | 0) * s.w.w + (b.x | 0), wetLand = s.w.biome[i] === 21 || s.w.biome[i] === 16 || s.w.biome[i] === 20;
   pr[Problem.Wet] = (wetLand ? 0.5 : 0) + ((s.season === 0 || s.season === 2) && s.w.rain[i] > 160 ? 0.3 : 0);
   if (inHuts / homes >= 0.5) pr[Problem.Wet] *= 0.2;
-  pr[Problem.Water] = clamp01(Math.hypot(b.water[0] - b.x, b.water[1] - b.y) / 10);
+  pr[Problem.Water] = clamp01(Math.hypot(b.water[0] - b.x, b.water[1] - b.y) / 10 + (s.weather.moistAt(b.x, b.y) < 0.3 && !b.well ? 0.3 : 0));
   /* food that keeps, beyond what the pits can take */
   const kept = keepingDays(b) * b.appetite;
   pr[Problem.Storage] = clamp01((kept - b.pit - b.appetite * 6) / Math.max(4, b.appetite * 6));
@@ -56,7 +56,7 @@ export function problemsDay(s: Society, b: Band): void {
   pr[Problem.Fire] = b.fire <= 0 ? 1 : 0;
   pr[Problem.Meat] = clamp01((b.yesterday.meat + b.yesterday.fish > 0 ? 0 : (s.time - b.meatAt) / DAY_SECONDS) / 6);
   pr[Problem.HerdLoss] = clamp01(ms.reduce((n, q) => n + q.mem.filter(m => m.k === Mem.HerdLoss && s.time - m.t < DAY_SECONDS * 20).length, 0) / 3);
-  pr[Problem.Dry] = s.weather ? 1 - s.weather.moistAt(b.x, b.y) : 0;
+  pr[Problem.Dry] = 1 - s.weather.moistAt(b.x, b.y);
   pr[Problem.Clay] = s.resources.knownNear(b.culture, b.x, b.y, 20, "clay") ? 1 : 0;
   /* pots cracking in the fire lately; grain among the band's crops; pots at any hearth */
   pr[Problem.Broke] = b.broke ? clamp01(1 - (s.time - b.broke) / (DAY_SECONDS * 20)) : 0;

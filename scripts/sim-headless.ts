@@ -61,6 +61,8 @@ const report = (label: string) => {
       line += `\n${"".padEnd(16)} places: ${people.gatherings.length} gatherings now (${pl.gatherings} in all), ${live.length} villages lived in${live.length ? ` (${live.map(v => `${v.name} "${v.gloss}" ${v.pop}`).join(", ")})` : ""}, ${pl.villages} founded, ${pl.abandoned} given up, ${pl.returns} returned to | fields ${people.works.filter(w => w.kind === 1 && (w.sown ?? 1) > 1).length} sown again, ${people.works.filter(w => w.kind === 1 && w.fallow).length} resting, best seed line ${Math.max(0, ...people.bands.flatMap(b => Object.values(b.seed))).toFixed(2)}`;
       const r = people.resources, rs = r.stats, known = new Set<number>(); for (const set of r.known.values()) for (const id of set) known.add(id);
       const byKind = new Map<number, number>(); for (const id of known) { const d = r.byId(id)!; byKind.set(d.kind, (byKind.get(d.kind) ?? 0) + 1); }
+      const wsum = people.weather.summary(), wells = people.works.filter(w => w.kind === 4 && (w.prog ?? 1) >= 1 && w.state > 0.2).length;
+      line += `\n${"".padEnd(16)} weather: soil ${wsum.mean.toFixed(2)} wet, ${wsum.drought} patches in drought (${people.weather.stats.droughtDays} patch-days so far), ${wells} wells standing`;
       line += `\n${"".padEnd(16)} land: ${known.size} of ${r.deposits.length} deposits found${byKind.size ? ` (${[...byKind].sort((a, b) => a[0] - b[0]).map(([k, n]) => `${MATS[k].name.replace(/ ore$/, "")} ${n}`).join(", ")})` : ""}, ${rs.exhausted} dug out | wood cut ${Math.round(rs.cut)} loads, ${rs.felled} trees felled, ${rs.regrown} grown back | forest left around camps ${mean(people.bands.map(b => r.forestLeft(b.x, b.y, 16))).toFixed(2)}`;
       {
         const bl = people.stats.buildings, byName = new Map<string, number>(), goingUp = new Map<string, number>();
@@ -128,6 +130,7 @@ if (people && summary) {
     ideas: IDEAS.filter(d => !d.start && people.ideas[d.id].knowers > 0).map(d => d.name).join("|"),
     buildings: people.stats.buildings.built, upgrades: people.stats.buildings.upgrades,
     pots: people.stats.pots.made, dietMean: +mean(people.people.filter(p => people.age(p) >= 5).map(p => dietScore(p))).toFixed(3), illnessDeaths: people.stats.causes.get("illness") ?? 0,
+    droughtDays: people.weather.stats.droughtDays, wells: people.works.filter(w => w.kind === 4 && (w.prog ?? 1) >= 1 && w.state > 0.2).length,
     felled: people.resources.stats.felled, regrown: people.resources.stats.regrown, found: people.resources.stats.found, exhausted: people.resources.stats.exhausted,
     secs: +((performance.now() - tr) / 1000).toFixed(1),
   };

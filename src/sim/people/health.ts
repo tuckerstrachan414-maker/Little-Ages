@@ -29,8 +29,8 @@ export function illness(s: Society, p: Person, age: number, st: Stage): void {
     const tender = s.near(p.x, p.y, 2.5).find(q => q !== p && q.goal === Goal.Tend);
     const tended = !!tender || s.time - p.tendedAt < DAY_SECONDS, herbs = (!!tender && knows(tender, HERB())) || s.time - p.herbsAt < DAY_SECONDS;
     if (herbs) s.stats.health.tended++;
-    if (p.sick > 1) { if (tended && rng.chance(herbs ? 0.5 : 0.3)) p.sick = 0.8; }
-    else p.sick = Math.max(0, p.sick - (0.2 + (p.food > 0.6 ? 0.1 : 0) + (tended ? 0.1 : 0) + (herbs ? 0.15 : 0)));
+    if (p.sick > 1) { if (tended && rng.chance(herbs ? 0.35 : 0.15)) p.sick = 0.8; }
+    else p.sick = Math.max(0, p.sick - (0.2 + (p.food > 0.6 ? 0.1 : 0) + (tended ? 0.06 : 0) + (herbs ? 0.12 : 0)));
     return;
   }
   const hazard = 0.15 * Math.exp(-0.9 * age) + 0.006 + 0.00011 * Math.exp(0.088 * age);

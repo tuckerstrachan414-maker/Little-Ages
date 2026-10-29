@@ -27,12 +27,14 @@ export class Weather {
   readonly rainK: Float32Array; readonly tempC: Float32Array;
   /** the year's swing per patch, as of the last day */
   factor: Float32Array;
+  /** where each patch's soil settles in an ordinary year: what the land is used to, and grows by */
+  readonly normal: Float32Array;
   stats = { droughtDays: 0 };
   private readonly seed: number;
   constructor(w: WorldData, seed: number) {
     this.seed = seed;
     const gw = this.gw = Math.ceil(w.w / CELL), gh = this.gh = Math.ceil(w.h / CELL), n = gw * gh;
-    this.rainK = new Float32Array(n); this.tempC = new Float32Array(n); this.moist = new Float32Array(n); this.factor = new Float32Array(n).fill(1);
+    this.rainK = new Float32Array(n); this.tempC = new Float32Array(n); this.moist = new Float32Array(n); this.factor = new Float32Array(n).fill(1); this.normal = new Float32Array(n);
     const cnt = new Float32Array(n);
     for (let y = 0; y < w.h; y++) for (let x = 0; x < w.w; x++) {
       const i = y * w.w + x; if (w.flags[i] & Flag.Water) continue;
@@ -42,12 +44,15 @@ export class Weather {
     for (let c = 0; c < n; c++) {
       if (cnt[c]) { this.rainK[c] /= cnt[c]; this.tempC[c] /= cnt[c]; } else { this.rainK[c] = 0.5; this.tempC[c] = 10; }
       /* the soil starts where its climate would leave it, in an ordinary year */
-      this.moist[c] = this.settled(c, 1);
+      this.normal[c] = this.settled(c, 1); this.moist[c] = this.normal[c];
     }
   }
   private settled(c: number, factor: number): number { return Math.max(0.02, Math.min(1, FILL * this.rainK[c] * factor / (EVAP + EVAP_HEAT * Math.max(0, this.tempC[c] - 10)))); }
   cellOf(x: number, y: number): number { return Math.min(this.gh - 1, Math.max(0, (y / CELL) | 0)) * this.gw + Math.min(this.gw - 1, Math.max(0, (x / CELL) | 0)); }
   moistAt(x: number, y: number): number { return this.moist[this.cellOf(x, y)]; }
+  /** How wet a patch is against what it is used to: 1 in an ordinary year, less in a dry one, a little more in a wet one. */
+  wetness(c: number): number { return Math.min(1.15, this.moist[c] / Math.max(0.02, this.normal[c])); }
+  wetnessAt(x: number, y: number): number { return this.wetness(this.cellOf(x, y)); }
   /** How this patch's year is running against the usual, 0.55 wet-dry: a slow, regional, seeded swing, continuous in place and time. */
   yearFactor(c: number, t: number): number {
     const cx = c % this.gw, cy = (c / this.gw) | 0;

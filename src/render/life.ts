@@ -12,7 +12,28 @@ import { CREATURE_SCALE } from "./scale.ts";
   one goes quiet. Bird flocks are simulated one by one and only drawn here.
 */
 
-export interface Fields { gw: number; gh: number; cell: number; rabbits: Uint8Array; fish: Uint8Array; left?: Uint8Array; }
+export interface Fields { gw: number; gh: number; cell: number; rabbits: Uint8Array; fish: Uint8Array; left?: Uint8Array; moist?: Uint8Array; }
+
+/** Dry ground: a sandy wash over the patches whose soil has gone dry, dithered up close, flat from afar. */
+export function drawDryness(ctx: CanvasRenderingContext2D, cam: Camera, wd: WorldData, f: Fields): void {
+  if (!f.moist) return;
+  const v = cam.visible(), z = cam.z;
+  const cx0 = Math.max(0, (v.x0 / f.cell) | 0), cx1 = Math.min(f.gw - 1, (v.x1 / f.cell) | 0), cy0 = Math.max(0, (v.y0 / f.cell) | 0), cy1 = Math.min(f.gh - 1, (v.y1 / f.cell) | 0);
+  for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) {
+    const m = f.moist[cy * f.gw + cx] / 255; if (m >= 0.35) continue;
+    const a = 0.32 * (0.35 - m) / 0.35;
+    const [sx, sy] = cam.toScreen(cx * f.cell, cy * f.cell), w = f.cell * z;
+    if (z < 6) { ctx.fillStyle = `rgba(214, 196, 140, ${a.toFixed(3)})`; ctx.fillRect(sx, sy, w, w); continue; }
+    /* up close, a dither of sandy tiles over the dry patch, more of them the drier it is */
+    ctx.fillStyle = `rgba(214, 196, 140, ${Math.min(0.5, a * 1.6).toFixed(3)})`;
+    for (let ty = 0; ty < f.cell; ty++) for (let tx = 0; tx < f.cell; tx++) {
+      const x = cx * f.cell + tx, y = cy * f.cell + ty, i = y * wd.w + x;
+      if (i < 0 || i >= wd.flags.length || wd.flags[i] & Flag.Water) continue;
+      if (hash2(x, y, 811) > a * 2.2) continue;
+      ctx.fillRect(sx + tx * z, sy + ty * z, z, z);
+    }
+  }
+}
 export interface FlockSnap { n: number; data: Float32Array; }
 export const BIRD_STRIDE = 7;
 

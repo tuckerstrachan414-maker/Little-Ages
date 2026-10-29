@@ -44,7 +44,7 @@ export function seaColor(x: number, y: number, depthV: number, shelfBiome: boole
 }
 
 /** Extra layers the worker paints into some modes: the deposits and who knows of them, for the "resources" mode. */
-export interface BakeExtra { deposits: { kind: number; x: number; y: number; r: number; amount: number; left: number; knownBy: number }[]; colors: string[]; }
+export interface BakeExtra { deposits: { kind: number; x: number; y: number; r: number; amount: number; left: number; knownBy: number }[]; colors: string[]; moist?: Float32Array; cell?: number; gw?: number; }
 
 const PAL = {
   shallow: C(FN.shallow), lake: C(FN.lake), river: C(FN.river), ice: C(FN.ice),
@@ -58,11 +58,19 @@ for (const k in BIOME_FLAT) PAL.flat[+k] = C(BIOME_FLAT[+k]);
 for (const k in CANOPY) PAL.canopy[+k] = CANOPY[+k].map(C);
 
 /** The color of one tile in a mode and season: the terrain itself, or a map of one thing about it. */
-export function tileColor(wd: WorldData, season: Season, mode: MapMode, i: number): RGB {
+export function tileColor(wd: WorldData, season: Season, mode: MapMode, i: number, extra?: BakeExtra): RGB {
   const { w, h, elev, biome, flags, tree, temp, rain, depth, seed } = wd;
   const x = i % w, y = (i / w) | 0, e = elev[i], f = flags[i], b = biome[i];
   const { shallow, lake, river, ice, snow, snowD, rock, rockL, dry, grassL, base, flat, canopy } = PAL;
   const freezeT = FREEZE_T[season];
+  if (mode === "dryness") {
+    if (f & Flag.Water) return PAL.water;
+    const m = extra?.moist && extra.cell && extra.gw ? extra.moist[((y / extra.cell) | 0) * extra.gw + ((x / extra.cell) | 0)] : 0.6;
+    const c = m < 0.35 ? lerp([196, 160, 104] as RGB, [214, 200, 150] as RGB, m / 0.35) : lerp([214, 200, 150] as RGB, [80, 130, 90] as RGB, (m - 0.35) / 0.65);
+    const ex = (x < w - 1 ? elev[i + 1] : e) - (x > 0 ? elev[i - 1] : e), ey = (y < h - 1 ? elev[i + w] : e) - (y > 0 ? elev[i - w] : e);
+    const k = 1 + Math.max(-1, Math.min(1, -(ex + ey) * 9)) * 0.18;
+    return [c[0] * k, c[1] * k, c[2] * k];
+  }
   if (mode === "resources") {
     if (f & Flag.Water) return PAL.water;
     let c: RGB = b === Biome.Mountain || b === Biome.SnowPeak || b === Biome.IceSheet || b === Biome.Cliff ? PAL.high : PAL.bare;
@@ -117,7 +125,7 @@ export function bake(wd: WorldData, season: Season, mode: MapMode = "terrain", o
   const { w, h } = wd;
   const px = out ?? new Uint8ClampedArray(w * h * 4);
   for (let i = 0; i < w * h; i++) {
-    const c = tileColor(wd, season, mode, i), o = i * 4;
+    const c = tileColor(wd, season, mode, i, extra), o = i * 4;
     px[o] = c[0]; px[o + 1] = c[1]; px[o + 2] = c[2]; px[o + 3] = 255;
   }
   if (mode === "resources" && extra) paintDeposits(wd, px, extra);

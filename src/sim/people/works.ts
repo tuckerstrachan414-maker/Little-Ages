@@ -291,12 +291,12 @@ export function worksDay(s: Society): void {
         /* frost kills a crop that has not ripened; heat and cold slow it */
         if (T < 0 && s.season === 3) { w.state = 0; w.food = 0; w.ripe = -1; }
         else {
-          w.state = Math.min(1, w.state + 0.038 * (T > 8 && T < 32 ? 1 : 0.4) * (0.7 + s.eco.plantK[s.eco.cell(w.x, w.y)] * 0.4));
+          w.state = Math.min(1, w.state + 0.038 * (T > 8 && T < 32 ? 1 : 0.4) * (0.7 + s.eco.plantK[s.eco.cell(w.x, w.y)] * 0.4) * (0.4 + 0.6 * s.weather.wetnessAt(w.x, w.y)));
           if (w.state >= 1) {
             w.ripe = s.time;
             const sower = s.byId.get(w.by);
             /* worked ground gives a little more in its first years; each crop takes something out of the soil */
-            w.food = expectedYield(s, w) * (0.75 + (sower ? sower.know[Idea.Planting] : 0.3) * 0.5) * ((w.sown ?? 1) > 1 ? 1.1 : 1);
+            w.food = expectedYield(s, w) * (0.75 + (sower ? sower.know[Idea.Planting] : 0.3) * 0.5) * ((w.sown ?? 1) > 1 ? 1.1 : 1) * (0.4 + 0.6 * s.weather.wetnessAt(w.x, w.y));
             w.fert = Math.max(0.35, (w.fert ?? 1) - 0.07);
             s.worksVersion++;
           }

@@ -28,7 +28,7 @@ const BASE: Record<string, [number, string]> = {
   hut: [0.34, "A first hut"], pit: [0.3, "Food put by"], field: [0.3, "A field sown again"], seed: [0.36, "The grain grows tame"],
   gather: [0.48, "Bands gather"], disperse: [0.32, "A gathering breaks up"],
   village: [0.84, "A village is born"], villagegrow: [0.45, "A village grows"], abandon: [0.6, "A village abandoned"], return: [0.5, "Back to the old village"],
-  found: [0.3, "A deposit found"], exhausted: [0.38, "A deposit dug out"], regrown: [0.2, "The wood comes back"],
+  drought: [0.4, "A dry year"], found: [0.3, "A deposit found"], exhausted: [0.38, "A deposit dug out"], regrown: [0.2, "The wood comes back"],
   pots: [0.3, "The first pots"], well: [0.4, "A well"], granary: [0.34, "A granary"], kiln: [0.3, "A kiln"], pen: [0.3, "A pen"], upgrade: [0.3, "A house rebuilt"], built: [0.3, "Something new built"],
 };
 /** Every kind of event the simulation tells of. */

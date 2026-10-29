@@ -550,6 +550,8 @@ function nearestWater(s: Society, p: Person): [number, number] | null {
   const consider = (x: number, y: number) => { const c = cost(x, y); if (c < bc && s.walker.reach(p.x, p.y, x, y)) { bc = c; best = [x, y]; } };
   for (const pl of p.places) if (pl.k === Place.Water) consider(pl.x, pl.y);
   consider(b.water[0], b.water[1]);
+  /* a well standing by the camp, or on the way */
+  const well = s.wellSpot(p.x, p.y, 16); if (well) consider(well[0], well[1]);
   if (bc > 4) {
     const w = s.waterNear(p.x, p.y, 16);
     if (w && cost(w[0], w[1]) < bc && s.walker.reach(p.x, p.y, w[0], w[1])) { s.learnPlace(p, Place.Water, w[0], w[1], 1, 0, 0); best = w; }
