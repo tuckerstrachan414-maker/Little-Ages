@@ -53,8 +53,8 @@ export const step = (k: St, x = 0, y = 0, id = 0, dur = 0, extra: Partial<Step> 
 
 export const Food = { None: 0, Plant: 1, Meat: 2, Fish: 3, Wood: 4 } as const;
 
-export const Place = { Water: 0, Plants: 1, Fish: 2, Game: 3, Rabbits: 4, Site: 5, Carcass: 6, Camp: 7, Danger: 8, Home: 9 } as const;
-export const PLACE_NAMES = ["water", "plant food", "fish", "game", "small game", "a camp site", "a carcass", "a camp", "danger", "home"];
+export const Place = { Water: 0, Plants: 1, Fish: 2, Game: 3, Rabbits: 4, Site: 5, Carcass: 6, Camp: 7, Danger: 8, Home: 9, Deposit: 10 } as const;
+export const PLACE_NAMES = ["water", "plant food", "fish", "game", "small game", "a camp site", "a carcass", "a camp", "danger", "home", "a deposit"];
 export interface KnownPlace {
   k: number; x: number; y: number;
   /** how good it looked: food units for food, herd size for game, a score for sites */

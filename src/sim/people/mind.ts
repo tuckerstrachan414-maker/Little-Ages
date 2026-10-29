@@ -531,10 +531,11 @@ function foodReason(s: Society, p: Person, hunger: number, kidsHungry: number, s
 export function woodSpot(s: Society, x: number, y: number): [number, number] | null {
   const W = s.w.w;
   let best: [number, number] | null = null, bd = 1e9;
+  /* the nearer trees first; once a camp has cut them, the walk for wood gets longer */
   for (let k = 0; k < 40; k++) {
-    const a = s.rng.next() * Math.PI * 2, r = 2 + s.rng.next() * 16, tx = Math.floor(x + Math.cos(a) * r), ty = Math.floor(y + Math.sin(a) * r);
+    const a = s.rng.next() * Math.PI * 2, r = 2 + s.rng.next() * (k < 24 ? 16 : 30), tx = Math.floor(x + Math.cos(a) * r), ty = Math.floor(y + Math.sin(a) * r);
     if (tx < 1 || ty < 1 || tx >= W - 1 || ty >= s.w.h - 1) continue;
-    const t = s.w.tree[ty * W + tx]; if (!t || t === Tree.Reeds || t === Tree.Cactus) continue;
+    if (!s.resources.cuttable(ty * W + tx)) continue;
     /* stand beside the tree, on dry ground */
     for (const [dx, dy] of [[0, 1], [1, 0], [-1, 0], [0, -1]]) { const sx = tx + dx + 0.5, sy = ty + dy + 0.5; if (s.walker.dry(sx, sy)) { const d = Math.hypot(sx - x, sy - y); if (d < bd) { bd = d; best = [sx, sy]; } break; } }
   }

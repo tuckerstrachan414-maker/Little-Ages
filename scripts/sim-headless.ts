@@ -11,6 +11,7 @@ import { Birds, Bird } from "../src/sim/birds.ts";
 import { settle } from "../src/sim/settle.ts";
 import { Society } from "../src/sim/people/society.ts";
 import { TECHS as IDEAS } from "../src/sim/tech/tree.ts";
+import { MATS } from "../src/sim/economy/goods.ts";
 import { DAY_SECONDS, DAYS_PER_SEASON, SEASON_NAMES, SPECIES_NAMES, type SizeKey } from "../src/shared/types.ts";
 
 const arg = (k: string, d: string) => { const i = process.argv.indexOf(`--${k}`); return i >= 0 ? process.argv[i + 1] : d; };
@@ -56,6 +57,9 @@ const report = (label: string) => {
       const h = people.stats.homes, c = people.stats.camp;
       const pl = people.stats.places, live = people.villages.filter(v => !v.abandoned);
       line += `\n${"".padEnd(16)} places: ${people.gatherings.length} gatherings now (${pl.gatherings} in all), ${live.length} villages lived in${live.length ? ` (${live.map(v => `${v.name} "${v.gloss}" ${v.pop}`).join(", ")})` : ""}, ${pl.villages} founded, ${pl.abandoned} given up, ${pl.returns} returned to | fields ${people.works.filter(w => w.kind === 1 && (w.sown ?? 1) > 1).length} sown again, ${people.works.filter(w => w.kind === 1 && w.fallow).length} resting, best seed line ${Math.max(0, ...people.bands.flatMap(b => Object.values(b.seed))).toFixed(2)}`;
+      const r = people.resources, rs = r.stats, known = new Set<number>(); for (const set of r.known.values()) for (const id of set) known.add(id);
+      const byKind = new Map<number, number>(); for (const id of known) { const d = r.byId(id)!; byKind.set(d.kind, (byKind.get(d.kind) ?? 0) + 1); }
+      line += `\n${"".padEnd(16)} land: ${known.size} of ${r.deposits.length} deposits found${byKind.size ? ` (${[...byKind].sort((a, b) => a[0] - b[0]).map(([k, n]) => `${MATS[k].name.replace(/ ore$/, "")} ${n}`).join(", ")})` : ""}, ${rs.exhausted} dug out | wood cut ${Math.round(rs.cut)} loads, ${rs.felled} trees felled, ${rs.regrown} grown back | forest left around camps ${mean(people.bands.map(b => r.forestLeft(b.x, b.y, 16))).toFixed(2)}`;
       line += `\n${"".padEnd(16)} homes: ${huts} huts standing, ${going} going up, ${ruins} fallen in (${h.huts} raised) | ${pits} pits holding ${Math.round(inPits)} (${h.pits} dug; ${Math.round(h.stored)} put by, ${Math.round(h.fetched)} fetched, ${Math.round(h.eaten)} eaten from them) | ${Math.round(c.left)} food left behind on moves, ${c.home} moves home`;
     }
     line += `\n${"".padEnd(16)} shared ${(o.shared / Math.max(1, o.shared + o.kept) * 100).toFixed(0)}% into the pot | ${Math.round(o.given)} food passed between hearths (${Math.round(o.rounds)} in the evening rounds, ${Math.round(o.family)} eaten at family hearths), ${o.asks} asked for, ${o.refused} refused, ${Math.round(o.repaid)} paid back | feuds ${o.feuds} begun (${people.feuds.length} burning, ${o.peace} settled, ${o.cooled} cooled, ${o.inherited} passed down), fights ${o.fights}, families driven out ${o.driven}, feud/faction splits ${o.factionSplits} | ${led}/${people.bands.length} bands led, new leaders ${o.leaders}, two voices ${o.contests}, mocked ${o.mocked} | gifts ${o.gifts}, left for another ${o.leftFor}`;
@@ -110,6 +114,7 @@ if (people && summary) {
     hutsRaised: s.homes.huts, pitsDug: s.homes.pits, firstHut: s.homes.firstHut ? +(s.homes.firstHut / 2400 + 1).toFixed(1) : 0, firstPit: s.homes.firstPit ? +(s.homes.firstPit / 2400 + 1).toFixed(1) : 0,
     gatherings: s.places.gatherings, villages: s.places.villages, liveVillages: people.villages.filter(v => !v.abandoned).length, firstVillage: s.places.firstVillage ? +(s.places.firstVillage / 2400 + 1).toFixed(1) : 0,
     ideas: IDEAS.filter(d => !d.start && people.ideas[d.id].knowers > 0).map(d => d.name).join("|"),
+    felled: people.resources.stats.felled, regrown: people.resources.stats.regrown, found: people.resources.stats.found, exhausted: people.resources.stats.exhausted,
     secs: +((performance.now() - tr) / 1000).toFixed(1),
   };
   console.log("SUMMARY " + JSON.stringify(out));

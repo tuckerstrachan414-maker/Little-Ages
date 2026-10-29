@@ -47,7 +47,9 @@ export class Ecology {
   readonly rabbitK: Float32Array; readonly fishK: Float32Array; readonly grassK: Float32Array; readonly browseK: Float32Array; readonly coldness: Float32Array;
   readonly plantK: Float32Array;
   rabbits: Float32Array; fish: Float32Array; grass: Float32Array; browse: Float32Array; plants: Float32Array;
+  private readonly w: WorldData;
   constructor(w: WorldData, seed: number) {
+    this.w = w;
     const gw = this.gw = Math.ceil(w.w / CELL), gh = this.gh = Math.ceil(w.h / CELL), n = gw * gh;
     this.rabbitK = new Float32Array(n); this.fishK = new Float32Array(n); this.grassK = new Float32Array(n); this.browseK = new Float32Array(n); this.coldness = new Float32Array(n);
     const cnt = new Float32Array(n);
@@ -67,6 +69,16 @@ export class Ecology {
     }
   }
   private cellOf(x: number, y: number): number { return Math.min(this.gh - 1, Math.max(0, (y / CELL) | 0)) * this.gw + Math.min(this.gw - 1, Math.max(0, (x / CELL) | 0)); }
+  /** What a patch can grow, counted again after its trees have changed: felled nut and fruit trees feed nobody. */
+  recount(c: number): void {
+    const w = this.w, gx = (c % this.gw) * CELL, gy = ((c / this.gw) | 0) * CELL;
+    let k = 0, n = 0;
+    for (let y = gy; y < Math.min(w.h, gy + CELL); y++) for (let x = gx; x < Math.min(w.w, gx + CELL); x++) {
+      const i = y * w.w + x; n++; if (w.flags[i] & Flag.Water) continue;
+      k += (PLANT_K[w.biome[i]] ?? 0) * (1 + (FOOD_TREE[w.tree[i]] ?? 0));
+    }
+    if (n) { this.plantK[c] = Math.min(1.4, k / n); this.plants[c] = Math.min(this.plants[c], this.plantK[c]); }
+  }
   /** A predator takes small game from the patch it stands in; returns how much it found (0..1). */
   hunt(x: number, y: number, want: number): number {
     const c = this.cellOf(x, y), got = Math.min(want, this.rabbits[c] * 0.5);

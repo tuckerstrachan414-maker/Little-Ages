@@ -21,6 +21,8 @@ import { TECH_COUNT as IDEA_COUNT, Idea } from "../tech/tree.ts";
 import { Work, worksDay, lookAtWorks, plotHope, workById, worksAround } from "./works.ts";
 import { layoutCamp, recountPits, hutStands, stakeDays, leaveBehind, pitFood, hutHomes } from "./homes.ts";
 import { villagesDay, noteSite, friendly, roomFor, tiesTo, VILLAGE_R, type Village, type Gathering, type Notable } from "./villages.ts";
+import { Resources, type Deposit } from "../resources.ts";
+import { MATS } from "../economy/goods.ts";
 
 /*
   Everyone alive, and the bands they live in. Each step every person's body changes (they
@@ -33,8 +35,13 @@ import { villagesDay, noteSite, friendly, roomFor, tiesTo, VILLAGE_R, type Villa
 export interface StartOptions { start: "bands" | "cradle"; bands: number; }
 export interface Carcass { id: number; x: number; y: number; sp: number; meat: number; hides: number; t: number; by: number; mocked?: boolean; }
 
+/** How a find is told, by material. */
+const FOUND_WORDS: Partial<Record<number, string>> = {
+  8: "a bank of good clay", 9: "a seam of flint in the chalk", 10: "good stone for building", 13: "a bed of tall reeds", 14: "a salt pan, white as snow",
+  15: "green-streaked rock in the hillside", 16: "a vein of grey metal in the rock", 17: "red rock, heavy and rusty", 18: "flecks of yellow metal in the river gravel", 19: "a vein of white metal in the mountain", 20: "black glass under the peak",
+};
 /** What a good place of each kind is worth, to compare a berry patch with a herd. */
-const PLACE_TYPICAL = [1, 4, 4, 10, 2, 8, 6, 1, 3, 1];
+const PLACE_TYPICAL = [1, 4, 4, 10, 2, 8, 6, 1, 3, 1, 2];
 export const FOOD_DAY: Record<Stage, number> = { baby: 0, toddler: 0.45, child: 0.65, teen: 0.95, adult: 1, elder: 0.8 };
 /** Meat on one animal, in days of food for one person. */
 export const MEAT = [25, 100, 400, 60, 0, 60];
@@ -95,8 +102,9 @@ export class Society {
   private herdGridAt = -1;
   /** people near the camera get step-by-step attention; others are still simulated in full */
   selected = 0;
-  /** the land's resources and the weather, once they are part of the world (later checkpoints fill these) */
-  resources?: { knownNear(culture: number, x: number, y: number, r: number, what: string): boolean };
+  /** what the land holds: deposits, and the wood standing on every tile */
+  readonly resources: Resources;
+  /** the weather, once it is part of the world (a later checkpoint fills this) */
   weather?: { moistAt(x: number, y: number): number };
   /** each people's refinement of each idea, and how often it has done each (later checkpoints fill these) */
   refine?: Map<number, Float32Array>;
@@ -104,6 +112,7 @@ export class Society {
 
   constructor(w: WorldData, eco: Ecology, wild: Wildlife, seed: number, start: StartOptions, time: number) {
     this.w = w; this.eco = eco; this.wild = wild; this.walker = new Walker(w);
+    this.resources = new Resources(w, seed);
     this.rng = new Rng(seed * 31 + 101);
     this.start = start;
     this.time = time; this.day = Math.floor(time / DAY_SECONDS); this.lastDay = this.day;
@@ -264,7 +273,7 @@ export class Society {
     const id = this.bands.length ? Math.max(...this.bands.map(b => b.id)) + 1 : 1;
     const name = placeName(this.cultures[culture].lang, this.rng);
     const b: Band = { id, name, culture, color: BAND_COLORS[(id - 1) % BAND_COLORS.length], x, y, fire: 0.8, store: { ...noFood(), wood: 2, hides: 0 }, hearths: new Map(),
-      members: [], founded: this.time, movedAt: this.time, moves: 0, homes: new Map(), busy: new Map(), respected: 0, followers: 0, ledSince: this.time, contender: 0, parent, met: new Set(), appetite: 1, moving: null, siteName: placeName(this.cultures[culture].lang, this.rng), water: [x, y], past: [], today: newDay(), yesterday: newDay(), can: new Int32Array(IDEA_COUNT), keeper: new Int32Array(IDEA_COUNT), outAt: 0, pit: 0, seed: {}, problems: newProblems(), meatAt: this.time };
+      members: [], founded: this.time, movedAt: this.time, moves: 0, homes: new Map(), busy: new Map(), respected: 0, followers: 0, ledSince: this.time, contender: 0, parent, met: new Set(), appetite: 1, moving: null, siteName: placeName(this.cultures[culture].lang, this.rng), water: [x, y], past: [], today: newDay(), yesterday: newDay(), can: new Int32Array(IDEA_COUNT), keeper: new Int32Array(IDEA_COUNT), outAt: 0, pit: 0, seed: {}, problems: newProblems(), meatAt: this.time, regrownAt: 0 };
     this.bands.push(b); this.bandById.set(id, b);
     return b;
   }
@@ -505,6 +514,18 @@ export class Society {
       if (e.fish[c] * 150 > 8) { const spot = this.foodSpot(gx, gy, "fish"); if (spot) this.learnPlace(p, Place.Fish, spot[0], spot[1], Math.min(20, e.fish[c] * 150 * 0.1), 0, 0); }
       if (e.rabbits[c] * 20 > 4) { const spot = this.foodSpot(gx, gy, "rabbit"); if (spot) this.learnPlace(p, Place.Rabbits, spot[0], spot[1], e.rabbits[c] * 20 * 0.3, 0, 0); }
     }
+    for (const d of this.resources.depositsNear(cx, cy, radius)) this.learnDeposit(p, d);
+  }
+  /** Someone comes upon a deposit: they remember it, and their people never forget it. The first of a kind a people finds is told. */
+  learnDeposit(p: Person, d: Deposit): void {
+    this.learnPlace(p, Place.Deposit, d.x, d.y, d.left / Math.max(1, d.amount), d.id, 0, this.time, d.kind);
+    const culture = this.culture(p).id;
+    if (!this.resources.find(culture, d)) return;
+    const first = !this.resources.deposits.some(o => o !== d && o.kind === d.kind && this.resources.known.get(culture)?.has(o.id));
+    if (!first || this.stage(p) === "baby" || this.stage(p) === "toddler") return;
+    const b = this.band(p), what = FOUND_WORDS[d.kind] ?? MATS[d.kind].name;
+    const dist = Math.hypot(d.x - b.x, d.y - b.y);
+    this.event("found", Bubble.Question, `${p.name} of the ${b.name} found ${what} ${dist < 6 ? "right by camp" : `${compass(d.x - b.x, d.y - b.y)} of camp`}${d.kind >= 15 ? `, though nobody knows what it is good for` : ""}.`, d.x, d.y, [p.id], b.id, d.kind);
   }
   /** A tile in the patch around (x, y) to stand on for that kind of food: by a food tree or meadow, on a bank, in open grass. */
   foodSpot(x: number, y: number, kind: "plant" | "fish" | "rabbit"): [number, number] | null {
@@ -647,8 +668,8 @@ export class Society {
     p.dayFood += Math.min(1.5, p.food) * days;
     /* the sick are brought food where they lie */
     if (p.goal === Goal.Sick && p.food < 0.9 && this.atCamp(p, 6)) this.eatFromStore(p, b, 1.2 * days);
-    /* and nobody starves at camp with food at hand: a starving child is given a meal, and a grown-up gets up from bed or the fire to eat */
-    else if (p.food < 0.12 && (st === "child" || st === "toddler" || asleep || p.goal === Goal.Rest || p.goal === Goal.Warm) && this.atCamp(p, 8)) this.eatFromStore(p, b, 0.6);
+    /* and nobody starves at camp with food at hand: a starving child is given a meal, and a grown-up gets up from bed or the fire to eat, or grabs a bite on the way to the water when they are at the end of their strength */
+    else if (p.food < 0.12 && (st === "child" || st === "toddler" || asleep || p.goal === Goal.Rest || p.goal === Goal.Warm || p.goal === Goal.Drink || p.health < 0.15) && this.atCamp(p, 8)) this.eatFromStore(p, b, 0.6);
     p.water = Math.max(0, p.water - (asleep ? 0.3 : 1.25) * (T > 28 ? 1.35 : T < 0 ? 0.75 : 1) * (working || running ? 1.15 : 1) * days);
     /* a sip from the water skin when thirsty and away from water */
     if (p.water < 0.62 && p.skin > 0) { const t = Math.min(p.skin, (0.9 - p.water) / 0.7); p.skin -= t; p.water += t * 0.7; }
@@ -789,6 +810,7 @@ export class Society {
       this.learnPlace(p, Place.Game, h.x, h.y, h.n, h.id, 0, this.time, h.sp);
     }
     for (const c of this.carcasses) if (c.meat > 2 && Math.hypot(c.x - p.x, c.y - p.y) < r) this.learnPlace(p, Place.Carcass, c.x, c.y, c.meat, c.id, 0, this.time, c.sp);
+    for (const d of this.resources.depositsNear(p.x, p.y, r)) this.learnDeposit(p, d);
     for (const b of this.bands) {
       if (b.id === p.band || Math.hypot(b.x - p.x, b.y - p.y) > r + 6) continue;
       this.learnPlace(p, Place.Camp, b.x, b.y, 1, b.id, 0);
@@ -886,6 +908,7 @@ export class Society {
     feudDay(this);
     ideasDay(this);
     worksDay(this);
+    this.landDay();
     for (const b of this.bands) problemsDay(this, b);
     for (const b of this.bands.slice()) this.bandDay(b);
     villagesDay(this);
@@ -893,6 +916,20 @@ export class Society {
     for (const c of this.carcasses) { const T = this.tempC(c.x, c.y); c.meat *= T > 15 ? 0.6 : T > 5 ? 0.75 : T > -5 ? 0.92 : 0.98; for (const h of this.herdsNear(c.x, c.y, 20)) if (h.sp === Species.Wolf || h.sp === Species.Bear) { const eat = Math.min(c.meat, 6 * h.n); c.meat -= eat; h.hunger = Math.max(0, h.hunger - 0.3); } }
     this.carcasses = this.carcasses.filter(c => c.meat > 1);
     this.stats.maxPop = Math.max(this.stats.maxPop, this.people.length);
+  }
+
+  /** The land, once a day: dead trees fall, cleared ground grows back, and the patches whose trees changed are counted again. */
+  private landDay(): void {
+    const res = this.resources;
+    res.daily(this.time, this.weather ? (x, y) => this.weather!.moistAt(x, y) : undefined);
+    for (const c of res.takeDirty()) this.eco.recount(c);
+    /* a wood coming back around a long-lived camp is worth telling, now and then */
+    for (const i of res.regrownToday) {
+      const x = i % this.w.w, y = (i / this.w.w) | 0;
+      const b = this.campNear(x, y, 14); if (!b || this.time - b.regrownAt < YEAR * 3 || res.forestLeft(b.x, b.y, 16) < 0.3) continue;
+      b.regrownAt = this.time;
+      this.event("regrown", Bubble.Home, `Around ${b.siteName}, where the ${b.name} have cut their firewood for years, young trees are growing back.`, x, y, [], b.id, 0);
+    }
   }
 
   /**

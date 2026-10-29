@@ -43,7 +43,7 @@ export function problemsDay(s: Society, b: Band): void {
   /* food that keeps, beyond what the pits can take */
   const kept = keepingDays(b) * b.appetite;
   pr[Problem.Storage] = clamp01((kept - b.pit - b.appetite * 6) / Math.max(4, b.appetite * 6));
-  pr[Problem.Wood] = b.store.wood < 2 ? 0.5 : 0;
+  pr[Problem.Wood] = (b.store.wood < 2 ? 0.5 : 0) + (s.resources.forestLeft(b.x, b.y, 16) < 0.5 ? 0.4 : 0);
   let crowd = 0; for (const o of s.bands) if (Math.hypot(o.x - b.x, o.y - b.y) < 16) crowd += o.members.length;
   pr[Problem.Crowding] = clamp01(crowd / 40);
   pr[Problem.Carry] = clamp01(adults.reduce((n, q) => n + (q.tripYield > 4.8 ? 1 : 0), 0) / Math.max(1, adults.length));
@@ -54,9 +54,9 @@ export function problemsDay(s: Society, b: Band): void {
   pr[Problem.Meat] = clamp01((b.yesterday.meat + b.yesterday.fish > 0 ? 0 : (s.time - b.meatAt) / DAY_SECONDS) / 6);
   pr[Problem.HerdLoss] = clamp01(ms.reduce((n, q) => n + q.mem.filter(m => m.k === Mem.HerdLoss && s.time - m.t < DAY_SECONDS * 20).length, 0) / 3);
   pr[Problem.Dry] = s.weather ? 1 - s.weather.moistAt(b.x, b.y) : 0;
-  pr[Problem.Clay] = s.resources?.knownNear(b.culture, b.x, b.y, 12, "clay") ? 1 : 0;
-  pr[Problem.Stone] = s.resources?.knownNear(b.culture, b.x, b.y, 12, "stone") ? 1 : 0;
-  pr[Problem.Flint] = s.resources?.knownNear(b.culture, b.x, b.y, 12, "flint") ? 1 : 0;
+  pr[Problem.Clay] = s.resources.knownNear(b.culture, b.x, b.y, 12, "clay") ? 1 : 0;
+  pr[Problem.Stone] = s.resources.knownNear(b.culture, b.x, b.y, 12, "stone") ? 1 : 0;
+  pr[Problem.Flint] = s.resources.knownNear(b.culture, b.x, b.y, 12, "flint") ? 1 : 0;
 }
 
 /** The problem a tech answers that presses hardest on this band, for the story of its finding. */

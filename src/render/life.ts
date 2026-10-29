@@ -12,7 +12,7 @@ import { CREATURE_SCALE } from "./scale.ts";
   one goes quiet. Bird flocks are simulated one by one and only drawn here.
 */
 
-export interface Fields { gw: number; gh: number; cell: number; rabbits: Uint8Array; fish: Uint8Array; }
+export interface Fields { gw: number; gh: number; cell: number; rabbits: Uint8Array; fish: Uint8Array; left?: Uint8Array; }
 export interface FlockSnap { n: number; data: Float32Array; }
 export const BIRD_STRIDE = 7;
 

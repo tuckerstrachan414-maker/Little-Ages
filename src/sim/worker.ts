@@ -9,7 +9,8 @@ import { Society } from "./people/society.ts";
 import { personDetail, bandDetail, villageDetail } from "./people/inspect.ts";
 import { villageSnaps } from "./people/villages.ts";
 import { searchWorld, bondEdges } from "./people/search.ts";
-import { techTree, techPanel, techNode } from "./people/../tech/summary.ts";
+import { techTree, techPanel, techNode, peopleColor } from "./tech/summary.ts";
+import { MATS } from "./economy/goods.ts";
 import { DAY_SECONDS, DAYS_PER_SEASON, type MapMode, type Season, type WorldData } from "../shared/types.ts";
 import type { ToWorker, FromWorker } from "../shared/protocol.ts";
 
@@ -37,7 +38,14 @@ let sentDay = -1;
 let worksSent = -1, villagesSent = -1;
 
 const seasonAt = (t: number) => (Math.floor(t / DAY_SECONDS / DAYS_PER_SEASON) % 4) as Season;
-function sendBake() { if (!world) return; const s = seasonAt(time); const px = bake(world, s, mode); post({ type: "baked", season: s, mode, pixels: px }, [px.buffer]); }
+function sendBake() {
+  if (!world) return;
+  const s = seasonAt(time);
+  /* the resources mode paints the deposits and who knows of them over the land */
+  const extra = mode === "resources" && people ? { deposits: people.resources.deposits.map((d, k) => ({ kind: d.kind, x: d.x, y: d.y, r: d.r, amount: d.amount, left: d.left, knownBy: people!.resources.knownBy()[k] })), colors: people.cultures.map(c => peopleColor(people!, c.id)) } : undefined;
+  const px = bake(world, s, mode, undefined, extra);
+  post({ type: "baked", season: s, mode, pixels: px }, [px.buffer]);
+}
 const copy = <T extends Float32Array | Uint8Array>(a: T): T => a.slice() as T;
 
 self.onmessage = (e: MessageEvent<ToWorker>) => {
@@ -57,6 +65,7 @@ self.onmessage = (e: MessageEvent<ToWorker>) => {
     const out: WorldData = { ...w, elev: copy(w.elev), biome: copy(w.biome), flags: copy(w.flags), tree: copy(w.tree), temp: copy(w.temp), rain: copy(w.rain), depth: copy(w.depth) };
     post({ type: "world", world: out }, [out.elev.buffer, out.biome.buffer, out.flags.buffer, out.tree.buffer, out.temp.buffer, out.rain.buffer, out.depth.buffer]);
     post({ type: "techtree", defs: techTree() });
+    post({ type: "deposits", list: people.resources.deposits.map(d => ({ id: d.id, kind: d.kind, name: MATS[d.kind].name, x: d.x, y: d.y, r: d.r, amount: d.amount })) });
     sendBake(); sendFields();
   } else if (m.type === "speed") speed = m.speed;
   else if (m.type === "mode") { mode = m.mode; sendBake(); }
@@ -71,7 +80,11 @@ self.onmessage = (e: MessageEvent<ToWorker>) => {
 function sendFields() {
   if (!eco) return;
   const { rabbits, fish } = eco.snapshot(), t = eco.total();
-  post({ type: "fields", gw: eco.gw, gh: eco.gh, cell: CELL, rabbits, fish, rabbitTotal: t.rabbits, fishTotal: t.fish }, [rabbits.buffer, fish.buffer]);
+  const left = people ? people.resources.leftSnap() : new Uint8Array(0);
+  post({ type: "fields", gw: eco.gw, gh: eco.gh, cell: CELL, rabbits, fish, rabbitTotal: t.rabbits, fishTotal: t.fish, left }, [rabbits.buffer, fish.buffer, left.buffer]);
+  /* trees felled, fallen or grown back since yesterday */
+  const changes = people?.resources.takeChanges();
+  if (changes) post({ type: "tiles", changes }, [changes.buffer]);
 }
 
 setInterval(() => {

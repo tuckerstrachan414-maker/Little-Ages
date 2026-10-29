@@ -66,6 +66,8 @@ export interface Band {
   problems: Float32Array;
   /** when meat or fish last came into camp */
   meatAt: number;
+  /** when the wood coming back around this camp was last told */
+  regrownAt: number;
 }
 export { newProblems };
 /** Food brought in, how much of it went into the pot, what was eaten, what passed between hearths, and fresh meat and fish lost to rot. */
@@ -91,6 +93,8 @@ export function estimate(pl: { k: number; q: number; t: number }, now: number): 
   const days = (now - pl.t) / 60;
   if (pl.k === Place.Game) return days > 3 ? 0 : pl.q * (1 - days / 3);
   if (pl.k === Place.Carcass) return days > 6 ? 0 : pl.q * (1 - days / 8);
+  /* a deposit is worth going back to for as long as anything is left in it */
+  if (pl.k === Place.Deposit) return 2 + pl.q * 6;
   /* plant food and fish grow back, so an old report of a picked-over patch looks better with time */
   return Math.min(pl.q + days * 0.4, Math.max(pl.q, 6));
 }

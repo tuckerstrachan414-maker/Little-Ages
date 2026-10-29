@@ -1,5 +1,7 @@
 import { SIZES, SEASON_NAMES, BIOME_NAMES, TREE_NAMES, Flag, DAY_SECONDS, DAYS_PER_SEASON, DAYS_PER_YEAR, type SizeKey, type MapMode, type WorldData } from "../shared/types.ts";
 import { STAGES } from "../sim/world/gen.ts";
+import { MAT_COLORS, MAT_NAMES, DEPOSIT_WORDS } from "../shared/mats.ts";
+import type { DepositSnap } from "../shared/protocol.ts";
 import type { Dock } from "./dock.ts";
 
 /* The paper interface over the map: world creation, the clock, map modes, the tile card, the minimap. */
@@ -73,8 +75,10 @@ export function hud(world: WorldData, dock: Dock, cb: { onSpeed: (s: number) => 
   const SPEEDS = [0, 1, 3, 10, 30, 100];
   time.innerHTML = `<span id="hud-date">...</span><div class="seg" role="group" aria-label="Speed">${SPEEDS.map(s => `<button type="button" data-speed="${s}" aria-pressed="${s === 1}" aria-label="${s ? s + " times speed" : "Pause"}">${s ? s + "X" : "II"}</button>`).join("")}</div>`;
   const modes = el("div", "paper"); modes.id = "hud-modes";
-  const MODES: [MapMode, string][] = [["terrain", "TERRAIN"], ["elevation", "HEIGHT"], ["temperature", "HEAT"], ["rainfall", "RAIN"], ["biomes", "BIOMES"]];
-  modes.innerHTML = `<h3>Map mode</h3><div class="seg modes" role="group" aria-label="Map mode">${MODES.map(([m, l]) => `<button type="button" data-mode="${m}" aria-pressed="${m === "terrain"}">${l}</button>`).join("")}</div><div class="foot"><button type="button" class="pbtn" id="new-world">NEW WORLD</button></div>`;
+  const MODES: [MapMode, string][] = [["terrain", "TERRAIN"], ["elevation", "HEIGHT"], ["temperature", "HEAT"], ["rainfall", "RAIN"], ["biomes", "BIOMES"], ["resources", "LAND"]];
+  /* the LAND mode's key: what each color in the ground is */
+  const LEGEND = [8, 9, 10, 13, 14, 15, 16, 17, 18, 19, 20];
+  modes.innerHTML = `<h3>Map mode</h3><div class="seg modes" role="group" aria-label="Map mode">${MODES.map(([m, l]) => `<button type="button" data-mode="${m}" aria-pressed="${m === "terrain"}">${l}</button>`).join("")}</div><div class="legend" id="hud-legend" hidden>${LEGEND.map(k => `<span><i style="background:${MAT_COLORS[k]}"></i>${MAT_NAMES[k].replace(/ ore$/, "")}</span>`).join("")}<span><i style="background:#60884f"></i>wood standing</span><span><i style="background:#beb08e"></i>bare ground</span><small>Deposits darken as they are dug out; the ring is the peoples who know of them.</small></div><div class="foot"><button type="button" class="pbtn" id="new-world">NEW WORLD</button></div>`;
   const map = el("div", "paper"); map.id = "hud-map";
   const touch = window.matchMedia("(hover: none)").matches;
   const info = el("div", "land", touch ? "Tap the land to read it." : "Point at the land to read it.");
@@ -94,7 +98,8 @@ export function hud(world: WorldData, dock: Dock, cb: { onSpeed: (s: number) => 
   modes.querySelector<HTMLButtonElement>("#new-world")!.onclick = cb.onNew;
   time.querySelectorAll<HTMLButtonElement>("[data-speed]").forEach(b => b.onclick = () => setSpeed(+b.dataset.speed!));
   const setSpeed = (s: number) => { time.querySelectorAll("[data-speed]").forEach(o => o.setAttribute("aria-pressed", String(+(o as HTMLElement).dataset.speed! === s))); cb.onSpeed(s); };
-  modes.querySelectorAll<HTMLButtonElement>("[data-mode]").forEach(b => b.onclick = () => { modes.querySelectorAll("[data-mode]").forEach(o => o.setAttribute("aria-pressed", String(o === b))); cb.onMode(b.dataset.mode as MapMode); });
+  const legend = modes.querySelector<HTMLElement>("#hud-legend")!;
+  modes.querySelectorAll<HTMLButtonElement>("[data-mode]").forEach(b => b.onclick = () => { modes.querySelectorAll("[data-mode]").forEach(o => o.setAttribute("aria-pressed", String(o === b))); legend.hidden = b.dataset.mode !== "resources"; cb.onMode(b.dataset.mode as MapMode); });
   let dragging = false;
   const jump = (e: PointerEvent) => { const r = mini.getBoundingClientRect(); cb.onMinimap((e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height); };
   mini.addEventListener("pointerdown", e => { dragging = true; mini.setPointerCapture(e.pointerId); jump(e); });
@@ -103,8 +108,10 @@ export function hud(world: WorldData, dock: Dock, cb: { onSpeed: (s: number) => 
   const date = time.querySelector("#hud-date")!, life = cap.querySelector("#hud-life")!;
   const mctx = mini.getContext("2d")!;
   let base: HTMLCanvasElement | null = null;
-  let fields: { gw: number; cell: number; rabbits: Uint8Array; fish: Uint8Array } | null = null;
+  let fields: { gw: number; cell: number; rabbits: Uint8Array; fish: Uint8Array; left?: Uint8Array } | null = null;
+  let deposits: DepositSnap[] = [];
   const plenty = (v: number) => v > 0.66 ? "plenty" : v > 0.33 ? "some" : v > 0.08 ? "scarce" : "none";
+  const dugWord = (left: number) => left > 0.95 ? "untouched" : left > 0.6 ? "a little dug" : left > 0.3 ? "half dug" : left > 0.02 ? "nearly dug out" : "dug out";
   return {
     setSpeed,
     setTime(t: number) {
@@ -117,7 +124,8 @@ export function hud(world: WorldData, dock: Dock, cb: { onSpeed: (s: number) => 
       life.textContent = `${l.people.toLocaleString()} PEOPLE · ${k(l.animals + l.birds + l.rabbits)} ANIMALS`;
       life.setAttribute("title", `${l.animals.toLocaleString()} large animals, ${l.birds.toLocaleString()} birds, about ${l.rabbits.toLocaleString()} rabbits and hares, about ${l.fish.toLocaleString()} fish`);
     },
-    setFields(f: { gw: number; cell: number; rabbits: Uint8Array; fish: Uint8Array }) { fields = f; },
+    setFields(f: { gw: number; cell: number; rabbits: Uint8Array; fish: Uint8Array; left?: Uint8Array }) { fields = f; },
+    setDeposits(list: DepositSnap[]) { deposits = list; },
     setMinimap(src: HTMLCanvasElement) { base = document.createElement("canvas"); base.width = mw; base.height = mh; const b = base.getContext("2d")!; b.imageSmoothingEnabled = true; b.imageSmoothingQuality = "high"; b.drawImage(src, 0, 0, mw, mh); },
     drawMinimap(view: { x0: number; y0: number; x1: number; y1: number }) {
       if (!base) return; mctx.drawImage(base, 0, 0);
@@ -130,11 +138,18 @@ export function hud(world: WorldData, dock: Dock, cb: { onSpeed: (s: number) => 
       const tC = Math.round(world.temp[i] / 255 * 62 - 26), mm = Math.round(world.rain[i] / 255 * 3200);
       const elevText = f & Flag.Ocean ? `${Math.round(-e * 6000).toLocaleString()} m deep` : `${Math.round(Math.max(0, e) * 5200).toLocaleString()} m`;
       const tree = world.tree[i] ? TREE_NAMES[world.tree[i]] : "";
-      const extra = f & Flag.River ? (world.depth[i] >= 3 ? "A great river" : world.depth[i] === 2 ? "A river" : "A stream") : f & Flag.Ocean ? `${world.depth[i]} tiles from shore` : f & Flag.Lake ? "Fresh water" : tree ? `${tree}${world.tree[i] >= 18 ? "" : " trees"}` : "Open ground";
+      const extra = f & Flag.River ? (world.depth[i] >= 3 ? "A great river" : world.depth[i] === 2 ? "A river" : "A stream") : f & Flag.Ocean ? `${world.depth[i]} tiles from shore` : f & Flag.Lake ? "Fresh water" : tree ? (world.tree[i] === 17 ? "A dead tree" : `${tree}${world.tree[i] >= 18 ? "" : " trees"}`) : "Open ground";
       let game = "";
       if (fields) {
         const c = Math.floor(y / fields.cell) * fields.gw + Math.floor(x / fields.cell);
         game = f & Flag.Water ? `<dt>FISH</dt><dd>${plenty(fields.fish[c] / 255)}</dd>` : fields.rabbits[c] ? `<dt>RABBITS</dt><dd>${plenty(fields.rabbits[c] / 255)}</dd>` : "";
+      }
+      /* what lies in the ground here */
+      for (const d of deposits) {
+        if (Math.hypot(d.x - x - 0.5, d.y - y - 0.5) > d.r + 0.5) continue;
+        const left = fields?.left && fields.left.length >= d.id ? fields.left[d.id - 1] / 255 : 1;
+        game += `<dt>${MAT_NAMES[d.kind].replace(/ ore$/, "").toUpperCase()}</dt><dd>${DEPOSIT_WORDS[d.kind] ?? "a deposit"}, ${dugWord(left)}</dd>`;
+        break;
       }
       info.innerHTML = `<b>${BIOME_NAMES[b]}</b> &middot; ${extra}<br><span>${elevText} &middot; ${tC}&deg;C &middot; ${mm.toLocaleString()} mm rain</span>${game ? `<br><dl>${game}</dl>` : ""}`;
     },

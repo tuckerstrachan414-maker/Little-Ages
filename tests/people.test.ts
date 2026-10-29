@@ -165,12 +165,12 @@ describe("people: determinism and the cradle start", () => {
 
 describe("the rule: nothing is triggered by a date", () => {
   it("no simulation code fires events on a particular year or day", () => {
-    const dirs = ["src/sim/people/", "src/sim/tech/", "src/sim/tech/branches/"];
-    for (const dir of dirs) for (const f of readdirSync(dir)) {
-      if (!f.endsWith(".ts")) continue;
-      const src = readFileSync(dir + f, "utf8");
-      expect(src, `${dir}${f}`).not.toMatch(/\b(year|day)\s*===?\s*\d/);
-      expect(src, `${dir}${f}`).not.toMatch(/\btime\s*[<>]=?\s*\d{3,}/);
+    const dirs = ["src/sim/people/", "src/sim/tech/", "src/sim/tech/branches/", "src/sim/economy/", "src/sim/world/"];
+    const files = dirs.flatMap(dir => readdirSync(dir).filter(f => f.endsWith(".ts")).map(f => dir + f)).concat(["src/sim/resources.ts", "src/sim/ecology.ts"]);
+    for (const f of files) {
+      const src = readFileSync(f, "utf8");
+      expect(src, f).not.toMatch(/\b(year|day)\s*===?\s*\d/);
+      expect(src, f).not.toMatch(/\btime\s*[<>]=?\s*\d{3,}/);
     }
     void Flag;
   });

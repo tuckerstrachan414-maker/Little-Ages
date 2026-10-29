@@ -18,6 +18,8 @@ const STOCK: Partial<Record<number, number>> = {
 };
 /** Trees nobody cuts for wood. */
 const NEVER = new Set<number>([Tree.Reeds, Tree.Cactus]);
+/** The daily chance a cleared tile ringed by trees grows its tree back: a felled wood returns from its edges over a few decades. */
+const REGROW = 0.0012;
 
 export class Resources {
   readonly w: WorldData;
@@ -31,6 +33,10 @@ export class Resources {
   changed: number[] = [];
   /** cleared tiles, and when each was cleared */
   private cleared = new Map<number, number>();
+  /** ecology patches whose trees changed since the ecology last recounted them */
+  private dirty = new Set<number>();
+  /** tiles that grew their trees back today */
+  regrownToday: number[] = [];
   /** the deposits each people knows of */
   known = new Map<number, Set<number>>();
   /** wood cut and trees felled, deposits found and dug out, trees grown back */
@@ -52,13 +58,20 @@ export class Resources {
 
   /** Deposits with anything left within r tiles of (x, y). */
   depositsNear(x: number, y: number, r: number): Deposit[] {
-    const out: Deposit[] = [], R = Math.ceil(r / CELL);
-    const cx = (x / CELL) | 0, cy = (y / CELL) | 0;
+    const R = Math.ceil(r / CELL), cx = (x / CELL) | 0, cy = (y / CELL) | 0;
+    let out: Deposit[] | null = null;
     for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) {
-      const l = this.byCell.get((cy + dy) * this.gw + cx + dx); if (!l) continue;
-      for (const id of l) { const d = this.deposits[id - 1]; if (d.left > 0 && Math.hypot(d.x - x, d.y - y) <= r) out.push(d); }
+      const xx = cx + dx, yy = cy + dy; if (xx < 0 || yy < 0 || xx >= this.gw) continue;
+      const l = this.byCell.get(yy * this.gw + xx); if (!l) continue;
+      for (const id of l) { const d = this.deposits[id - 1]; if (d.left > 0 && Math.hypot(d.x - x, d.y - y) <= r) (out ??= []).push(d); }
     }
-    return out.sort((a, b) => a.id - b.id);
+    return out ? out.sort((a, b) => a.id - b.id) : [];
+  }
+  /** Which peoples know each deposit, one bit per people, for the map. */
+  knownBy(): Uint32Array {
+    const out = new Uint32Array(this.deposits.length);
+    for (const [culture, set] of this.known) { if (culture >= 32) continue; for (const id of set) out[id - 1] |= 1 << culture; }
+    return out;
   }
   /** Whether a people knows a deposit of a material (by id or name) within r tiles of (x, y). */
   knownNear(culture: number, x: number, y: number, r: number, what: number | string): boolean {
@@ -82,38 +95,57 @@ export class Resources {
   /** Takes up to amt out of a deposit; returns what came out. Exhausted deposits give nothing. */
   take(dep: Deposit, amt: number): number {
     const got = Math.min(amt, dep.left);
+    if (got <= 0) return 0;
     dep.left -= got; this.stats.dug += got;
     if (dep.left <= 0) { dep.left = 0; this.stats.exhausted++; }
     return got;
   }
   /** Cuts wood from the tree on a tile: returns the loads that came off it. A bare tile gives what the land has (sticks and brush), without a tree to fell. */
-  cut(x: number, y: number, amt: number): number {
+  cut(x: number, y: number, amt: number, time: number): number {
     const i = (y | 0) * this.w.w + (x | 0), t = this.w.tree[i];
-    if (!t) return amt * 0.5;
+    if (!t || t === Tree.Snag) return amt * 0.5;
     if (NEVER.has(t)) return amt;
     const got = Math.min(amt, this.stock[i]);
     this.stock[i] -= got; this.stats.cut += got;
-    if (this.stock[i] <= 0) { this.w.tree[i] = Tree.Snag; this.stock[i] = STOCK[Tree.Snag]!; this.changed.push(i, Tree.Snag); this.cleared.set(i, -1); this.stats.felled++; }
+    if (this.stock[i] <= 0) { this.setTree(i, Tree.Snag); this.stock[i] = STOCK[Tree.Snag]!; this.cleared.set(i, time); this.stats.felled++; }
     return got;
   }
-  /** Marks when a tile was cleared (called with the time by whoever cut it). */
-  clearedAt(i: number, t: number): void { if (this.cleared.get(i) === -1) this.cleared.set(i, t); }
+  /** Cuts from the best-stocked tree beside where someone stands (or under them): wood is gathered standing beside the trunk. */
+  cutNear(x: number, y: number, amt: number, time: number): number {
+    const W = this.w.w, H = this.w.h, tx = x | 0, ty = y | 0;
+    let bi = -1, bs = 0;
+    for (const [dx, dy] of [[0, 0], [0, -1], [1, 0], [0, 1], [-1, 0]]) {
+      const xx = tx + dx, yy = ty + dy; if (xx < 0 || yy < 0 || xx >= W || yy >= H) continue;
+      const i = yy * W + xx, t = this.w.tree[i]; if (!t || t === Tree.Snag || NEVER.has(t)) continue;
+      if (this.stock[i] > bs) { bs = this.stock[i]; bi = i; }
+    }
+    if (bi < 0) return amt * 0.5;
+    return this.cut(bi % W, (bi / W) | 0, amt, time);
+  }
+  /** Whether wood can be cut from the tree on a tile (a standing tree with wood left on it). */
+  cuttable(i: number): boolean { const t = this.w.tree[i]; return !!t && t !== Tree.Snag && !NEVER.has(t) && this.stock[i] > 0; }
+  private setTree(i: number, t: number): void {
+    this.w.tree[i] = t; this.changed.push(i, t);
+    this.dirty.add(((((i / this.w.w) | 0) / CELL) | 0) * this.gw + (((i % this.w.w) / CELL) | 0));
+  }
+  /** The ecology patches whose trees changed since last asked. */
+  takeDirty(): number[] { if (!this.dirty.size) return []; const out = [...this.dirty]; this.dirty.clear(); return out; }
 
   /** Once a day: snags rot away, and cleared ground beside trees slowly grows its old trees back. */
   daily(time: number, moistAt?: (x: number, y: number) => number): void {
-    const W = this.w.w, H = this.w.h;
+    const W = this.w.w, H = this.w.h, day = (time / DAY_SECONDS) | 0;
+    this.regrownToday.length = 0;
     for (const [i, at] of this.cleared) {
-      if (at === -1) { this.cleared.set(i, time); continue; }
       const t = this.w.tree[i], x = i % W, y = (i / W) | 0;
       /* a dead tree stands about a year, then falls */
-      if (t === Tree.Snag && time - at > DAY_SECONDS * 40 && hash2(x, y, (time / DAY_SECONDS) | 0) < 0.05) { this.w.tree[i] = Tree.None; this.stock[i] = 0; this.changed.push(i, Tree.None); continue; }
-      if (t !== Tree.None) continue;
-      let trees = 0; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const xx = x + dx, yy = y + dy; if (xx < 0 || yy < 0 || xx >= W || yy >= H || (dx === 0 && dy === 0)) continue; if (this.w.tree[yy * W + xx] && this.w.tree[yy * W + xx] !== Tree.Snag) trees++; }
+      if (t === Tree.Snag) { if (time - at > DAY_SECONDS * 40 && hash2(x, y, day) < 0.05) { this.setTree(i, Tree.None); this.stock[i] = 0; } continue; }
+      if (t !== Tree.None) { this.cleared.delete(i); continue; }
+      let trees = 0; for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const xx = x + dx, yy = y + dy; if (xx < 0 || yy < 0 || xx >= W || yy >= H || (dx === 0 && dy === 0)) continue; const n = this.w.tree[yy * W + xx]; if (n && n !== Tree.Snag) trees++; }
       if (!trees) continue;
       const moist = moistAt ? moistAt(x, y) : 0.6;
-      if (hash2(x, y, (time / DAY_SECONDS) | 0 + 77) < 0.0006 * (trees / 8) * (0.3 + moist)) {
+      if (hash2(x, y, day + 77) < REGROW * (trees / 8) * (0.3 + moist)) {
         const sp = this.orig[i] || Tree.Shrub;
-        this.w.tree[i] = sp; this.stock[i] = NEVER.has(sp) ? 255 : (STOCK[sp] ?? 12); this.changed.push(i, sp); this.cleared.delete(i); this.stats.regrown++;
+        this.setTree(i, sp); this.stock[i] = NEVER.has(sp) ? 255 : (STOCK[sp] ?? 12); this.cleared.delete(i); this.stats.regrown++; this.regrownToday.push(i);
       }
     }
     for (const d of this.deposits) if (MATS[d.kind].regrows && d.left < d.amount) d.left = Math.min(d.amount, d.left + d.amount / 400);

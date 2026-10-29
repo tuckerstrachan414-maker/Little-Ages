@@ -1,3 +1,4 @@
+import { bakeTile } from "../sim/world/bake.ts";
 import { Camera } from "./camera.ts";
 import { treeSprite, treeGlyph } from "./sprites/trees.ts";
 import { animalSprite, ANIMAL_DOT } from "./sprites/animals.ts";
@@ -88,14 +89,46 @@ export class Renderer {
     this.terrain = fresh; this.season = season; this.mode = mode;
     if (mode === "terrain") this.px = px;
     /* pre-shrunk copies so the zoomed-out view is a cheap blit */
-    this.mips = [];
-    let src = fresh;
-    while (src.width > 512) { const m = document.createElement("canvas"); m.width = src.width >> 1; m.height = src.height >> 1; const c = m.getContext("2d")!; c.imageSmoothingEnabled = true; c.imageSmoothingQuality = "high"; c.drawImage(src, 0, 0, m.width, m.height); this.mips.push(m); src = m; }
+    this.buildMips();
     if (mode !== "terrain" || changed) this.clearChunks();
   }
   private mips: HTMLCanvasElement[] = [];
+  private mipsDirty = false; private mipsAt = 0;
   /** The smallest copy of the map that still has at least one pixel per screen pixel. */
   private mipFor(z: number): HTMLCanvasElement { let best = this.terrain; for (const m of this.mips) { if (m.width / this.world.w >= z) best = m; } return best; }
+  private buildMips(): void {
+    this.mips = [];
+    let src = this.terrain;
+    while (src.width > 512) { const m = document.createElement("canvas"); m.width = src.width >> 1; m.height = src.height >> 1; const c = m.getContext("2d")!; c.imageSmoothingEnabled = true; c.imageSmoothingQuality = "high"; c.drawImage(src, 0, 0, m.width, m.height); this.mips.push(m); src = m; }
+    this.mipsDirty = false; this.mipsAt = performance.now();
+  }
+  /**
+   * Trees felled, fallen or grown back: the page's copy of the world changes, the tile is repainted on the map,
+   * and the cached ground chunks over it are thrown away so they are built again with the land as it is now.
+   */
+  applyTiles(changes: Int32Array): void {
+    const wd = this.world, W = wd.w;
+    const tctx = this.terrain.getContext("2d")!, one = tctx.createImageData(1, 1);
+    const gone = new Set<string>();
+    for (let k = 0; k < changes.length; k += 2) {
+      const i = changes[k], t = changes[k + 1];
+      if (i < 0 || i >= wd.tree.length) continue;
+      wd.tree[i] = t;
+      if (this.px) {
+        bakeTile(wd, this.season, this.mode, i, this.px);
+        if (this.mode === "terrain") { const o = i * 4; one.data[0] = this.px[o]; one.data[1] = this.px[o + 1]; one.data[2] = this.px[o + 2]; one.data[3] = 255; tctx.putImageData(one, i % W, (i / W) | 0); }
+      }
+      const x = i % W, y = (i / W) | 0;
+      for (const T of BUCKETS) {
+        const CH = Math.max(8, Math.round(CHUNK_PX / T)), cx = Math.floor(x / CH), cy = Math.floor(y / CH);
+        /* a crown reaches into the chunk above, the ground smoothing into every neighbor: on a border, those go too */
+        const bx = x % CH === 0 ? -1 : x % CH === CH - 1 ? 1 : 0, by = y % CH === 0 ? -1 : y % CH === CH - 1 ? 1 : 0;
+        for (let dy = Math.min(0, by); dy <= Math.max(0, by); dy++) for (let dx = Math.min(0, bx); dx <= Math.max(0, bx); dx++) gone.add(`${cx + dx},${cy + dy},${T}`);
+      }
+    }
+    for (const g of gone) for (let s = 0; s < 4; s++) { const key = `${g},${s}`, c = this.chunks.get(key); if (c) { this.chunks.delete(key); this.chunkPixels -= c.px; } }
+    this.mipsDirty = true;
+  }
 
   resize(cssW: number, cssH: number, dpr: number): void {
     this.dpr = dpr;
@@ -106,6 +139,8 @@ export class Renderer {
   draw(now: number): void {
     const { ctx, cam } = this;
     cam.step(now);
+    /* felled trees reach the zoomed-out map at most once a second */
+    if (this.mipsDirty && now - this.mipsAt > 1000) this.buildMips();
     const z = cam.z, W = this.world.w, H = this.world.h;
     ctx.fillStyle = FN.deep; ctx.fillRect(0, 0, cam.vw, cam.vh);
     /* 1. the map */

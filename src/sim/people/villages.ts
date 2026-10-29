@@ -92,7 +92,7 @@ export function tiesTo(s: Society, q: { id: number; mother: number; father: numb
 /** The weightiest thing that has happened around a place, kept per square of the map so a village can be named for it. */
 export interface Notable { kind: string; sig: number; hint: number; who: string; t: number; }
 const NOTE_CELL = 12;
-const NAMEABLE = new Set(["kill", "weir", "harvest", "fight", "fireout", "discover", "ember", "peace", "hut"]);
+const NAMEABLE = new Set(["kill", "weir", "harvest", "fight", "fireout", "discover", "ember", "peace", "hut", "found"]);
 export const noteKey = (x: number, y: number) => `${Math.floor(x / NOTE_CELL)},${Math.floor(y / NOTE_CELL)}`;
 /** Called with every event: keeps the weightiest nameable thing that has happened in each square. */
 export function noteSite(s: Society, kind: string, sig: number, hint: number, who: number[], x: number, y: number): void {

@@ -248,9 +248,12 @@ function work(s: Society, p: Person, st: Step, dt: number, anim: number): void {
       break;
     }
     case St.Wood: {
-      /* an axe brings down dead wood that hands can only break off a stick at a time */
-      const axe = knows(p, Idea.Axe);
-      load(p, Food.Wood, axe ? 5 : 3);
+      /* an axe brings down dead wood that hands can only break off a stick at a time; the tree it comes off has only so much on it */
+      const axe = knows(p, Idea.Axe), want = axe ? 5 : 3;
+      let got = s.resources.cutNear(st.x, st.y, want, s.time);
+      /* turf, reeds and grass cut on the spot for a hut where no trees stand */
+      if (st.a === 1 && got < want) got = want;
+      load(p, Food.Wood, got);
       if (axe) practice(p, Idea.Axe, 0.005);
       inspire(s, p, St.Wood);
       break;

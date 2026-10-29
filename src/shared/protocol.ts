@@ -29,8 +29,12 @@ export type FromWorker =
       people: Float32Array; peopleCount: number; camps: CampSnap[]; looks: Look[]; events: ChronicleEvent[]; pop: number;
       /* weirs, plots, huts and pits, sent only when they have changed; villages and gatherings likewise */
       works?: WorkSnap[]; villages?: VillageSnap[] }
-  /* small game and fish per 16x16-tile patch, 0..255, sent once a game day */
-  | { type: "fields"; gw: number; gh: number; cell: number; rabbits: Uint8Array; fish: Uint8Array; rabbitTotal: number; fishTotal: number }
+  /* small game and fish per 16x16-tile patch, 0..255, and what is left of each deposit, sent once a game day */
+  | { type: "fields"; gw: number; gh: number; cell: number; rabbits: Uint8Array; fish: Uint8Array; rabbitTotal: number; fishTotal: number; left: Uint8Array }
+  /** what lies in the ground, once after the world; `left` in `fields` says how much of each remains */
+  | { type: "deposits"; list: DepositSnap[] }
+  /** tiles whose tree changed (felled, fallen, grown back), as [tile index, tree] pairs, sent once a game day when any */
+  | { type: "tiles"; changes: Int32Array }
   | { type: "results"; seq: number; items: SearchItem[] }
   /** triples of [person a, person b, bond] (see Bond) */
   | { type: "bonds"; edges: Int32Array }
@@ -41,6 +45,9 @@ export type FromWorker =
   | { type: "person"; detail: PersonDetail | null; id: number }
   | { type: "band"; detail: BandDetail | null; id: number }
   | { type: "village"; detail: VillageDetail | null; id: number };
+
+/** A deposit as the page knows it: where, what, how big. */
+export interface DepositSnap { id: number; kind: number; name: string; x: number; y: number; r: number; amount: number; }
 
 export interface Kin {
   id: number; name: string; rel: string; alive: boolean; age: number; sex: "f" | "m";

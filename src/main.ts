@@ -13,7 +13,7 @@ import { BondLayer } from "./ui/bonds.ts";
 import { TechPanel } from "./ui/tech.ts";
 import type { CampSnap, ChronicleEvent } from "./shared/people.ts";
 import type { SearchItem } from "./sim/people/search.ts";
-import type { FromWorker, ToWorker } from "./shared/protocol.ts";
+import type { FromWorker, ToWorker, DepositSnap } from "./shared/protocol.ts";
 import type { MapMode } from "./shared/types.ts";
 
 /* Boot: world creation, then the map, the simulation worker and the interface. */
@@ -32,6 +32,7 @@ let search: SearchBox | null = null;
 let spot: Spotlight | null = null;
 let bonds: BondLayer | null = null;
 let tech: TechPanel | null = null;
+let deposits: DepositSnap[] = [];
 let camps: CampSnap[] = [];
 let lastTick = { time: 0, at: 0, speed: 1 };
 const life = { animals: 0, birds: 0, rabbits: 0, fish: 0, people: 0 };
@@ -131,6 +132,10 @@ function start() {
       } else if (m.type === "fields") {
         if (renderer) renderer.fields = m;
         life.rabbits = m.rabbitTotal; life.fish = m.fishTotal; ui?.setLife(life); ui?.setFields(m);
+      } else if (m.type === "deposits") {
+        deposits = m.list; ui?.setDeposits(m.list);
+      } else if (m.type === "tiles") {
+        renderer?.applyTiles(m.changes);
       } else if (m.type === "tick") {
         if (!renderer) return;
         const now = performance.now();
@@ -248,6 +253,6 @@ function bindInput() {
 }
 
 /* small hook for automated visual checks and the curious */
-(window as unknown as { littleAges: unknown }).littleAges = { get renderer() { return renderer; }, get camps() { return camps; }, get history() { return history; }, get ribbon() { return ribbon; }, get spot() { return spot; }, get journal() { return journal; }, get search() { return search; }, get bonds() { return bonds; }, get tech() { return tech; }, get dock() { return dock; }, lookAt, setSpeed: (s: number) => ui?.setSpeed(s), setTime: (t: number) => send({ type: "settime", time: t }), pin };
+(window as unknown as { littleAges: unknown }).littleAges = { get renderer() { return renderer; }, get camps() { return camps; }, get history() { return history; }, get ribbon() { return ribbon; }, get spot() { return spot; }, get journal() { return journal; }, get search() { return search; }, get bonds() { return bonds; }, get tech() { return tech; }, get dock() { return dock; }, get deposits() { return deposits; }, lookAt, setSpeed: (s: number) => ui?.setSpeed(s), setTime: (t: number) => send({ type: "settime", time: t }), pin };
 
 start();

@@ -2,6 +2,7 @@ import { Species } from "../../shared/types.ts";
 import type { Society } from "./society.ts";
 import { TECHS as IDEAS } from "../tech/tree.ts";
 import { unpackHint } from "../tech/tree.ts";
+import { MATS } from "../economy/goods.ts";
 
 /*
   How much an event matters, and a headline for it. Nothing is scripted: weight comes from
@@ -27,6 +28,7 @@ const BASE: Record<string, [number, string]> = {
   hut: [0.34, "A first hut"], pit: [0.3, "Food put by"], field: [0.3, "A field sown again"], seed: [0.36, "The grain grows tame"],
   gather: [0.48, "Bands gather"], disperse: [0.32, "A gathering breaks up"],
   village: [0.84, "A village is born"], villagegrow: [0.45, "A village grows"], abandon: [0.6, "A village abandoned"], return: [0.5, "Back to the old village"],
+  found: [0.3, "A deposit found"], exhausted: [0.38, "A deposit dug out"], regrown: [0.2, "The wood comes back"],
 };
 /** Every kind of event the simulation tells of. */
 export const KINDS = Object.keys(BASE);
@@ -78,6 +80,8 @@ export function weigh(s: Society, kind: string, who: number[], band: number, hin
     case "pit": if (n === 0) title = "Food put by in the ground"; break;
     case "gather": sig += Math.min(0.25, Math.max(0, hint - 40) / 200); break;
     case "village": if (n === 0) title = "The first village"; break;
+    case "found": { const m = MATS[hint]; if (m) { title = `${m.name.charAt(0).toUpperCase()}${m.name.slice(1)} found`; if (hint >= 15) sig += 0.08; } break; }
+    case "exhausted": { const m = MATS[hint]; if (m) title = `The ${m.name} runs out`; break; }
     case "feud": if (hint === 1) { sig += 0.04; title = "A feud passes down"; } break;
     case "fight": if (hint === 1) { sig += 0.08; title = "Hurt in a fight"; } break;
     case "peace": if (hint === 1) { sig += 0.12; title = "A feud is settled"; } else title = "A feud cools"; break;
