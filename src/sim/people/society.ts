@@ -55,6 +55,17 @@ export const FOOD_DAY: Record<Stage, number> = { baby: 0, toddler: 0.45, child: 
 /** Meat on one animal, in days of food for one person. */
 export const MEAT = [25, 100, 400, 60, 0, 60, 14, 16, 30, 0];
 const BAND_COLORS = ["#c0563f", "#4f74a8", "#c99a32", "#7d5a96", "#4e8a5c", "#b5683a", "#3f8a8c", "#a8456a", "#6e7d3a", "#8a5a3a", "#5a6ab0", "#b0804a", "#507a8c", "#9a4a8a", "#6a9a4a", "#c07a5a"];
+/**
+  Is a point within r of another? The squared distance settles it unless it falls within a
+  hair of r², where the exact `Math.hypot` test is asked as before, so nothing that these
+  bounds decide ever differs from `Math.hypot(dx, dy) <= r`; they only save the square root
+  for the crowds and herds everybody looks over every few seconds. A negative or NaN radius
+  takes nobody, as before.
+*/
+export const withinLo = (r: number) => r < 0 ? -1 : r * r * (1 - 1e-9);
+export const withinHi = (r: number) => r < 0 ? -1 : r * r * (1 + 1e-9);
+/** Scratch lists for `kin`. */
+const KIN_A: number[] = [], KIN_B: number[] = [];
 
 export class Society {
   readonly w: WorldData; readonly eco: Ecology; readonly wild: Wildlife; readonly walker: Walker; readonly rng: Rng;
@@ -454,13 +465,37 @@ export class Society {
     for (const cid of p.children) { const c = this.byId.get(cid); if (c && this.age(c) < 12 && c.band !== to.id && (c.mother === p.id || !this.byId.has(c.mother))) move(c); }
   }
 
-  /** Are two people close kin (parent, child, sibling, grandparent, aunt or uncle, first cousin)? */
+  /**
+    Are two people close kin (parent, child, sibling, grandparent, aunt or uncle, first cousin)?
+    Each side's forebears up to `depth` generations are gathered and the two lists compared;
+    for the depths everyone asks about (1 and 2) that is at most seven ids each, kept in two
+    scratch lists, since this is asked for every pair of adults in a band every day.
+  */
   kin(a: Person, b: { id: number; mother: number; father: number }, depth = 2): boolean {
+    if (depth <= 2) {
+      if (depth < 0) return false;
+      if (depth < 1) return !!a.id && a.id === b.id;
+      const na = this.forebears(a.id, depth, KIN_A), nb = this.forebears(b.id, depth, KIN_B);
+      for (let i = 0; i < na; i++) { const x = KIN_A[i]; for (let j = 0; j < nb; j++) if (KIN_B[j] === x) return true; }
+      return false;
+    }
     const up = (id: number, d: number, out: Set<number>) => { if (!id || d < 0) return; out.add(id); const r = this.byId.get(id) ?? this.archive.get(id); if (r) { up(r.mother, d - 1, out); up(r.father, d - 1, out); } };
     const A = new Set<number>(), B = new Set<number>();
     up(a.id, depth, A); up(b.id, depth, B);
     for (const x of A) if (B.has(x)) return true;
     return false;
+  }
+  /** Someone, their parents and, at depth 2, their grandparents, as far as they are on record; written into `out`, the count returned. */
+  private forebears(id: number, depth: number, out: number[]): number {
+    let n = 0;
+    if (!id) return 0;
+    out[n++] = id;
+    const r = this.byId.get(id) ?? this.archive.get(id);
+    if (!r) return n;
+    const m = r.mother, f = r.father;
+    if (m) { out[n++] = m; if (depth > 1) { const q = this.byId.get(m) ?? this.archive.get(m); if (q) { if (q.mother) out[n++] = q.mother; if (q.father) out[n++] = q.father; } } }
+    if (f) { out[n++] = f; if (depth > 1) { const q = this.byId.get(f) ?? this.archive.get(f); if (q) { if (q.mother) out[n++] = q.mother; if (q.father) out[n++] = q.father; } } }
+    return n;
   }
 
   /* ---------------- camps ---------------- */
@@ -657,15 +692,17 @@ export class Society {
   /** People within r tiles of (x, y). */
   near(x: number, y: number, r: number, out: Person[] = []): Person[] {
     out.length = 0;
+    const lo = withinLo(r), hi = withinHi(r);
     const x0 = Math.floor((x - r) / 8), x1 = Math.floor((x + r) / 8), y0 = Math.floor((y - r) / 8), y1 = Math.floor((y + r) / 8);
-    for (let gy = y0; gy <= y1; gy++) for (let gx = x0; gx <= x1; gx++) { const a = this.grid.get(gy * 4096 + gx); if (a) for (const p of a) if (Math.hypot(p.x - x, p.y - y) <= r) out.push(p); }
+    for (let gy = y0; gy <= y1; gy++) for (let gx = x0; gx <= x1; gx++) { const a = this.grid.get(gy * 4096 + gx); if (a) for (const p of a) { const dx = p.x - x, dy = p.y - y, d2 = dx * dx + dy * dy; if (d2 <= lo || (d2 <= hi && Math.hypot(dx, dy) <= r)) out.push(p); } }
     return out;
   }
   herdsNear(x: number, y: number, r: number): Herd[] {
     const out: Herd[] = [];
     if (this.time - this.herdGridAt > 1) this.rebuildHerdGrid();
+    const lo = withinLo(r), hi = withinHi(r);
     const x0 = Math.floor((x - r) / 16), x1 = Math.floor((x + r) / 16), y0 = Math.floor((y - r) / 16), y1 = Math.floor((y + r) / 16);
-    for (let gy = y0; gy <= y1; gy++) for (let gx = x0; gx <= x1; gx++) { const a = this.herdGrid.get(gy * 4096 + gx); if (a) for (const h of a) if (h.n > 0 && Math.hypot(h.x - x, h.y - y) <= r) out.push(h); }
+    for (let gy = y0; gy <= y1; gy++) for (let gx = x0; gx <= x1; gx++) { const a = this.herdGrid.get(gy * 4096 + gx); if (a) for (const h of a) { if (h.n <= 0) continue; const dx = h.x - x, dy = h.y - y, d2 = dx * dx + dy * dy; if (d2 <= lo || (d2 <= hi && Math.hypot(dx, dy) <= r)) out.push(h); } }
     return out;
   }
 
@@ -865,8 +902,11 @@ export class Society {
     }
     for (const c of this.carcasses) if (c.meat > 2 && Math.hypot(c.x - p.x, c.y - p.y) < r) this.learnPlace(p, Place.Carcass, c.x, c.y, c.meat, c.id, 0, this.time, c.sp);
     for (const d of this.resources.depositsNear(p.x, p.y, r)) this.learnDeposit(p, d);
+    const reach = r + 6, lo = withinLo(reach), hi = withinHi(reach);
     for (const b of this.bands) {
-      if (b.id === p.band || Math.hypot(b.x - p.x, b.y - p.y) > r + 6) continue;
+      if (b.id === p.band) continue;
+      const dx = b.x - p.x, dy = b.y - p.y, d2 = dx * dx + dy * dy;
+      if (d2 > hi || (d2 > lo && Math.hypot(dx, dy) > reach)) continue;
       this.learnPlace(p, Place.Camp, b.x, b.y, 1, b.id, 0);
       const mine = this.band(p);
       if (!mine.met.has(b.id)) {

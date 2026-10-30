@@ -3,7 +3,7 @@ import { Bubble } from "../../shared/people.ts";
 import { Mem, type Person } from "./person.ts";
 import type { Band } from "./band.ts";
 import { MEAT, type Carcass, type Society } from "./society.ts";
-import { close, feudOf, grievance } from "./feuds.ts";
+import { close, feudOf, sideOf, grievance } from "./feuds.ts";
 import { SPECIES_SHORT } from "./mind.ts";
 
 /*
@@ -22,8 +22,22 @@ import { SPECIES_SHORT } from "./mind.ts";
 
 const lg = (v: number) => Math.log1p(Math.max(0, v));
 
+/**
+  Which side of each live feud someone is on, by person: what `feudOf` works out afresh for
+  every pair, worked out once per person for the day's vote, where every adult weighs every
+  other. The feuds are those `feudOf` walks (all but the ones cooled below 0.1), in order.
+*/
+export type FeudSides = Map<number, Int8Array>;
+export function feudSides(s: Society, people: Person[]): FeudSides {
+  const feuds = s.feuds.filter(f => !(f.heat < 0.1)), sides: FeudSides = new Map();
+  for (const p of people) { const row = new Int8Array(feuds.length); for (let k = 0; k < feuds.length; k++) row[k] = sideOf(s, feuds[k], p); sides.set(p.id, row); }
+  return sides;
+}
+/** Whether a feud sets two people against each other, from their sides: the same answer as `feudOf(s, p, q) !== null`. */
+const atFeud = (a: Int8Array, b: Int8Array): boolean => { for (let k = 0; k < a.length; k++) { const x = a[k]; if (x && b[k] && b[k] !== x) return true; } return false; };
+
 /** How much `p` would go along with `q` (or with their own judgment, when q is p). */
-export function voice(s: Society, b: Band, p: Person, q: Person): number {
+export function voice(s: Society, b: Band, p: Person, q: Person, sides?: FeudSides): number {
   if (q === p) return 0.1 + lg(p.prestige) * 0.6 + p.traits[3] * 0.35 + (s.age(p) > 45 ? 0.08 : 0);
   const aq = s.age(q);
   if (aq < 18) return -1;
@@ -34,7 +48,8 @@ export function voice(s: Society, b: Band, p: Person, q: Person): number {
   /* people stay with the one they have been listening to, and with the one who already leads */
   if (q.id === b.respected) v += 0.25;
   if (p.follows === q.id) v += 0.15;
-  if (feudOf(s, p, q)) v -= 1;
+  const sp = sides?.get(p.id), sq = sides?.get(q.id);
+  if (sp && sq ? atFeud(sp, sq) : feudOf(s, p, q)) v -= 1;
   return v;
 }
 
@@ -43,10 +58,10 @@ export function voice(s: Society, b: Band, p: Person, q: Person): number {
   whoever has the biggest following. A leader is only replaced by someone with clearly more.
 */
 export function chooseLeaders(s: Society, b: Band, adults: Person[]): void {
-  const count = new Map<number, number>();
+  const count = new Map<number, number>(), sides = s.feuds.length ? feudSides(s, adults) : undefined;
   for (const p of adults) {
     let best = p, bv = voice(s, b, p, p);
-    for (const q of adults) { if (q === p) continue; const v = voice(s, b, p, q); if (v > bv) { bv = v; best = q; } }
+    for (const q of adults) { if (q === p) continue; const v = voice(s, b, p, q, sides); if (v > bv) { bv = v; best = q; } }
     p.follows = best.id;
     if (best !== p) count.set(best.id, (count.get(best.id) ?? 0) + 1);
   }
