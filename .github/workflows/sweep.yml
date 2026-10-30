@@ -1,0 +1,75 @@
+# The balance sweep of scripts/sweep.ts, one world per job, so sixteen seeds of a hundred years
+# run side by side instead of one after another: `--years 100` is an hour or three for one world.
+# Run it by hand from the Actions tab (or `gh workflow run sweep.yml`); the `collect` job prints
+# the rows of every world as JSON and keeps them as the `sweep-results` artifact, ready for
+# `scripts/sweep.ts --against`. The baseline is run from the commit named in `base` (the last
+# commit before checkpoint 3A by default), so a change can be read against how people lived before it.
+name: Balance sweep
+on:
+  workflow_dispatch:
+    inputs:
+      years:
+        description: Years to simulate
+        default: "100"
+      seeds:
+        description: Seeds, as a JSON list
+        default: "[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]"
+      base:
+        description: Commit to run the baseline from (leave empty for no baseline)
+        default: b9b2275
+jobs:
+  world:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    strategy:
+      fail-fast: false
+      matrix:
+        code: [new, base]
+        seed: ${{ fromJSON(inputs.seeds) }}
+    steps:
+      - if: matrix.code == 'new' || inputs.base != ''
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.code == 'base' && inputs.base || github.ref }}
+      - if: matrix.code == 'new' || inputs.base != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - if: matrix.code == 'new' || inputs.base != ''
+        run: npm ci --ignore-scripts
+      - if: matrix.code == 'new' || inputs.base != ''
+        run: |
+          node --experimental-strip-types --no-warnings scripts/sim-headless.ts --size medium --seed ${{ matrix.seed }} --years ${{ inputs.years }} --bands 12 --summary > report-${{ matrix.code }}-${{ matrix.seed }}.txt
+          grep -E "^SUMMARY|^simulated" report-*.txt
+      - if: matrix.code == 'new' || inputs.base != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-${{ matrix.code }}-${{ matrix.seed }}
+          path: report-*.txt
+  collect:
+    needs: world
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: report-*
+          merge-multiple: true
+      - run: |
+          node -e '
+            const fs = require("fs");
+            const rows = { new: [], base: [] };
+            for (const f of fs.readdirSync(".").filter(f => /^report-(new|base)-\d+\.txt$/.test(f))) {
+              const line = fs.readFileSync(f, "utf8").split("\n").find(l => l.startsWith("SUMMARY "));
+              if (line) rows[f.split("-")[1]].push(JSON.parse(line.slice(8)));
+            }
+            for (const k of ["new", "base"]) {
+              rows[k].sort((a, b) => a.seed - b.seed);
+              fs.writeFileSync(k === "new" ? "sweep.json" : "base.json", JSON.stringify(rows[k], null, 1));
+              console.log(`${k.toUpperCase()}_JSON ${JSON.stringify(rows[k])}`);
+            }
+          '
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sweep-results
+          path: "*.json"
