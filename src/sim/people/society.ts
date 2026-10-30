@@ -428,6 +428,17 @@ export class Society {
     } else if (!left.length) this.event("couple", Bubble.Heart, `${f.name} and ${m.name} of the ${this.band(f).name} became a couple.`, f.x, f.y, [f.id, m.id], f.band, this.band(f).culture !== this.band(m).culture ? 1 : 0);
     relayout(this, this.band(f));
   }
+  /** Someone whose band no longer exists: told of once, then taken into the nearest band, or lost to the wilds when there is none. */
+  private rehome(p: Person): void {
+    const listed = this.bands.filter(b => b.members.includes(p.id)).map(b => b.id);
+    console.error(`[little-ages] ${p.name} (#${p.id}, ${this.age(p).toFixed(1)} years, goal ${p.goal}, carrier ${p.carrier}, baby ${p.baby}) has no band: band ${p.band}, came from ${p.came} at ${p.joined.toFixed(0)}, listed in ${listed.join(",") || "no band"}; bands alive ${this.bands.length}; last events: ${this.events.slice(-4).map(e => `${e.kind}: ${e.text}`).join(" | ")}`);
+    let best: Band | null = null, bd = Infinity;
+    for (const b of this.bands) { const d = Math.hypot(b.x - p.x, b.y - p.y); if (d < bd) { bd = d; best = b; } }
+    if (!best) { this.die(p, "the cold"); return; }
+    for (const b of this.bands) b.members = b.members.filter(id => id !== p.id);
+    p.band = best.id; best.members.push(p.id); abandon(this, p); this.dirty.add(p.id);
+    this.relayout(best);
+  }
   /** Moves a person (and any baby or young children they look after) to another band. */
   moveTo(p: Person, to: Band): void {
     const move = (q: Person) => {
@@ -606,6 +617,8 @@ export class Society {
     const list = this.people.slice();
     for (const p of list) {
       if (!this.byId.has(p.id)) continue;
+      /* nobody lives without a band: someone whose band is gone joins the nearest one (and the log says how it happened, so it can be mended) */
+      if (!this.bandById.has(p.band)) { this.rehome(p); if (!this.byId.has(p.id)) continue; }
       this.body(p, dt);
       if (!this.byId.has(p.id)) continue;
       if (p.carrier) { this.carried(p); continue; }

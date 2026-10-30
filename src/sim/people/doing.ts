@@ -23,6 +23,7 @@ import { pitRoom, pitFood } from "./homes.ts";
 import { Biome } from "../../shared/types.ts";
 import { keepYoung, youngOf, herdSpell, hasDogs } from "./herding.ts";
 import { qualityOf } from "../tech/refine.ts";
+import { noteMeal } from "../economy/diet.ts";
 
 /*
   Doing things. Each plan is a list of steps (walk there, gather, walk back, put it in the
@@ -279,7 +280,7 @@ function work(s: Society, p: Person, st: Step, dt: number, anim: number): void {
     }
     case St.Eat: {
       const greedy = p.traits[2] > 0.65 ? 1.2 : 1;
-      if (st.a === 1 && p.carryAmt > 0 && isFood(p.carryKind)) { const e = Math.min(p.carryAmt, Math.max(0.3, 1.6 - p.food)); p.carryAmt -= e; p.food = Math.min(2.5, p.food + e); if (p.carryAmt <= 0.01) { p.carryAmt = 0; p.carryKind = 0; } }
+      if (st.a === 1 && p.carryAmt > 0 && isFood(p.carryKind)) { const e = Math.min(p.carryAmt, Math.max(0.3, 1.6 - p.food)); p.carryAmt -= e; p.food = Math.min(2.5, p.food + e); const k = p.carryKind; noteMeal(p, { plant: k === Food.Plant ? e : 0, meat: k === Food.Meat ? e : 0, fish: k === Food.Fish ? e : 0, dried: k === Food.Dried ? e : 0 }); if (p.carryAmt <= 0.01) { p.carryAmt = 0; p.carryKind = 0; } }
       else {
         /* with the fire dead, meat and fish are eaten raw, and raw they go less far */
         const raw = b.fire <= 0 && s.atCamp(p, 8);
@@ -319,7 +320,7 @@ function work(s: Society, p: Person, st: Step, dt: number, anim: number): void {
       }
       break;
     }
-    case St.Knap: inspire(s, p, St.Knap); p.spear = 1; p.skills[Skill.Craft] = Math.min(1, p.skills[Skill.Craft] + 0.005); if (knows(p, Idea.Blades)) practice(s, p, Idea.Blades, 0.01); break;
+    case St.Knap: inspire(s, p, St.Knap, { missed: p.mem.some(m => m.k === Mem.Missed && s.time - m.t < DAY_SECONDS * 5) }); p.spear = 1; p.skills[Skill.Craft] = Math.min(1, p.skills[Skill.Craft] + 0.005); if (knows(p, Idea.Blades)) practice(s, p, Idea.Blades, 0.01); break;
     case St.Cook: { const h = hearthOf(s, p), hg = hgoodsOf(s, p); inspire(s, p, St.Cook, { clayNear: s.resources.knownNear(b.culture, b.x, b.y, 20, "clay"), grain: h.plant > 0 && b.problems[Problem.Grain] > 0, pots: hg[Mat.Pots] >= 1 }); break; }
     case St.Shape: shapePots(s, p, st); break;
     case St.Bake: bakePots(s, p, st); break;
@@ -503,8 +504,9 @@ function stalk(s: Society, p: Person, st: Step, dt: number): void {
   if (!s.byId.has(p.id)) return;
   if (s.rng.chance(chance)) kill(s, p, h, party);
   else {
-    /* missed: the herd bolts; try once more if they can catch up. A throw that fell short is when a better weapon comes to mind */
+    /* missed: the herd bolts; try once more if they can catch up. A throw that fell short is when a better weapon comes to mind, now or at the next knapping */
     h.state = 2; h.timer = 10; const a = Math.atan2(h.y - p.y, h.x - p.x); h.tx = h.x + Math.cos(a) * 24; h.ty = h.y + Math.sin(a) * 24;
+    s.remember(p, Mem.Missed, 0, -0.08, h.sp);
     inspire(s, p, St.Stalk, { missed: true });
     if (st.a >= 3 || p.spear <= 0) {
       p.why = `${p.name} is heading home empty-handed. The ${SPECIES_SHORT[h.sp]} got away.`; p.whyAt = s.time;
@@ -744,6 +746,7 @@ function shapePots(s: Society, p: Person, st: Step): void {
   p.raw += want;
   practice(s, p, POTTERY(), 0.02);
   p.skills[Skill.Craft] = Math.min(1, p.skills[Skill.Craft] + 0.003);
+  inspire(s, p, St.Shape, { clayNear: true });
 }
 /** Shaped pots baked in the ashes of the fire, or in a kiln: some crack, many more in the open fire. */
 function bakePots(s: Society, p: Person, st: Step): void {

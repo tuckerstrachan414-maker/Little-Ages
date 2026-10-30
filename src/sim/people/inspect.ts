@@ -59,6 +59,9 @@ function memoryText(s: Society, p: Person, m: Person["mem"][number]): string {
   const whoRel = rel ? `${p.sex === "f" ? "her" : "his"} ${rel}, ${who}` : who;
   const her = p.sex === "f" ? "her" : "him", she = p.sex === "f" ? "she" : "he";
   switch (m.k) {
+    case Mem.HerdLoss: return m.v < -0.3 ? `Wolves got in among the animals the family keeps` : `An animal the family kept wandered off in the night`;
+    case Mem.Kept: return `Carried young animals home from a kill and fed them at the hearth`;
+    case Mem.Missed: return `A throw that fell short, and the game got away`;
     case Mem.Fed: return `${who} gave ${her} food in a hungry time`;
     case Mem.Refused: return `${who} turned ${her} away when ${she} asked for food`;
     case Mem.Repaid: return `${who} paid back the food ${she} gave`;

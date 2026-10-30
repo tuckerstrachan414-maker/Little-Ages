@@ -92,7 +92,8 @@ export const CTX_PROBLEMS: Partial<Record<ProblemKey, (c: Ctx) => number | undef
 
 /** The three wants that press hardest, in words, for a band's card. */
 export function needsLine(b: Band): string {
-  const top = [...(Object.keys(Problem) as ProblemKey[])].filter(k => Problem[k] < Problem.Clay).map(k => [k, b.problems[Problem[k]]] as const).filter(([, v]) => v > 0.25).sort((a, c) => c[1] - a[1]).slice(0, 3);
+  const atHand = new Set<ProblemKey>(["Clay", "Stone", "Flint", "Grain", "Pots"]);
+  const top = [...(Object.keys(Problem) as ProblemKey[])].filter(k => !atHand.has(k)).map(k => [k, b.problems[Problem[k]]] as const).filter(([, v]) => v > 0.25).sort((a, c) => c[1] - a[1]).slice(0, 3);
   const words: Record<ProblemKey, string> = {
     Hunger: "little to eat", Spoilage: "food going bad", Cold: "cold nights", Wet: "the wet getting in", Water: "water far away", Storage: "more food than the pits hold", Wood: "firewood short",
     Crowding: "a crowded camp", Carry: "more than can be carried", Illness: "sickness", Far: "food far from camp", Fire: "no fire", Meat: "no meat lately", HerdLoss: "animals lost to wolves", Dry: "dry ground",

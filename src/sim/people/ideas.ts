@@ -28,7 +28,7 @@ export const IDEAS = TECHS, IDEA_COUNT = TECH_COUNT;
 
 /** The world's record of each idea: who first worked it out, how often it has been found, how many know it now. */
 export interface IdeaLog {
-  first: { who: number; name: string; band: number; bandName: string; people: string; t: number; x: number; y: number } | null;
+  first: { who: number; name: string; band: number; bandName: string; people: string; culture: number; t: number; x: number; y: number } | null;
   /** times it has been worked out by someone who did not learn it */
   times: number;
   /** the peoples that have ever known it */
@@ -128,7 +128,7 @@ export function discover(s: Society, p: Person, id: number, k: number, c: Ctx = 
   b.can[id]++;
   log.times++; log.cultures.add(b.culture); log.knowers++; log.lostAt = 0;
   if (!log.keeper || !s.byId.has(log.keeper)) log.keeper = p.id;
-  if (!log.first) log.first = { who: p.id, name: p.name, band: b.id, bandName: b.name, people: cult.lang.name, t: s.time, x: p.x, y: p.y };
+  if (!log.first) log.first = { who: p.id, name: p.name, band: b.id, bandName: b.name, people: cult.lang.name, culture: b.culture, t: s.time, x: p.x, y: p.y };
   s.remember(p, Mem.Discovered, 0, 0.6, id);
   p.prestige += 0.25 + level * 0.15;
   s.bubble(p, Bubble.Star, 4);
@@ -183,22 +183,28 @@ export function growUp(s: Society, p: Person, age: number): void {
 export function inUse(q: Person): number[] {
   const st = q.plan[q.si]; if (!st || st.t <= 0) return [];
   const has = (id: number) => q.know[id] > 0;
+  const known = (keys: string[]) => keys.map(k => techIx(k)).filter(has);
   switch (st.k) {
     case St.Fish: return st.id ? [Idea.Weirs, Idea.Fishing] : has(Idea.Nets) ? [Idea.Nets, Idea.Fishing] : [Idea.Fishing];
-    case St.Gather: { const o: number[] = []; if (st.id) o.push(Idea.Planting); if (has(Idea.Baskets)) o.push(Idea.Baskets); if (has(Idea.Digging)) o.push(Idea.Digging); return o; }
-    case St.Sow: return [Idea.Planting];
+    case St.Gather: { const o: number[] = []; if (st.id) o.push(Idea.Planting, ...known(["sickle-harvest", "seed-selection"])); if (has(Idea.Baskets)) o.push(Idea.Baskets); if (has(Idea.Digging)) o.push(Idea.Digging); return o; }
+    case St.Sow: return [Idea.Planting, ...known(["seed-selection"])];
     case St.Snare: return [Idea.Snares];
-    case St.Knap: return has(Idea.Blades) ? [Idea.Blades, Idea.Spear] : [Idea.Spear];
-    case St.Stalk: return [Idea.Spear];
+    case St.Knap: return [...(has(Idea.Blades) ? [Idea.Blades, Idea.Spear] : [Idea.Spear]), ...known(["bow-and-arrow"])];
+    case St.Stalk: return [Idea.Spear, ...known(["bow-and-arrow"])];
     case St.Butcher: return has(Idea.Blades) ? [Idea.Blades] : [];
     case St.Wood: return has(Idea.Axe) ? [Idea.Axe] : [];
     case St.Craft: return [Idea.Hides];
     case St.Kindle: return has(Idea.MakeFire) ? [Idea.MakeFire] : [];
     case St.Dry: return [Idea.Drying];
     case St.Build: return [Idea.Weirs];
-    case St.Raise: return [Idea.Huts];
-    case St.Pit: case St.Store: return [Idea.Pits];
-    case St.Cook: return [Idea.KeepFire];
+    case St.Raise: return [Idea.Huts, ...known(["mud-brick", "wattle-and-daub", "timber-framing", "wells", "kiln-firing", "penning", "granary"])];
+    case St.Pit: return [Idea.Pits];
+    case St.Store: case St.Fetch: return [Idea.Pits, ...known(["granary"])];
+    case St.Cook: return [Idea.KeepFire, ...known(["grinding-grain", "porridge", "pottery"])];
+    case St.Shape: return known(["pottery"]);
+    case St.Bake: return known(["kiln-firing", "pottery"]);
+    case St.Tend: return known(["herb-lore"]);
+    case St.Quarry: return has(Idea.Digging) ? [Idea.Digging] : [];
     case St.Herd: return HERDING().filter(has);
   }
   return [];

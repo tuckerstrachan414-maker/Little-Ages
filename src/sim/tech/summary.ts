@@ -1,6 +1,6 @@
 import { Known, type TechDefLite, type TechGroup, type TechGroupInfo, type TechPanelData, type TechNodeDetail } from "../../shared/tech.ts";
 import { TECHS, TECH_COUNT, eraOf } from "./tree.ts";
-import { Problem, type ProblemKey } from "./problems.ts";
+import { type ProblemKey } from "./problems.ts";
 import { ready } from "../people/ideas.ts";
 import type { Band } from "../people/band.ts";
 import type { Society } from "../people/society.ts";
@@ -62,7 +62,7 @@ export function techPanel(s: Society, g: TechGroup): TechPanelData {
     if (known(d.id)) nodes[d.id] = Known.Known;
     else if (g.kind === "world" ? !!log.first : [...cultures].some(c => log.cultures.has(c))) nodes[d.id] = Known.Lost;
     else if (d.active && d.needs.every(known) && (!d.any.length || d.any.some(known))) nodes[d.id] = Known.Reach;
-    if (log.first && (g.kind === "world" || cultures.has(s.bandById.get(log.first.band)?.culture ?? -1))) firstT[d.id] = log.first.t;
+    if (log.first && (g.kind === "world" || cultures.has(log.first.culture))) firstT[d.id] = log.first.t;
     if (s.refine) { let r = 0; for (const c of cultures) r = Math.max(r, s.refine.get(c)?.[d.id] ?? 0); refine[d.id] = r; }
   }
   const data: TechPanelData = { group: groupInfo(s, g, known), groups: techGroups(s), nodes, knowers, refine, firstT };
@@ -74,6 +74,8 @@ export function techPanel(s: Society, g: TechGroup): TechPanelData {
   return data;
 }
 
+/** Not wants but what is at hand, left off the cards. */
+const AT_HAND = new Set<ProblemKey>(["Clay", "Stone", "Flint", "Grain", "Pots"]);
 const PROBLEM_ANSWERS: Record<ProblemKey, string> = {
   Hunger: "hunger", Spoilage: "food going bad", Cold: "the cold", Wet: "the wet", Water: "water far from camp", Storage: "food that will not keep", Wood: "firewood running short", Crowding: "a crowded camp",
   Carry: "more than can be carried", Illness: "sickness", Far: "food far from camp", Fire: "a dead fire", Meat: "no meat", HerdLoss: "animals lost", Dry: "dry ground", Clay: "clay at hand", Stone: "stone at hand", Flint: "flint at hand", Broke: "pots cracking in the fire", Grain: "hard grain", Pots: "a pot on the fire",
@@ -88,7 +90,7 @@ export function techNode(s: Society, id: number, g: TechGroup): TechNodeDetail |
   people.sort((a, c) => c.q.know[id] - a.q.know[id]);
   const cultures = new Set(bs.map(b => b.culture));
   let firstHere: TechNodeDetail["firstHere"] = null;
-  if (log.first && cultures.has(s.bandById.get(log.first.band)?.culture ?? -1)) firstHere = { who: log.first.who, name: log.first.name, bandName: log.first.bandName, t: log.first.t, x: log.first.x, y: log.first.y };
+  if (log.first && cultures.has(log.first.culture)) firstHere = { who: log.first.who, name: log.first.name, bandName: log.first.bandName, t: log.first.t, x: log.first.x, y: log.first.y };
   const n = people.length, nb = bs.filter(b => b.can[id] > 0).length;
   let status: string;
   if (d.start) status = `An old way, known from the start: ${n} ${n === 1 ? "person knows" : "people know"} it here, in ${nb} ${nb === 1 ? "band" : "bands"}.`;
@@ -107,7 +109,7 @@ export function techNode(s: Society, id: number, g: TechGroup): TechNodeDetail |
     firstHere, times: log.times, lostAt: log.lostAt,
     knowers: people.slice(0, 6).map(({ q, band }) => ({ id: q.id, name: q.name, band, m: q.know[id] })), nKnowers: n, bands: nb,
     refine: s.refine && cultures.size ? { level: Math.max(...[...cultures].map(c => s.refine!.get(c)?.[id] ?? 0)), uses: Math.max(...[...cultures].map(c => s.uses?.get(c)?.[id] ?? 0)), best: best ? { id: best.q.id, name: best.q.name } : null } : null,
-    answers: d.problems ? (Object.keys(d.problems) as ProblemKey[]).filter(k => Problem[k] < Problem.Clay).map(k => PROBLEM_ANSWERS[k]) : [],
+    answers: d.problems ? (Object.keys(d.problems) as ProblemKey[]).filter(k => !AT_HAND.has(k)).map(k => PROBLEM_ANSWERS[k]) : [],
   };
 }
 /** Whether a person is ready for a node, for the cards. */

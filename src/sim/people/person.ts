@@ -92,7 +92,7 @@ export const Mem = {
   Paired: 11, Parted: 12, Moved: 13, Split: 14, Learned: 15, Found: 16, Cold: 17, Rejected: 18, Freeloader: 19, Helped: 20, Feast: 21,
   Refused: 22, Fight: 23, Peace: 24, Gift: 25, Mocked: 26, Left: 27, Feud: 28, Repaid: 29, Stingy: 30,
   Discovered: 31, FireOut: 32, Taught: 33, Harvest: 34,
-  HerdLoss: 35, Kept: 36,
+  HerdLoss: 35, Kept: 36, Missed: 37,
 } as const;
 export interface Memory { t: number; k: number; who: number; v: number; x: number; y: number; n: number; }
 

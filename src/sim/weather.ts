@@ -16,8 +16,12 @@ const SEASON = [1.1, 0.7, 0.9, 1.0];
 const FILL = 0.06, EVAP = 0.012, EVAP_HEAT = 0.0009;
 /** The swing of the years: a region's rain runs between these shares of its usual. */
 const YEAR_LOW = 0.55, YEAR_SPAN = 0.8;
-/** Below this share of the usual rain, for a season or more, the land is in drought. */
+/* what an ordinary year brings, so that a patch's normal is what its soil settles at over the years rather than a year with no swing in it */
+const MEAN_SEASON = SEASON.reduce((a, b) => a + b, 0) / SEASON.length, MEAN_YEAR = YEAR_LOW + YEAR_SPAN / 2;
+/** Below this share of the usual rain, for a season or more, the land is in drought... */
 export const DROUGHT = 0.75;
+/** ...once the soil has fallen below this share of what it is used to (saturated ground, in a rainforest, never does). */
+const DRY_SOIL = 0.75;
 
 export class Weather {
   readonly gw: number; readonly gh: number;
@@ -44,7 +48,7 @@ export class Weather {
     for (let c = 0; c < n; c++) {
       if (cnt[c]) { this.rainK[c] /= cnt[c]; this.tempC[c] /= cnt[c]; } else { this.rainK[c] = 0.5; this.tempC[c] = 10; }
       /* the soil starts where its climate would leave it, in an ordinary year */
-      this.normal[c] = this.settled(c, 1); this.moist[c] = this.normal[c];
+      this.normal[c] = this.settled(c, MEAN_SEASON * MEAN_YEAR); this.moist[c] = this.normal[c];
     }
   }
   private settled(c: number, factor: number): number { return Math.max(0.02, Math.min(1, FILL * this.rainK[c] * factor / (EVAP + EVAP_HEAT * Math.max(0, this.tempC[c] - 10)))); }
@@ -60,8 +64,8 @@ export class Weather {
     const n = fbm(u * 0.7 + yr * 0.9, v * 0.7 + yr * 0.37, this.seed + 401, 3);
     return YEAR_LOW + YEAR_SPAN * Math.max(0, Math.min(1, (n - 0.5) * 2.4 + 0.5));
   }
-  /** Whether a patch is in drought now: the year dry, and the soil gone dry with it. */
-  droughtAt(c: number): boolean { return this.factor[c] < DROUGHT && this.moist[c] < 0.25; }
+  /** A drought: a dry year on ground gone well below its own usual wetness, so a steppe or a meadow can see one, not only a desert. */
+  droughtAt(c: number): boolean { return this.factor[c] < DROUGHT && this.wetness(c) < DRY_SOIL; }
   /** Once a game day: rain by climate, season and the year's swing fills the soil; the heat empties it. */
   daily(time: number, season: number): void {
     let dry = 0;
