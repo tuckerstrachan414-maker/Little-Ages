@@ -162,7 +162,7 @@ if (people && summary) {
     techs: IDEAS.filter(d => !d.start && people.ideas[d.id].knowers > 0).length,
     firstPottery: firstYear("pottery"), firstWells: firstYear("wells"), firstGranary: firstYear("granary"), firstHerd: Math.min(...["herding-goats-and-sheep", "herding-cattle", "herding-pigs"].map(firstYear).filter(y => y > 0), Infinity) === Infinity ? 0 : Math.min(...["herding-goats-and-sheep", "herding-cattle", "herding-pigs"].map(firstYear).filter(y => y > 0)),
     firstDogs: firstYear("taming-dogs"), firstBow: firstYear("bow-and-arrow"), firstHouse1: Math.min(...["mud-brick", "wattle-and-daub", "timber-framing"].map(firstYear).filter(y => y > 0), Infinity) === Infinity ? 0 : Math.min(...["mud-brick", "wattle-and-daub", "timber-framing"].map(firstYear).filter(y => y > 0)),
-    granaries: people.works.filter(w => w.kind === 3 && (w.tier ?? 0) >= 1 && w.state > 0.2).length, houses1: people.works.filter(w => w.kind === 2 && (w.tier ?? 0) >= 1 && (w.prog ?? 1) >= 1 && w.state > 0.2).length, kilns: people.works.filter(w => w.kind === 5 && (w.prog ?? 1) >= 1 && w.state > 0.2).length,
+    granaries: people.works.filter(w => w.kind === 3 && (w.tier ?? 0) >= 1 && (w.prog ?? 1) >= 1 && w.state > 0.2).length, houses1: people.works.filter(w => w.kind === 2 && (w.tier ?? 0) >= 1 && (w.prog ?? 1) >= 1 && w.state > 0.2).length, kilns: people.works.filter(w => w.kind === 5 && (w.prog ?? 1) >= 1 && w.state > 0.2).length,
     secsPerYear: +(((performance.now() - tr) / 1000) / years).toFixed(2),
     secs: +((performance.now() - tr) / 1000).toFixed(1),
   };

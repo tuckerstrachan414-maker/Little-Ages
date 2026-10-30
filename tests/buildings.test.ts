@@ -16,6 +16,7 @@ import { wants, materialsInReach, communalSite, householdSite } from "../src/sim
 import { Problem } from "../src/sim/tech/problems.ts";
 import { Mat, MAT_COUNT } from "../src/sim/economy/goods.ts";
 import { bandDetail } from "../src/sim/people/inspect.ts";
+import { kilnStand } from "../src/sim/people/mind.ts";
 import { qualityFor } from "../src/sim/tech/refine.ts";
 import { DAY_SECONDS, DAYS_PER_SEASON, type WorldData } from "../src/shared/types.ts";
 
@@ -257,5 +258,26 @@ describe("what people want to build", () => {
     expect(Object.values(Goal)).toContain(Goal.Construct); expect(Object.values(St)).toContain(St.Quarry);
     expect(needsOf(defById("well0"))[Mat.Wood]).toBe(4);
     expect(Work.Hut).toBe(Line.House); expect(Work.Pit).toBe(Line.Store);
+  });
+});
+
+describe("the potter's stand", () => {
+  it("is at the kiln's mouth on dry ground, even for a kiln with the water at its foot", () => {
+    const { s } = fresh();
+    const b = s.bands[0];
+    let spot: [number, number] | null = null;
+    for (let r = 1; r < 60 && !spot; r++) for (let dy = -r; dy <= r && !spot; dy++) for (let dx = -r; dx <= r && !spot; dx++) {
+      const x = Math.round(b.x) + dx + 0.5, y = Math.round(b.y) + dy + 0.5;
+      if (s.walker.dry(x, y) && s.walker.dry(x, y - 1) && !s.walker.dry(x, y + 1)) spot = [x, y];
+    }
+    expect(spot).not.toBeNull();
+    const kiln = { x: spot![0], y: spot![1] } as Work;
+    expect(s.walker.dry(kiln.x, kiln.y + 1)).toBe(false);
+    const [kx, ky] = kilnStand(s, kiln);
+    expect(s.walker.dry(kx, ky)).toBe(true);
+    expect(Math.hypot(kx - kiln.x, ky - (kiln.y + 1))).toBeLessThan(4.5);
+    /* and on open ground the potter stands right at the mouth */
+    const open = { x: spot![0], y: spot![1] - 1 } as Work;
+    expect(kilnStand(s, open)).toEqual([open.x, open.y + 1]);
   });
 });

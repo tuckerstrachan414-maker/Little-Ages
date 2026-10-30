@@ -9,6 +9,8 @@ import { Ecology, CELL } from "../src/sim/ecology.ts";
 import { settle } from "../src/sim/settle.ts";
 import { Society } from "../src/sim/people/society.ts";
 import { Place } from "../src/sim/people/person.ts";
+import { Problem } from "../src/sim/tech/problems.ts";
+import { noteSite, eventName } from "../src/sim/people/villages.ts";
 import { bake } from "../src/sim/world/bake.ts";
 import { Biome, Flag, Tree, DAY_SECONDS, DAYS_PER_SEASON, type WorldData } from "../src/shared/types.ts";
 
@@ -184,8 +186,31 @@ describe("people and the land", () => {
     expect(s.resources.stats.cut).toBeGreaterThan(100);
     expect(s.resources.stats.felled).toBeGreaterThan(0);
     expect(w.tree.filter(t => t === Tree.Snag).length).toBeGreaterThan(0);
-    /* the felled tiles were posted to the page */
-    expect(s.resources.takeChanges()?.length ?? 0).toBeGreaterThanOrEqual(0);
-    expect(s.bands.every(b => b.problems.length > 0)).toBe(true);
+    /* the felled tiles were posted to the page, as [tile, tree] pairs, and a snag is among them; and some band feels the wood running short */
+    const posted = s.resources.takeChanges();
+    expect(posted).not.toBeNull();
+    expect(Array.from(posted!).some((t, i) => i % 2 === 1 && t === Tree.Snag)).toBe(true);
+    expect(s.resources.takeChanges()).toBeNull();
+    expect(s.bands.some(b => b.problems[Problem.Wood] > 0)).toBe(true);
+  });
+});
+
+describe("a find names the place", () => {
+  it("a clay bank or a flint rock found there can be what a village is called after", () => {
+    const w: WorldData = { ...world, tree: world.tree.slice() };
+    const eco = new Ecology(w, SEED), wild = new Wildlife(w, SEED, eco);
+    settle(wild, eco, 2, () => {});
+    const s = new Society(w, eco, wild, SEED, { start: "bands", bands: 4 }, (DAYS_PER_SEASON + 0.32) * DAY_SECONDS);
+    const b = s.bands[0], x = b.x + 300, y = b.y + 300;
+    noteSite(s, "found", 0.95, Mat.Clay, [], x, y);
+    const clay = eventName(s, x, y);
+    expect(clay?.gloss).toBe("Clay Bank"); expect(clay?.words).toEqual(["clay", "bank"]); expect(clay?.why).toContain("clay");
+    noteSite(s, "found", 0.95, Mat.Flint, [], x + 60, y);
+    expect(eventName(s, x + 60, y)?.gloss).toBe("Flint Rock");
+    noteSite(s, "found", 0.95, Mat.Salt, [], x, y + 60);
+    expect(eventName(s, x, y + 60)?.gloss).toBe("Salt Flat");
+    /* a find of something that is not dug from the ground gives no name */
+    noteSite(s, "found", 0.95, Mat.Meat, [], x + 60, y + 60);
+    expect(eventName(s, x + 60, y + 60)).toBeNull();
   });
 });

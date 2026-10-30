@@ -350,9 +350,9 @@ export function decide(s: Society, p: Person, forced?: Goal): void {
       const dep = clayHave >= 3 ? null : s.resources.knownDeposit(b.culture, b.x, b.y, 16, Mat.Clay);
       if (clayHave >= 3 || dep) {
         const kiln = worksAround(s, b.x, b.y, 12).find(w => w.kind === Line.Kiln && standing(w) && (w.band === b.id || (w.owner ?? 0) >= 1)) ?? null;
-        const [hx2, hy2] = s.homeSpot(p), q = dep ? s.dryNear(dep.x, dep.y, 4) : null;
+        const [hx2, hy2] = s.homeSpot(p), q = dep ? s.dryNear(dep.x, dep.y, 4) : null, [kx, ky] = kiln ? kilnStand(s, kiln) : [0, 0];
         add({ g: Goal.Pot, v: (0.3 + tr[7] * 0.25) * (hg[Mat.Pots] < 1 ? 1.2 : 0.8) * (1 - foodDrive * 0.6), icon: Bubble.Pot,
-          plan: () => [...(q && dep ? [step(St.Go, q[0], q[1]), step(St.Quarry, q[0], q[1], dep.id, 8, { a: Mat.Clay })] : []), step(St.Go, hx2, hy2), step(St.Shape, hx2, hy2, 0, 12, { a: kiln ? 8 : 4 }), ...(kiln ? [step(St.Go, kiln.x, kiln.y + 1), step(St.Bake, kiln.x, kiln.y + 1, kiln.id, 10)] : [step(St.Go, fx, fy), step(St.Bake, fx, fy, 0, 10)])],
+          plan: () => [...(q && dep ? [step(St.Go, q[0], q[1]), step(St.Quarry, q[0], q[1], dep.id, 8, { a: Mat.Clay })] : []), step(St.Go, hx2, hy2), step(St.Shape, hx2, hy2, 0, 12, { a: kiln ? 8 : 4 }), ...(kiln ? [step(St.Go, kx, ky), step(St.Bake, kx, ky, kiln.id, 10)] : [step(St.Go, fx, fy), step(St.Bake, fx, fy, 0, 10)])],
           why: () => `${p.name} is ${dep ? "fetching clay from the bank and " : ""}shaping pots to bake ${kiln ? "in the kiln" : "in the fire"}, because ${hg[Mat.Pots] < 1 ? `${her(p)} family has nothing to boil food in or keep it from the mice` : "the family's pots are too few for all the food put by"}.` });
       }
     }
@@ -762,4 +762,9 @@ function siteReason(s: Society, p: Person, x: number, y: number): string {
   for (const pl of p.places) { if (Math.hypot(pl.x - x, pl.y - y) > 30) continue; if (pl.k === Place.Plants) plants += pl.q; else if (pl.k === Place.Fish) fish += pl.q; else if (pl.k === Place.Game) game += pl.q; }
   const best = Math.max(plants, fish, game * 2);
   return best === 0 ? "fresh land" : best === plants ? `plenty of ${plantWord(s, x, y)} to gather` : best === fish ? "good fishing" : "game to hunt";
+}
+
+/** Where a potter stands to fire the kiln: at its mouth, on dry ground (a kiln by the water may have the river at its foot). */
+export function kilnStand(s: Society, kiln: Work): [number, number] {
+  return s.dryNear(kiln.x, kiln.y + 1, 4);
 }

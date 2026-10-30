@@ -87,7 +87,7 @@ export function wants(s: Society, p: Person, b: Band): Want[] {
     /* a work the village's chief called for: those who go along with the chief come readily, those who cannot stand the chief mostly stay away */
     let v = 0.4 + ((w.owner ?? 0) >= 1 ? 0.05 : 0.1);
     if ((w.owner ?? 0) === 2) { const vil = s.villages.find(o => o.call?.work === w.id || o.communal.includes(w.id)); const chief = vil ? s.byId.get(vil.chief) : undefined; if (chief && chief !== p) v = 0.35 * (p.follows === chief.id ? 1.4 : 0.8 + Math.max(0, s.op(p, chief.id)) * 0.4); }
-    out.push({ def, x: w.x, y: w.y, help: w, v, owner: (["household", "band", "settlement"] as Owner[])[w.owner ?? 0], home, why: left > 0 ? `${p.name} is bringing ${MATS[nextMaterial(w.up ? w.up.needs : w.needs)]?.name ?? "materials"} for the ${def.name} ${w.owner ? "the band is" : `${her} family is`} ${w.up ? "rebuilding" : "raising"} at ${b.siteName}.` : `${p.name} is working on the ${def.name} ${w.owner ? "the band is" : `${her} family is`} ${w.up ? "rebuilding" : "raising"} at ${b.siteName}.` });
+    out.push({ def, x: w.x, y: w.y, help: w, v, owner: (["household", "band", "settlement"] as Owner[])[w.owner ?? 0], home, why: left > 0 ? `${p.name} is bringing ${materialWords(nextMaterial(w.up ? w.up.needs : w.needs))} for the ${def.name} ${ownerWords(w, her)} ${w.up ? "rebuilding" : "raising"} at ${b.siteName}.` : `${p.name} is working on the ${def.name} ${ownerWords(w, her)} ${w.up ? "rebuilding" : "raising"} at ${b.siteName}.` });
   }
   /* storage: more food put by than the pit can hold, and a granary known */
   const pit = buildingOf(s, b, Line.Store, home);
@@ -135,3 +135,8 @@ export function wants(s: Society, p: Person, b: Band): Want[] {
 }
 /** The words for a want's def where it would stand, for cards. */
 export const wantWords = (w: Want) => defOf({ kind: w.def.line, def: w.def.id } as Work).name;
+
+/** Wood for a building is poles and timber, not firewood. */
+function materialWords(m: number): string { return m === Mat.Wood ? "poles and timber" : MATS[m]?.name ?? "materials"; }
+/** Whose work it is: a family's, the band's, or the village's. */
+function ownerWords(w: Work, her: string): string { return w.owner === 2 ? "the village is" : w.owner === 1 ? "the band is" : `${her} family is`; }

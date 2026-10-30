@@ -1,4 +1,4 @@
-import { Biome, DAY_SECONDS, Flag, SPECIES_NAMES } from "../../shared/types.ts";
+import { Biome, DAY_SECONDS, Flag, SPECIES_NAMES, Species } from "../../shared/types.ts";
 import { Bubble, type VillageSnap } from "../../shared/people.ts";
 import type { Band } from "./band.ts";
 import { compound, lexeme } from "./language.ts";
@@ -6,6 +6,7 @@ import { TECHS as IDEAS } from "../tech/tree.ts";
 import { unpackHint } from "../tech/tree.ts";
 import { Work, worksAround } from "./works.ts";
 import { hutStands, pitFood } from "./homes.ts";
+import { Mat, MATS } from "../economy/goods.ts";
 import type { Society } from "./society.ts";
 
 /*
@@ -108,7 +109,7 @@ export function noteSite(s: Society, kind: string, sig: number, hint: number, wh
   s.notable.set(k, { kind, sig, hint, who: p?.name ?? "", t: s.time });
 }
 /** What a village would be named for, from the squares around it: the meaning, in English words, and the story behind it. */
-function eventName(s: Society, x: number, y: number): { words: string[]; gloss: string; why: string } | null {
+export function eventName(s: Society, x: number, y: number): { words: string[]; gloss: string; why: string } | null {
   let best: Notable | null = null;
   for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const n = s.notable.get(noteKey(x + dx * NOTE_CELL, y + dy * NOTE_CELL)); if (n && (!best || n.sig > best.sig)) best = n; }
   if (!best || best.sig < 0.55) return null;
@@ -121,6 +122,15 @@ function eventName(s: Society, x: number, y: number): { words: string[]; gloss: 
     case "peace": return { words: ["peace", "fire"], gloss: "Peace Fire", why: `for the feud that was settled by the fire there` };
     case "fireout": case "ember": return { words: ["cold", "hearth"], gloss: "Cold Hearth", why: `for the night the fire went out there` };
     case "hut": return { words: ["first", "roof"], gloss: "First Roof", why: `for the first hut anyone ever raised, ${who ? `${who}'s, ` : ""}which stood there` };
+    case "found": {
+      const m = MATS[best.hint]; if (!m || !m.dug) return null;
+      const land = m.id === Mat.Clay ? "bank" : m.id === Mat.Reeds ? "bed" : m.id === Mat.Salt ? "flat" : m.id === Mat.Stone ? "hill" : "rock";
+      return { words: [m.name, land], gloss: `${cap(m.name)} ${cap(land)}`, why: `for the ${m.name} ${who || "someone"} found there` };
+    }
+    case "tamed": {
+      const sp = best.hint & 15, w = (SPECIES_NAMES[sp] ?? "goats").split(" ").pop()!.replace(/s$/, ""), dogs = sp === Species.Dog;
+      return { words: [w, dogs ? "hearth" : "fold"], gloss: `${cap(w)} ${dogs ? "Hearth" : "Fold"}`, why: `for the first ${w}s anyone tamed, which ${who ? `${who}'s family` : "a family"} kept there` };
+    }
     case "discover": {
       const d = IDEAS[unpackHint(best.hint).id]; if (!d) return null;
       const g = d.place; if (!g) return null;

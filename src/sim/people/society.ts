@@ -298,7 +298,7 @@ export class Society {
     const id = this.nextBand++;
     const name = placeName(this.cultures[culture].lang, this.rng);
     const b: Band = { id, name, culture, color: BAND_COLORS[(id - 1) % BAND_COLORS.length], x, y, fire: 0.8, store: { ...noFood(), wood: 2, hides: 0 }, hearths: new Map(),
-      members: [], founded: this.time, movedAt: this.time, moves: 0, homes: new Map(), busy: new Map(), respected: 0, followers: 0, ledSince: this.time, contender: 0, parent, met: new Set(), appetite: 1, moving: null, siteName: placeName(this.cultures[culture].lang, this.rng), water: [x, y], past: [], today: newDay(), yesterday: newDay(), can: new Int32Array(IDEA_COUNT), keeper: new Int32Array(IDEA_COUNT), outAt: 0, pit: 0, seed: {}, problems: newProblems(), meatAt: this.time, regrownAt: 0, goods: new Float32Array(MAT_COUNT), broke: 0, hgoods: new Map(), dryDays: 0, droughtAt: 0, well: 0, keptAt: 0, herdAt: 0, pupsAt: 0 };
+      members: [], founded: this.time, movedAt: this.time, moves: 0, homes: new Map(), busy: new Map(), respected: 0, followers: 0, ledSince: this.time, contender: 0, parent, met: new Set(), appetite: 1, moving: null, siteName: placeName(this.cultures[culture].lang, this.rng), water: [x, y], past: [], today: newDay(), yesterday: newDay(), can: new Int32Array(IDEA_COUNT), keeper: new Int32Array(IDEA_COUNT), outAt: 0, pit: 0, seed: {}, problems: newProblems(), crowd: 0, meatAt: this.time, regrownAt: 0, goods: new Float32Array(MAT_COUNT), broke: 0, hgoods: new Map(), dryDays: 0, droughtAt: 0, well: 0, keptAt: 0, herdAt: 0, pupsAt: 0 };
     this.bands.push(b); this.bandById.set(id, b);
     return b;
   }
@@ -627,6 +627,8 @@ export class Society {
       /* never left standing in a lake: step out to the nearest dry ground */
       if (!this.walker.passable(p.x, p.y)) { [p.x, p.y] = this.dryNear(p.x, p.y, 6); p.path = null; }
       if (time >= p.nextDanger) { p.nextDanger = time + 0.8 + (p.id % 7) * 0.05; this.danger(p); }
+      /* wolves or a bear may have killed them, and a last member's band has ended with them: the dead do nothing more this tick */
+      if (!this.byId.has(p.id)) continue;
       if (time >= p.nextLook) { p.nextLook = time + 2.5 + (p.id % 11) * 0.1; this.look(p); this.feel(p); }
       if (p.si >= p.plan.length || (isInterruptible(p.goal) && time - p.whyAt > 7) || this.urgent(p)) decide(this, p);
       doStep(this, p, dt);
@@ -810,7 +812,7 @@ export class Society {
       let pAttack = h.sp === Species.Bear ? (d < 2.5 ? 0.012 : 0) : h.hunger > 0.75 && company === 0 && d < 4 ? (weak ? 0.004 : this.sun < 0.2 ? 0.0012 : 0.0004) * h.n : 0;
       /* dogs about the camp bark the wolves off before they come close */
       if (pAttack > 0 && !bear) { const b = this.bandById.get(p.band); if (b && Math.hypot(b.x - p.x, b.y - p.y) < 12 && hasDogs(this, b)) pAttack *= 0.3; }
-      if (pAttack > 0 && this.rng.chance(pAttack)) this.attacked(p, h);
+      if (pAttack > 0 && this.rng.chance(pAttack)) { this.attacked(p, h); if (!this.byId.has(p.id)) return; }
       else if (p.fear > 0.45 + p.traits[0] * 0.35 && p.goal !== Goal.Flee) { abandon(this, p); decide(this, p, Goal.Flee); }
     }
   }
@@ -986,13 +988,13 @@ export class Society {
       if (well && Math.hypot(well.x - b.x, well.y + 1 - b.y) < Math.hypot(b.water[0] - b.x, b.water[1] - b.y)) b.water = [well.x, well.y + 1];
       const c = this.weather.cellOf(b.x, b.y);
       b.dryDays = this.weather.droughtAt(c) ? b.dryDays + 1 : 0;
-      if (b.dryDays === 10 && this.time - b.droughtAt > YEAR) { b.droughtAt = this.time; this.event("drought", Bubble.Sun, `The grass has gone brown around ${b.siteName} and the roots are hard to find: a dry year for the ${b.name}.`, b.x, b.y, [], b.id, 0); }
+      if (b.dryDays === 10 && (!b.droughtAt || this.time - b.droughtAt > YEAR)) { b.droughtAt = this.time; this.event("drought", Bubble.Sun, `The grass has gone brown around ${b.siteName} and the roots are hard to find: a dry year for the ${b.name}.`, b.x, b.y, [], b.id, 0); }
     }
     for (const c of res.takeDirty()) this.eco.recount(c);
     /* a wood coming back around a long-lived camp is worth telling, now and then */
     for (const i of res.regrownToday) {
       const x = i % this.w.w, y = (i / this.w.w) | 0;
-      const b = this.campNear(x, y, 14); if (!b || this.time - b.regrownAt < YEAR * 3 || res.forestLeft(b.x, b.y, 16) < 0.3) continue;
+      const b = this.campNear(x, y, 14); if (!b || (b.regrownAt > 0 && this.time - b.regrownAt < YEAR * 3) || res.forestLeft(b.x, b.y, 16) < 0.3) continue;
       b.regrownAt = this.time;
       this.event("regrown", Bubble.Home, `Around ${b.siteName}, where the ${b.name} have cut their firewood for years, young trees are growing back.`, x, y, [], b.id, 0);
     }

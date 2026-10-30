@@ -9,9 +9,9 @@ import { homeOf, noFood, type Band } from "../src/sim/people/band.ts";
 import { eat, hearthOf, hgoodsOf, take } from "../src/sim/people/sharing.ts";
 import { inspire, learn, discover } from "../src/sim/people/ideas.ts";
 import { techIx, techByKey } from "../src/sim/tech/tree.ts";
-import { Problem } from "../src/sim/tech/problems.ts";
+import { Problem, problemsDay } from "../src/sim/tech/problems.ts";
 import { Diet, dietDay, dietScore, recoveryFactor, dietWords, noteMeal } from "../src/sim/economy/diet.ts";
-import { illness } from "../src/sim/people/health.ts";
+import { illness, crowding } from "../src/sim/people/health.ts";
 import { Mat } from "../src/sim/economy/goods.ts";
 import { doStep } from "../src/sim/people/doing.ts";
 import { startBuilding } from "../src/sim/buildings/build.ts";
@@ -169,5 +169,24 @@ describe("pottery comes to those with clay at hand and food going bad", () => {
     discover(s, p, d.id, St.Cook, { clayNear: true });
     const e = s.events[before];
     expect(e.kind).toBe("discover"); expect(e.text).toContain(p.name); expect(e.text).toContain("pot"); expect(e.text).not.toContain("{");
+  });
+});
+
+describe("a crowded camp", () => {
+  it("wears on the health by the people within sixteen tiles, counted raw: nothing at thirty, a sixth at forty, everything at ninety, half as much with a well", () => {
+    const { s } = fresh(4);
+    const b = s.bands[0], p = adults(s, b)[0], home = homeOf(p, s.byId, s.time);
+    problemsDay(s, b);
+    const counted = s.bands.filter(o => Math.hypot(o.x - b.x, o.y - b.y) < 16).reduce((n, o) => n + o.members.length, 0);
+    expect(b.crowd).toBe(counted);
+    expect(b.problems[Problem.Crowding]).toBeCloseTo(Math.min(1, counted / 40), 5);
+    b.crowd = 20; expect(crowding(s, b)).toBe(0);
+    b.crowd = 40; expect(crowding(s, b)).toBeCloseTo(1 / 6, 3);
+    b.crowd = 100; expect(crowding(s, b)).toBe(1);
+    b.crowd = 150; expect(crowding(s, b)).toBe(1);
+    b.crowd = 60; const sixty = crowding(s, b); expect(sixty).toBeCloseTo(0.5, 3);
+    const well = startBuilding(s, p, defById("well0"), b.x + 3, b.y + 2, "band", home); well.prog = 1; well.state = 1; well.needs = undefined;
+    expect(crowding(s, b)).toBeCloseTo(sixty / 2, 3);
+    void home;
   });
 });

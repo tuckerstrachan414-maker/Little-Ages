@@ -35,7 +35,7 @@ export class TechPanel {
   private z = 1; private ox = 0; private oy = 0; private fitted = false;
   private hover = -1; selected = -1;
   private lastAsk = 0; private drag: { x: number; y: number; ox: number; oy: number; moved: boolean } | null = null;
-  private needsDraw = true; private q = "";
+  private needsDraw = true; private q = ""; private optsKey = "";
   private readonly hist: History; private readonly cb: TechCallbacks; private readonly dock: Dock;
 
   constructor(dock: Dock, hist: History, cb: TechCallbacks) {
@@ -58,7 +58,8 @@ export class TechPanel {
     this.data = data;
     const cur = `${this.group.kind}:${this.group.id}`;
     const opts = data.groups.map(g => `<option value="${g.kind}:${g.id}"${`${g.kind}:${g.id}` === cur ? " selected" : ""}>${g.kind === "settlement" ? "The village of " : ""}${esc(g.name)}</option>`).join("");
-    if (this.select.innerHTML !== opts) this.select.innerHTML = opts;
+    /* the browser serialises the chosen option differently from the markup, so the markup is remembered: rebuilding the list would close it under the pointer */
+    if (opts !== this.optsKey) { this.optsKey = opts; this.select.innerHTML = opts; }
     this.ageEl.textContent = data.group.kind === "world" ? `The furthest people: ${ERA_NAMES[data.group.age]}` : `${ERA_NAMES[data.group.age]}`;
     if (!this.fitted) { this.fit(); this.fitted = true; }
     this.needsDraw = true;
@@ -205,18 +206,19 @@ export class TechPanel {
     /* the keyboard walks the tree: arrows step to the nearest node that way, Enter opens its card, Escape (handled by the page) closes the card, then the panel */
     cv.addEventListener("keydown", e => {
       const dirs: Record<string, [number, number]> = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
-      if (e.key === "Enter" || e.key === " ") { const id = this.selected >= 0 ? this.selected : this.hover; if (id >= 0) { this.selectNode(id); this.center(id); } e.preventDefault(); return; }
+      /* the keys the tree takes never reach the page, which would pan the map or pause the world on them */
+      if (e.key === "Enter" || e.key === " ") { const id = this.selected >= 0 ? this.selected : this.hover; if (id >= 0) { this.selectNode(id); this.center(id); } e.preventDefault(); e.stopPropagation(); return; }
       const dir = dirs[e.key]; if (!dir) return;
-      e.preventDefault();
+      e.preventDefault(); e.stopPropagation();
       const next = this.step(this.selected >= 0 ? this.selected : this.hover >= 0 ? this.hover : this.firstKnown(), dir);
-      if (next >= 0) { this.selected = next; this.detail = null; this.card.hidden = false; this.card.innerHTML = `<p class="muted">Looking...</p>`; this.cb.askNode(next, this.group); this.center(next); this.needsDraw = true; }
+      if (next >= 0) { this.selectNode(next); this.center(next); }
     });
     this.card.addEventListener("click", e => {
       const b = (e.target as HTMLElement).closest<HTMLElement>("[data-ix],[data-ev],[data-fly],[data-close]"); if (!b) return;
       if (b.dataset.ix) { this.selectNode(+b.dataset.ix); this.center(+b.dataset.ix); }
       else if (b.dataset.ev) { const ev = this.hist.byId(+b.dataset.ev); if (ev) { this.dock.set("tech", false); this.cb.show(ev); } }
       else if (b.dataset.fly) { const [x, y] = b.dataset.fly.split(",").map(Number); this.dock.set("tech", false); this.cb.fly(x, y); }
-      else if (b.dataset.close !== undefined) { this.selected = -1; this.detail = null; this.card.hidden = true; this.needsDraw = true; }
+      else if (b.dataset.close !== undefined) this.closeCard();
     });
   }
   private showTip(id: number, e: PointerEvent): void {
@@ -226,6 +228,8 @@ export class TechPanel {
     this.tip.innerHTML = `<b>${esc(cap(t.name))}</b> ${esc(word)}`; this.tip.hidden = false;
     const r = this.canvas.getBoundingClientRect(); this.tip.style.left = `${Math.min(r.width - 200, e.clientX - r.left + 12)}px`; this.tip.style.top = `${e.clientY - r.top + 14}px`;
   }
+  /** Closes the node card and leaves the tree as it is. */
+  closeCard(): void { this.selected = -1; this.detail = null; this.card.hidden = true; this.needsDraw = true; }
   selectNode(id: number): void { this.selected = id; this.detail = null; this.card.hidden = false; this.card.innerHTML = `<p class="muted">Looking...</p>`; this.cb.askNode(id, this.group); this.needsDraw = true; }
   /** The nearest node from `from` in a direction: mostly that way, and not too far aside. */
   private step(from: number, [dx, dy]: [number, number]): number {

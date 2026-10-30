@@ -90,7 +90,8 @@ export function weigh(s: Society, kind: string, who: number[], band: number, hin
     case "well": case "granary": case "kiln": case "pen": case "built": if (hint === 1) { sig += 0.15; title = `The first ${kind === "built" ? "of its kind" : kind} anywhere`; } break;
     case "upgrade": if (hint === 1) { sig += 0.12; title = "A house built to last"; } break;
     case "kept": title = hint === 1 ? "Wolf pups taken in" : n === 0 ? "The first young animals carried home" : title; break;
-    case "tamed": if (hint === 2) { sig += 0.3; title = "The first tame animals anywhere"; } else title = "A people takes to herding"; break;
+    /* the hint carries the level (2 for the first anywhere) in its high bits and the species in its low four */
+    case "tamed": { const dogs = (hint & 15) === Species.Dog; if (hint >> 4 === 2) { sig += 0.3; title = dogs ? "The first dogs anywhere" : "The first tame animals anywhere"; } else title = dogs ? "A people keeps dogs" : "A people takes to herding"; break; }
     case "herd": title = hint === 1 ? "Wolves among the flock" : "Animals wander off"; break;
     case "found": { const m = MATS[hint]; if (m) { title = `${m.name.charAt(0).toUpperCase()}${m.name.slice(1)} found`; if (hint >= 15) sig += 0.08; } break; }
     case "exhausted": { const m = MATS[hint]; if (m) title = `The ${m.name} runs out`; break; }

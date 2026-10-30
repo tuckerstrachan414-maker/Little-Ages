@@ -6,7 +6,7 @@ import { settle } from "../src/sim/settle.ts";
 import { Society } from "../src/sim/people/society.ts";
 import { St, step, type Person } from "../src/sim/people/person.ts";
 import { homeOf, type Band } from "../src/sim/people/band.ts";
-import { Idea, learn } from "../src/sim/people/ideas.ts";
+import { Idea, learn, countBand } from "../src/sim/people/ideas.ts";
 import { techIx, techByKey, Era } from "../src/sim/tech/tree.ts";
 import { Problem } from "../src/sim/tech/problems.ts";
 import { addWork, Work, worksDay } from "../src/sim/people/works.ts";
@@ -172,7 +172,10 @@ describe("the chief's granary", () => {
     expect(w.kind).toBe(Line.Store); expect(w.def).toBe("store1"); expect(w.owner).toBe(OWNER.settlement); expect(w.prog).toBe(0);
     /* a villager sees it as work to lend a hand to, like a well; and the call stands the next day, with nothing yet delivered */
     const helper = all.find(q => q !== chief && s.age(q) < 60)!;
-    expect(wants(s, helper, b).some(x => x.help === w)).toBe(true);
+    const hw = wants(s, helper, b).find(x => x.help === w)!;
+    expect(hw).toBeTruthy();
+    /* the words say whose work it is and what is carried: the village's, poles and timber, not firewood */
+    expect(hw.why).toContain("the village is raising"); expect(hw.why).toContain("poles and timber"); expect(hw.why).not.toContain("firewood");
     s.time += DAY_SECONDS; settlementsDay(s);
     expect(v.call).toBeTruthy();
     /* a frame on posts nobody has worked on wears like any other going up; kept, it waits */
@@ -202,7 +205,7 @@ describe("a people's age", () => {
     const people = bands.flatMap(b => grown(s, b)).slice(0, 3);
     expect(people.length).toBe(3);
     for (const p of people) know(s, p, "pottery");
-    for (const b of bands) { const { countBand } = require("../src/sim/people/ideas.ts"); countBand(s, b); }
+    for (const b of bands) countBand(s, b);
     expect(cultureAge(s, c.id)).toBe(Era.NewStone);
     const before = s.events.length;
     settlementsDay(s);
