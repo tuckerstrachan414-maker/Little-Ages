@@ -2,7 +2,8 @@ import { Biome, DAY_SECONDS, Flag, SPECIES_NAMES } from "../../shared/types.ts";
 import { Bubble, type VillageSnap } from "../../shared/people.ts";
 import type { Band } from "./band.ts";
 import { compound, lexeme } from "./language.ts";
-import { IDEAS } from "./ideas.ts";
+import { TECHS as IDEAS } from "../tech/tree.ts";
+import { unpackHint } from "../tech/tree.ts";
 import { Work, worksAround } from "./works.ts";
 import { hutStands, pitFood } from "./homes.ts";
 import type { Society } from "./society.ts";
@@ -32,6 +33,10 @@ export interface Village {
   pop: number; peak: number; huts: number;
   /** since when no band has lived there (0 while lived in), and when it was given up for good (0 if not) */
   empty: number; abandoned: number;
+  /** a hamlet (0), village (1), town (2) or city (3) */
+  tier: number;
+  /** the one most of its grown-ups listen to (0 for nobody), since when, the buildings the whole place shares, and the work the chief has called everyone to */
+  chief: number; chiefSince: number; communal: number[]; call: { work: number; since: number } | null;
 }
 export interface Gathering {
   id: number; bands: number[]; x: number; y: number; since: number; peak: number; name: string;
@@ -91,7 +96,7 @@ export function tiesTo(s: Society, q: { id: number; mother: number; father: numb
 /** The weightiest thing that has happened around a place, kept per square of the map so a village can be named for it. */
 export interface Notable { kind: string; sig: number; hint: number; who: string; t: number; }
 const NOTE_CELL = 12;
-const NAMEABLE = new Set(["kill", "weir", "harvest", "fight", "fireout", "discover", "ember", "peace", "hut"]);
+const NAMEABLE = new Set(["kill", "weir", "harvest", "fight", "fireout", "discover", "ember", "peace", "hut", "found", "tamed"]);
 export const noteKey = (x: number, y: number) => `${Math.floor(x / NOTE_CELL)},${Math.floor(y / NOTE_CELL)}`;
 /** Called with every event: keeps the weightiest nameable thing that has happened in each square. */
 export function noteSite(s: Society, kind: string, sig: number, hint: number, who: number[], x: number, y: number): void {
@@ -117,18 +122,13 @@ function eventName(s: Society, x: number, y: number): { words: string[]; gloss: 
     case "fireout": case "ember": return { words: ["cold", "hearth"], gloss: "Cold Hearth", why: `for the night the fire went out there` };
     case "hut": return { words: ["first", "roof"], gloss: "First Roof", why: `for the first hut anyone ever raised, ${who ? `${who}'s, ` : ""}which stood there` };
     case "discover": {
-      const d = IDEAS[best.hint % 100]; if (!d) return null;
-      const g = IDEA_PLACE[d.id]; if (!g) return null;
+      const d = IDEAS[unpackHint(best.hint).id]; if (!d) return null;
+      const g = d.place; if (!g) return null;
       return { words: g[0], gloss: g[1], why: `for ${who || "someone"}, who worked out ${d.how} there` };
     }
   }
   return null;
 }
-const IDEA_PLACE: Record<number, [string[], string]> = {
-  5: [["spark", "hill"], "Spark Hill"], 6: [["flint", "edge"], "Flint Edge"], 7: [["axe", "wood"], "Axe Wood"], 8: [["root", "ground"], "Root Ground"],
-  9: [["basket", "reeds"], "Basket Reeds"], 10: [["net", "water"], "Net Water"], 11: [["weir", "water"], "Weir Water"], 12: [["smoke", "rack"], "Smoke Racks"],
-  13: [["seed", "ground"], "Seed Ground"], 14: [["deep", "store"], "Deep Store"], 15: [["first", "roof"], "First Roof"],
-};
 /** The lie of the land at a place, for naming it: a ford, a shore, a bay, a hill, a wood, a meadow. */
 function landform(s: Society, x: number, y: number): string {
   const W = s.w.w; let river = false, lake = false, sea = false, hill = false;
@@ -276,6 +276,7 @@ function found(s: Society, b: Band, huts: Work[]): void {
   const v: Village = {
     id: s.nextId++, name, gloss, why, x: b.x, y: b.y, culture: b.culture, founded: s.time, founder: first.by, founderName, story,
     bands: [b.id, ...with_.map(o => o.id)], ever: [b.id, ...with_.map(o => o.id)], pop: b.members.length + with_.reduce((n, o) => n + o.members.length, 0), peak: 0, huts: huts.length, empty: 0, abandoned: 0,
+    tier: 0, chief: 0, chiefSince: 0, communal: [], call: null,
   };
   v.peak = v.pop;
   s.villages.push(v); s.villagesVersion++;
@@ -294,12 +295,12 @@ export function villageSnaps(s: Society): VillageSnap[] {
   for (const v of s.villages) {
     const bs = bandsOf(v.bands);
     if (v.abandoned && !v.huts && !worksAround(s, v.x, v.y, VILLAGE_R).some(w => w.kind === Work.Hut)) continue;
-    out.push({ id: v.id, kind: v.abandoned ? "ruins" : "village", name: v.name, gloss: v.gloss, x: v.x, y: v.y, pop: v.pop, bands: bs.map(b => b.name), color: bs[0]?.color ?? "#9a8a6a", band: bs[0]?.id ?? 0 });
+    out.push({ id: v.id, kind: v.abandoned ? "ruins" : "village", name: v.name, gloss: v.gloss, x: v.x, y: v.y, pop: v.pop, bands: bs.map(b => b.name), color: bs[0]?.color ?? "#9a8a6a", band: bs[0]?.id ?? 0, tier: v.tier });
   }
   for (const g of s.gatherings) {
     if (!g.told || s.villages.some(v => !v.abandoned && Math.hypot(v.x - g.x, v.y - g.y) < VILLAGE_R)) continue;
     const bs = bandsOf(g.bands);
-    out.push({ id: g.id, kind: "gathering", name: g.name, gloss: "", x: g.x, y: g.y, pop: bs.reduce((n, b) => n + b.members.length, 0), bands: bs.map(b => b.name), color: bs[0]?.color ?? "#9a8a6a", band: bs.slice().sort((a, b) => b.members.length - a.members.length)[0]?.id ?? 0 });
+    out.push({ id: g.id, kind: "gathering", name: g.name, gloss: "", x: g.x, y: g.y, pop: bs.reduce((n, b) => n + b.members.length, 0), bands: bs.map(b => b.name), color: bs[0]?.color ?? "#9a8a6a", band: bs.slice().sort((a, b) => b.members.length - a.members.length)[0]?.id ?? 0, tier: 0 });
   }
   return out;
 }

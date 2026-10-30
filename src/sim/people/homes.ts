@@ -3,8 +3,11 @@ import { Bubble, type HutLook } from "../../shared/people.ts";
 import { Food, Place, Skill, type Person, type Step } from "./person.ts";
 import { homeOf, storeFood, noFood, keepingDays, type Band, type Foods } from "./band.ts";
 import { Work, addWork, worksAround, workById } from "./works.ts";
-import { Idea, knows, practice } from "./ideas.ts";
+import { knows, practice } from "./ideas.ts";
+import { Idea } from "../tech/tree.ts";
 import { householdAppetite, hearthOf, pass, take } from "./sharing.ts";
+import { decayOf, defOf } from "../buildings/build.ts";
+import { houseWords } from "../buildings/defs.ts";
 import type { Society } from "./society.ts";
 
 /*
@@ -36,8 +39,14 @@ export const pitRoom = (w: Work) => w.size ?? 40;
 export const pitFood = (w: Work) => (w.foods ? storeFood(w.foods) : 0);
 /** A household's own pit at its band's camp. */
 export function pitOf(s: Society, b: Band, home: number): Work | null {
-  for (const w of worksAround(s, b.x, b.y, 12)) if (w.kind === Work.Pit && w.home === home && w.band === b.id) return w;
-  return null;
+  let shared: Work | null = null;
+  for (const w of worksAround(s, b.x, b.y, 12)) {
+    if (w.kind !== Work.Pit) continue;
+    if (w.home === home && w.band === b.id) return w;
+    /* a granary the band or the village shares, standing, is everyone's to put by in */
+    if ((w.owner ?? 0) >= 1 && (w.prog ?? 1) >= 1 && w.state > 0.2 && w.foods && !shared) shared = w;
+  }
+  return shared;
 }
 /** Counts the food in a band's pits at its camp again (for the days of food the band has). */
 export function recountPits(s: Society, b: Band): void {
@@ -74,7 +83,7 @@ export function pitSite(s: Society, b: Band, home: number): [number, number] | n
 export function digPit(s: Society, p: Person, st: Step): void {
   const b = s.band(p), home = homeOf(p, s.byId, s.time);
   if (pitOf(s, b, home)) return;
-  practice(p, Idea.Pits, 0.03);
+  practice(s, p, Idea.Pits, 0.03);
   const first = !worksAround(s, b.x, b.y, 14).some(w => w.kind === Work.Pit && w.band === b.id);
   addWork(s, { kind: Work.Pit, x: st.x, y: st.y, wx: st.x, wy: st.y, band: b.id, home, by: p.id, t: s.time, state: 1, food: 0, crop: "", ripe: 0, size: knows(p, Idea.Digging) ? 52 : 40, foods: noFood(), opened: s.time });
   s.stats.homes.pits++; if (!s.stats.homes.firstPit) s.stats.homes.firstPit = s.time;
@@ -98,10 +107,10 @@ export function fetchFromPit(s: Society, p: Person, st: Step): void {
   w.opened = s.time; b.pit = Math.max(0, b.pit - got); s.stats.homes.fetched += got;
 }
 /** Eating straight from the family's pit at this camp, when the hearth and the pot are bare. */
-export function eatFromPit(s: Society, p: Person, b: Band, home: number, want: number): number {
+export function eatFromPit(s: Society, p: Person, b: Band, home: number, want: number, took?: Foods): number {
   if (Math.hypot(p.x - b.x, p.y - b.y) > 8) return 0;
   const w = pitOf(s, b, home); if (!w || !w.foods) return 0;
-  const got = take(w.foods, want);
+  const got = take(w.foods, want, took);
   if (got > 0) { w.opened = s.time; b.pit = Math.max(0, b.pit - got); s.stats.homes.eaten += got; }
   return got;
 }
@@ -111,7 +120,9 @@ export function pitDay(s: Society, w: Work, keep: boolean): void {
   if (!w.foods) return;
   const T = s.tempC(w.x, w.y), f = w.foods, lone = s.time - (w.opened ?? w.t) > DAY_SECONDS * 20 ? 0.998 : 1;
   const rot = T < -2 ? 0.995 : T > 20 ? 0.65 : T > 10 ? 0.8 : T > 5 ? 0.9 : 0.96;
-  f.meat *= rot; f.fish *= rot; f.plant *= 0.996 * lone; f.dried *= 0.999 * lone;
+  /* a granary on posts keeps plant food drier and out of reach of the mice */
+  const plantKeep = defOf(w).effects.keep ?? 0.996;
+  f.meat *= rot; f.fish *= rot; f.plant *= plantKeep * lone; f.dried *= Math.max(0.999, plantKeep) * lone;
   if (!keep) w.state -= 0.004;
 }
 
@@ -136,7 +147,7 @@ const HUT_WORDS: Record<string, string> = {
   "cone|plain": "tall cone of poles sheathed in bark and hides", "cone|cold": "earth lodge of poles heaped with turf", "cone|wet": "cone of poles raised on stilts", "cone|hot": "tall cone of thatch",
 };
 export const hutWordsOf = (style: string | undefined, look: string | undefined) => HUT_WORDS[`${style}|${look}`] ?? "hut";
-export const hutWords = (w: Work) => hutWordsOf(w.style, w.look);
+export const hutWords = (w: Work) => ((w.tier ?? 0) >= 1 ? houseWords(w.style, w.walls, w.roof) : hutWordsOf(w.style, w.look));
 /** A hut standing and sound enough to live in. */
 export const hutStands = (w: Work | undefined | null): boolean => !!w && w.kind === Work.Hut && (w.prog ?? 1) >= 1 && w.state > 0.2;
 /** How far a hut reaches from where it stands, for keeping other things clear of it. */
@@ -236,7 +247,7 @@ export function raise(s: Society, p: Person, st: Step): void {
     b.homes.set(home, [st.x, st.y, hut.id]);
   }
   p.skills[Skill.Craft] = Math.min(1, p.skills[Skill.Craft] + 0.004);
-  practice(p, Idea.Huts, 0.015);
+  practice(s, p, Idea.Huts, 0.015);
   if (st.a === 1) { hut.state = Math.min(1, hut.state + amt * 2.4); return; }
   if (st.a === 2) {
     /* a bay added to a longhouse for a grown child's family */
@@ -280,8 +291,10 @@ export function hutDay(s: Society, w: Work): boolean {
     if (!lived) w.prog = (w.prog ?? 0) - 0.02;
     return (w.prog ?? 0) > 0;
   }
+  /* a rebuild nobody is working on comes to nothing */
+  if (w.up && !lived) { w.up.prog -= 0.01; if (w.up.prog <= 0) { w.up = undefined; s.worksVersion++; } }
   const before = w.state;
-  w.state -= lived ? 0.0016 : 0.006 * (s.tempC(w.x, w.y) < 0 ? 1.3 : 1);
+  w.state -= decayOf(w, lived) * (!lived && s.tempC(w.x, w.y) < 0 ? 1.3 : 1);
   if ((before >= 0.55) !== (w.state >= 0.55) || (before >= 0.2) !== (w.state >= 0.2)) s.worksVersion++;
   return w.state > -1.4;
 }

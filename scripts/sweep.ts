@@ -33,21 +33,27 @@ await Promise.all(Array.from({ length: Math.min(jobs, seeds.length) }, async () 
   while (next < seeds.length) { const seed = seeds[next++]; const r = await runOne(seed); rows.push(r); process.stderr.write(`seed ${seed} done in ${r.secs}s\n`); }
 }));
 rows.sort((a, b) => +a.seed - +b.seed);
-const KEYS = ["pop", "maxPop", "bands", "births", "deaths", "hunger", "cold", "illness", "moves", "splits", "meanStay", "long", "secs"];
+const KEYS = ["pop", "pop25", "pop50", "deaths", "hunger", "illness", "moves", "long", "villages", "towns", "techs", "flocks", "secs"];
 const base: Row[] | null = against ? JSON.parse(readFileSync(against, "utf8")) : null;
 console.log(["seed", ...KEYS].map(k => k.padStart(9)).join(""));
 for (const r of rows) {
   const b = base?.find(x => x.seed === r.seed);
-  console.log([String(r.seed).padStart(9), ...KEYS.map(k => (b ? `${fmt(+r[k] - +b[k], k)}` : fmt(+r[k], k)).padStart(9))].join("") + (b ? "  (change)" : ""));
+  /* a key the old run did not record shows as the new value alone */
+  console.log([String(r.seed).padStart(9), ...KEYS.map(k => (b && b[k] !== undefined ? `${fmt(+r[k] - +b[k], k)}` : fmt(+(r[k] ?? 0), k)).padStart(9))].join("") + (b ? "  (change)" : ""));
 }
 const sum = (rs: Row[], k: string) => rs.reduce((a, r) => a + +r[k], 0);
 const mean = (rs: Row[], k: string) => sum(rs, k) / Math.max(1, rs.length);
 const sd = (xs: number[]) => { const m = xs.reduce((a, x) => a + x, 0) / Math.max(1, xs.length); return Math.sqrt(xs.reduce((a, x) => a + (x - m) ** 2, 0) / Math.max(1, xs.length - 1)); };
-console.log(["mean", ...KEYS.map(k => fmt(mean(rows, k), k))].map(v => v.padStart(9)).join(""));
+console.log(["mean", ...KEYS.map(k => fmt(mean(rows.map(r => ({ ...r, [k]: r[k] ?? 0 })), k), k))].map(v => v.padStart(9)).join(""));
+/* medians and how many worlds clear a mark, for the acceptance targets */
+const med = (k: string) => { const xs = rows.map(r => +(r[k] ?? 0)).sort((a, b) => a - b); return xs.length ? xs[Math.floor((xs.length - 1) / 2)] : 0; };
+const count = (k: string, f: (v: number) => boolean) => rows.filter(r => f(+(r[k] ?? 0))).length;
+if (rows[0]?.pop50 !== undefined) console.log(`Medians: pop ${med("pop")}, pop50 ${med("pop50")}, hunger ${med("hunger")}, illness ${med("illness")}, techs ${med("techs")}, maxSettlement ${med("maxSettlement")}, secsPerYear ${med("secsPerYear")} | worlds with pop >= 150: ${count("pop", v => v >= 150)}, a settlement of 100+: ${count("maxSettlement", v => v >= 100)}, a town: ${count("towns", v => v >= 1)}, pottery: ${count("firstPottery", v => v > 0)}, a herding line: ${count("firstHerd", v => v > 0)}, wells: ${count("firstWells", v => v > 0)}, granaries: ${count("firstGranary", v => v > 0)}, a house to last: ${count("firstHouse1", v => v > 0)}, dogs: ${count("firstDogs", v => v > 0)}, the bow: ${count("firstBow", v => v > 0)}`);
 if (base) {
   const paired = rows.filter(r => base.some(b => b.seed === r.seed));
   console.log("Per world, new minus old (mean, give or take one standard deviation):");
   for (const k of KEYS) {
+    if (!paired.every(r => base.find(b => b.seed === r.seed)![k] !== undefined)) continue;
     const d = paired.map(r => +r[k] - +base.find(b => b.seed === r.seed)![k]);
     console.log(`  ${k.padEnd(9)} ${fmt(d.reduce((a, x) => a + x, 0) / Math.max(1, d.length), k).padStart(9)} +/- ${fmt(sd(d), k)}   (old total ${fmt(sum(base.filter(b => paired.some(r => r.seed === b.seed)), k), k)}, new total ${fmt(sum(paired, k), k)})`);
   }

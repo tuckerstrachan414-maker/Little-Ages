@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Little Ages: the tree of knowledge</title>
+<link rel="stylesheet" href="/src/ui/styles.css">
+<style>body{margin:0;background:#4c6a3a;font:12px system-ui} #note{position:fixed;left:12px;top:12px;color:#f2e6c8;font-size:13px;max-width:360px}</style></head>
+<body><p id="note">The TECH panel fed three made-up peoples, without a world behind it: pick one from the box, drag, zoom, walk it with the arrow keys, click a node. The world view stripes a node in every knowing people's colors.</p>
+<script type="module">
+import { TechPanel } from "/src/ui/tech.ts";
+import { techTree } from "/src/sim/tech/summary.ts";
+import { TECH_COUNT, TECHS } from "/src/sim/tech/tree.ts";
+import { Known } from "/src/shared/tech.ts";
+/* the panel needs a dock to live in and a history to look events up in; here, the barest stand-ins */
+const dock = { add: (key, el) => { document.body.append(el); el.hidden = false; }, set() {}, toggle() {}, isOpen: () => true };
+const hist = { events: [], byId: () => undefined };
+/* three peoples: one deep into the New Stone Age, one just past the old ways, one that has lost its pots */
+const peoples = [
+  { kind: "people", id: 0, name: "The Kelu", color: "#c0563f", age: 1, known: new Set(["keep-fire", "spear", "fishing", "hides", "snares", "make-fire", "blades", "axe", "digging-sticks", "baskets", "nets", "weirs", "drying", "planting", "pits", "huts", "pottery", "kiln-firing", "grinding-grain", "porridge", "wells", "granary", "mud-brick", "herb-lore", "taming-dogs", "herding-goats-and-sheep", "milking", "penning", "bow-and-arrow"]), lost: new Set(["timber-framing"]) },
+  { kind: "people", id: 1, name: "The Oto", color: "#4f74a8", age: 0, known: new Set(["keep-fire", "spear", "fishing", "hides", "snares", "make-fire", "blades", "digging-sticks", "drying", "bow-and-arrow", "taming-dogs"]), lost: new Set() },
+  { kind: "people", id: 2, name: "The Namim", color: "#4e8a5c", age: 1, known: new Set(["keep-fire", "spear", "fishing", "hides", "snares", "make-fire", "baskets", "nets", "weirs", "planting", "pits", "huts", "pottery", "sickle-harvest", "seed-selection", "granary", "wattle-and-daub"]), lost: new Set(["pottery"]) },
+];
+const world = { kind: "world", id: 0, name: "The whole world", color: "#2b2418", age: 1 };
+const groups = [world, ...peoples.map(({ kind, id, name, color, age }) => ({ kind, id, name, color, age }))];
+const byKey = new Map(TECHS.map(d => [d.key, d]));
+function data(g) {
+  const nodes = new Uint8Array(TECH_COUNT), knowers = new Uint16Array(TECH_COUNT), refine = new Float32Array(TECH_COUNT), firstT = new Float32Array(TECH_COUNT);
+  const ps = g.kind === "world" ? peoples : peoples.filter(p => p.id === g.id);
+  const known = id => ps.some(p => p.known.has(TECHS[id].key) && !p.lost.has(TECHS[id].key));
+  for (const d of TECHS) {
+    if (known(d.id)) { nodes[d.id] = Known.Known; knowers[d.id] = ps.filter(p => p.known.has(d.key) && !p.lost.has(d.key)).length * 7 + (d.id % 5); refine[d.id] = d.start ? 6 + (d.id % 4) : (d.id * 7) % 9 / 3; firstT[d.id] = 2400 * (3 + d.era * 6 + (d.id % 7)); }
+    else if (ps.some(p => p.lost.has(d.key))) nodes[d.id] = Known.Lost;
+    else if (d.active && d.needs.every(known) && (!d.any.length || d.any.some(known))) nodes[d.id] = Known.Reach;
+  }
+  const out = { group: groups.find(o => o.kind === g.kind && o.id === g.id) ?? world, groups, nodes, knowers, refine, firstT };
+  if (g.kind === "world") out.colors = TECHS.map(d => peoples.filter(p => !d.start && p.known.has(d.key) && !p.lost.has(d.key)).map(p => p.color));
+  return out;
+}
+let panel;
+const cb = {
+  ask: g => panel.set(data(g)),
+  askNode: (id, g) => {
+    const d = TECHS[id], ps = g.kind === "world" ? peoples : peoples.filter(p => p.id === g.id);
+    const knows = ps.filter(p => p.known.has(d.key) && !p.lost.has(d.key)), known = i => ps.some(p => p.known.has(TECHS[i].key) && !p.lost.has(TECHS[i].key));
+    panel.setNode({
+      id, key: d.key, name: d.name, how: d.how, branch: d.branch, era: d.era, active: d.active, start: d.start, icon: d.icon,
+      status: knows.length ? `${knows.length * 7} people know it here, in ${knows.length * 3} bands.` : d.active ? "Nobody has worked it out yet." : "Nobody has thought of it; it lies beyond what this age can reach.",
+      needs: d.needs.map(i => ({ id: i, name: TECHS[i].name, known: known(i) })), any: d.any.map(i => ({ id: i, name: TECHS[i].name, known: known(i) })),
+      unlocks: TECHS.filter(o => o.needs.includes(id) || o.any.includes(id)).map(o => ({ id: o.id, name: o.name, known: known(o.id) })),
+      first: knows.length ? { who: 1, name: "Ama", bandName: "Kelu of the Ford", people: knows[0].name.replace("The ", ""), t: 2400 * (3 + d.era * 6), x: 100, y: 100 } : null, firstHere: null, times: knows.length, lostAt: 0,
+      knowers: knows.length ? [{ id: 1, name: "Ama", band: "Kelu of the Ford", m: 0.9 }, { id: 2, name: "Tsitsinu", band: "Reed Camp", m: 0.4 }] : [], nKnowers: knows.length * 7, bands: knows.length * 3,
+      refine: knows.length ? { level: (id * 7) % 9 / 3 + (d.start ? 6 : 0), uses: 140 * (1 + id % 9), best: { id: 1, name: "Ama" } } : null,
+      answers: Object.keys(d.problems ?? {}).map(k => k.toLowerCase()),
+    });
+  },
+  show() {}, fly() {},
+};
+panel = new TechPanel(dock, hist, cb);
+panel.setTree(techTree());
+panel.set(data(world));
+const loop = () => { panel.tick(performance.now()); requestAnimationFrame(loop); }; loop();
+window.panel = panel; window.done = true;
+</script></body></html>

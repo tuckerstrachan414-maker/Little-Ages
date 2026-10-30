@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Little Ages: animals</title>
+<style>body{margin:0;background:#8aa35a;font:12px system-ui} canvas{image-rendering:pixelated;display:block}</style></head>
+<body><canvas id="c"></canvas>
+<script type="module">
+/* Every beast of the land, wild and kept: each species in every frame (grazing head down and up, walking, running), in summer and in winter, with the far-zoom dot beside it. */
+import { animalSprite, ANIMAL_DOT } from "/src/render/sprites/animals.ts";
+import { SPECIES_NAMES } from "/src/shared/types.ts";
+const K = 5, c = document.getElementById("c"), x = c.getContext("2d");
+c.width = 1500; c.height = 120 * SPECIES_NAMES.length + 60; x.imageSmoothingEnabled = false;
+x.fillStyle = "#8aa35a"; x.fillRect(0, 0, c.width, c.height);
+const draw = (cv, px, py) => x.drawImage(cv, px, py - cv.height * K, cv.width * K, cv.height * K);
+x.fillStyle = "#14110c"; x.font = "14px system-ui";
+["grazing", "head up", "walk 1", "walk 2", "run 1", "run 2", "winter"].forEach((n, i) => x.fillText(n, 200 + i * 160, 24));
+SPECIES_NAMES.forEach((name, sp) => {
+  const y = 130 + sp * 120;
+  x.fillStyle = "#14110c"; x.fillText(name, 10, y - 40);
+  x.fillStyle = ANIMAL_DOT[sp]; x.fillRect(150, y - 50, 12, 12);
+  for (let f = 0; f < 6; f++) draw(animalSprite(sp, f, false), 200 + f * 160, y);
+  draw(animalSprite(sp, 0, true), 200 + 6 * 160, y);
+});
+window.done = true;
+</script></body></html>

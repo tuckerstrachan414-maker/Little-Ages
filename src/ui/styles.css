@@ -61,6 +61,11 @@ button { font: inherit; color: inherit; }
 #hud-modes .seg.modes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3px; }
 #hud-modes .seg.modes button { padding: 7px 4px 6px; }
 #hud-modes .foot { display: flex; justify-content: flex-end; margin-top: 8px; }
+#hud-modes .legend { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2px 6px; margin-top: 8px; font-size: 11px; line-height: 1.3; }
+#hud-modes .legend[hidden] { display: none; }
+#hud-modes .legend span { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+#hud-modes .legend i { display: inline-block; width: 9px; height: 9px; border: 1px solid var(--ink); flex: none; }
+#hud-modes .legend small { grid-column: 1 / -1; color: var(--ink-2); font-size: 10.5px; margin-top: 2px; }
 
 #hud-map { padding: 4px; }
 #hud-map canvas { display: block; image-rendering: pixelated; cursor: pointer; }
@@ -350,4 +355,35 @@ button { font: inherit; color: inherit; }
   #hud-news { width: auto; max-height: 24vh; }
   #hud-modes, #hud-bands, #hud-search, #hud-journal, #hud-ideas { top: 200px; left: max(12px, env(safe-area-inset-left)); right: max(12px, env(safe-area-inset-right)); width: auto; max-height: 52vh; }
   #hud-hint { display: none; }
+}
+
+/* the tree of knowledge */
+#hud-tech { position: fixed; z-index: 8; top: 60px; right: max(12px, env(safe-area-inset-right)); pointer-events: auto; width: min(960px, 100vw - 24px); height: min(78vh, 720px); display: flex; flex-direction: column; padding: 8px 10px 10px; }
+#hud-tech .th { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
+#hud-tech h3 { font-family: var(--f-display); font-size: 16px; font-weight: 600; margin: 0; }
+#hud-tech .tg { font-family: var(--f-body); font-size: 13px; padding: 4px 6px; border: 2px solid var(--ink-2); background: #fbf4e2; color: var(--ink); border-radius: 2px; max-width: 240px; }
+#hud-tech .age { font-family: var(--f-label); font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); }
+#hud-tech .tq { font-family: var(--f-body); font-size: 13px; padding: 4px 8px; border: 2px solid var(--ink-2); background: #fbf4e2; color: var(--ink); border-radius: 2px; width: 200px; margin-left: auto; }
+#hud-tech .hint { font-family: var(--f-label); font-size: 9.5px; letter-spacing: .06em; color: var(--ink-3); width: 100%; }
+#hud-tech .tb { position: relative; flex: 1; min-height: 0; border: 2px solid var(--ink-2); background: var(--paper); overflow: hidden; }
+#hud-tech canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; image-rendering: pixelated; }
+#hud-tech .tip { position: absolute; pointer-events: none; background: var(--ink); color: var(--paper); font-size: 12px; padding: 3px 7px; border-radius: 2px; white-space: nowrap; z-index: 2; }
+#hud-tech .tn-card { position: absolute; top: 0; right: 0; bottom: 0; width: 300px; overflow-y: auto; background: #fbf4e2; border-left: 2px solid var(--ink-2); padding: 10px 12px; font-size: 13px; z-index: 3; }
+#hud-tech .tn-card h4 { font-family: var(--f-display); font-size: 15px; margin: 2px 24px 4px 0; }
+#hud-tech .tn-card p { margin: 0 0 7px; line-height: 1.35; }
+#hud-tech .tn-card .how { color: var(--ink-2); }
+#hud-tech .tn-card .st { font-weight: 700; }
+#hud-tech .tn-card .x { position: absolute; top: 4px; right: 6px; background: none; border: 0; font-size: 18px; cursor: pointer; color: var(--ink-2); }
+#hud-tech .tn-card .lnk { background: none; border: 0; padding: 0; color: var(--accent); text-decoration: underline; cursor: pointer; font-size: inherit; }
+#hud-tech .tn-card .lnk.on { color: var(--ok); }
+#hud-tech .tn-card .rbar { height: 8px; border: 2px solid var(--ink-2); background: #efe4c6; margin: 0 0 8px; }
+#hud-tech .tn-card .rbar i { display: block; height: 100%; background: var(--accent); }
+#hud-tech canvas:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+#hud-tech .muted { color: var(--ink-3); }
+@media (max-width: 700px) {
+  #hud-tech { width: calc(100vw - 16px); height: 80vh; }
+  #hud-tech .tb { display: flex; flex-direction: column; }
+  #hud-tech canvas { flex: 1; min-height: 0; height: auto; }
+  #hud-tech .tn-card { position: static; width: 100%; flex: 0 0 45%; border-left: 0; border-top: 2px solid var(--ink-2); }
+  #hud-tech .tq { width: 100%; margin-left: 0; }
 }

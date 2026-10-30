@@ -1,4 +1,5 @@
 import { Place, type Person } from "./person.ts";
+import { newProblems } from "../tech/problems.ts";
 
 /*
   A band: the people who share a fire. It has a camp, a fire someone has to keep fed, and
@@ -53,15 +54,34 @@ export interface Band {
   today: Day;
   yesterday: Day;
   /** how many of the band know each idea, and the one who knows it best (counted each morning) */
-  can: number[];
-  keeper: number[];
+  can: Int32Array;
+  keeper: Int32Array;
   /** when the fire last went out */
   outAt: number;
   /** food put by in the band's storage pits at this camp (counted again each day and whenever a pit is filled or emptied) */
   pit: number;
+  /** the band's pile of materials at camp, by Mat: clay, flint, stone and the rest, carried in and not yet used */
+  goods: Float32Array;
+  /** when pots last broke at the fire (0 if never) */
+  broke: number;
+  /** each household's own things, by Mat: its pots, wool, herbs */
+  hgoods: Map<number, Float32Array>;
+  /** days on end the camp's ground has been in drought, and when a dry year was last told */
+  dryDays: number; droughtAt: number;
+  /** the well the band drinks from, if one stands by its camp (a work id, 0 for none) */
+  well: number;
   /** the band's own seed for each crop it sows: how tame the line has grown, from 0 (wild) up */
   seed: Record<string, number>;
+  /** what the band is short of, 0..1 by Problem, worked out each morning (see tech/problems.ts) */
+  problems: Float32Array;
+  /** when meat or fish last came into camp */
+  meatAt: number;
+  /** when the wood coming back around this camp was last told */
+  regrownAt: number;
+  /** herding: when young animals were last kept and told of, when animals were last lost to wolves and told of, and when wolf pups were last taken in */
+  keptAt: number; herdAt: number; pupsAt: number;
 }
+export { newProblems };
 /** Food brought in, how much of it went into the pot, what was eaten, what passed between hearths, and fresh meat and fish lost to rot. */
 export interface Day { plant: number; meat: number; fish: number; eaten: number; shared: number; given: number; spoiled: number; }
 export const newDay = (): Day => ({ plant: 0, meat: 0, fish: 0, eaten: 0, shared: 0, given: 0, spoiled: 0 });
@@ -85,6 +105,8 @@ export function estimate(pl: { k: number; q: number; t: number }, now: number): 
   const days = (now - pl.t) / 60;
   if (pl.k === Place.Game) return days > 3 ? 0 : pl.q * (1 - days / 3);
   if (pl.k === Place.Carcass) return days > 6 ? 0 : pl.q * (1 - days / 8);
+  /* a deposit is worth going back to for as long as anything is left in it */
+  if (pl.k === Place.Deposit) return 2 + pl.q * 6;
   /* plant food and fish grow back, so an old report of a picked-over patch looks better with time */
   return Math.min(pl.q + days * 0.4, Math.max(pl.q, 6));
 }

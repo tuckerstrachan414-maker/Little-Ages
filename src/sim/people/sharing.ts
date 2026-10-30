@@ -1,3 +1,7 @@
+import { Mat, MAT_COUNT } from "../economy/goods.ts";
+import { noteMeal } from "../economy/diet.ts";
+import { techIx } from "../tech/tree.ts";
+import { bandKnows } from "./ideas.ts";
 import { DAY_SECONDS } from "../../shared/types.ts";
 import { Bubble } from "../../shared/people.ts";
 import { Food, Goal, Mem, type Person } from "./person.ts";
@@ -45,6 +49,20 @@ export function householdAppetite(s: Society, b: Band, head: number): number {
   return v;
 }
 
+/** A household's own things (pots, wool, herbs), by Mat. */
+export function hgoodsOf(s: Society, p: Person): Float32Array {
+  const b = s.band(p), h = homeOf(p, s.byId, s.time);
+  let g = b.hgoods.get(h);
+  if (!g) { g = new Float32Array(MAT_COUNT); b.hgoods.set(h, g); }
+  return g;
+}
+/** How much further plant food goes at this household's meals: boiled in a pot over a lit fire, and as porridge for those who cannot chew their fill. */
+export function plantBoost(s: Society, p: Person, b: Band, head: number): number {
+  const hg = b.hgoods.get(head); if (!hg || hg[Mat.Pots] < 1 || b.fire <= 0.05 || !s.atCamp(p, 8)) return 0;
+  const st = s.stage(p);
+  return 0.25 + (bandKnows(b, PORRIDGE()) && (st === "toddler" || st === "elder" || p.sick > 0) ? 0.25 : 0);
+}
+const PORRIDGE = () => techIx("porridge");
 export function hearthOf(s: Society, p: Person): Hearth {
   const b = s.band(p), h = homeOf(p, s.byId, s.time);
   let hh = b.hearths.get(h);
@@ -90,9 +108,9 @@ function familySpare(s: Society, p: Person, b: Band, mine: number): number {
   return v;
 }
 
-export function take(from: Foods, want: number): number {
+export function take(from: Foods, want: number, took?: Foods): number {
   let left = want;
-  for (const k of SPOIL_ORDER) { const t = Math.min(left, from[k]); from[k] -= t; left -= t; if (left <= 1e-9) break; }
+  for (const k of SPOIL_ORDER) { const t = Math.min(left, from[k]); from[k] -= t; left -= t; if (took) took[k] += t; if (left <= 1e-9) break; }
   return want - left;
 }
 /** Moves `amt` of food between two stores, what spoils first going first; returns what moved. */
@@ -110,13 +128,16 @@ export function pass(from: Foods, to: Foods, amt: number): number {
 */
 export function eat(s: Society, p: Person, b: Band, want: number): number {
   if (want <= 0) return 0;
-  const mine = homeOf(p, s.byId, s.time), h = b.hearths.get(mine);
-  let got = h ? take(h, want) : 0;
-  const fromPot = take(b.store, want - got);
+  const mine = homeOf(p, s.byId, s.time), h = b.hearths.get(mine), took = noFood();
+  let got = h ? take(h, want, took) : 0;
+  const fromPot = take(b.store, want - got, took);
   got += fromPot;
-  if (got < want - 1e-9 && b.pit > 0) got += eatFromPit(s, p, b, mine, want - got);
-  if (got < want - 1e-9 && (want >= 0.05 || p.food < 0.5)) got += fromFamily(s, p, b, mine, want - got);
+  if (got < want - 1e-9 && b.pit > 0) got += eatFromPit(s, p, b, mine, want - got, took);
+  if (got < want - 1e-9 && (want >= 0.05 || p.food < 0.5)) got += fromFamily(s, p, b, mine, want - got, took);
   if (got <= 0) return 0;
+  noteMeal(p, took);
+  /* boiled in a pot, plant food goes further; as porridge the toddlers, the old and the sick can eat their fill of it */
+  got += took.plant * plantBoost(s, p, b, mine);
   p.food = Math.min(2.5, p.food + got);
   /* only what came out of the pot counts as taking from the others */
   if (fromPot > 0) p.took = p.took * 0.98 + fromPot * 0.02 * 40;
@@ -125,11 +146,11 @@ export function eat(s: Society, p: Person, b: Band, want: number): number {
 }
 
 /** What close family will let someone eat from their hearth: whatever they have beyond half a day for themselves. */
-function fromFamily(s: Society, p: Person, b: Band, mine: number, want: number): number {
+function fromFamily(s: Society, p: Person, b: Band, mine: number, want: number, took?: Foods): number {
   let got = 0;
   for (const [q, head, h] of familyHearths(s, p, b, mine)) {
     const spare = storeFood(h) - householdAppetite(s, b, head) * 0.5; if (spare <= 0) continue;
-    const t = take(h, Math.min(spare, want - got));
+    const t = take(h, Math.min(spare, want - got), took);
     if (t > 0) { got += t; const r = s.rel(p, q.id); r.owe += t * 0.3; s.rel(q, p.id).owe -= t * 0.3; b.today.given += t; s.stats.social.given += t; s.stats.social.family += t; }
     if (got >= want - 1e-9) break;
   }
@@ -351,9 +372,18 @@ export function shareRound(s: Society, b: Band): void {
   (the widower, the children), or into the pot if nobody does.
 */
 export function reconcileHearths(s: Society, b: Band): void {
-  if (!b.hearths.size) return;
+  if (!b.hearths.size && !b.hgoods.size) return;
   const heads = new Set<number>();
   for (const id of b.members) { const q = s.byId.get(id); if (q) heads.add(homeOf(q, s.byId, s.time)); }
+  /* a household's pots pass to whoever carries it on */
+  for (const [k, g] of [...b.hgoods]) {
+    if (heads.has(k)) continue;
+    b.hgoods.delete(k);
+    const q = s.byId.get(k), a = s.archive.get(k) ?? q;
+    const heir = q && q.band === b.id ? q : (a ? [a.partner, ...a.children].map(id => s.byId.get(id)).find(o => !!o && o.band === b.id) : undefined);
+    const to = heir ? homeOf(heir, s.byId, s.time) : -1;
+    if (to >= 0 && heads.has(to)) { let t = b.hgoods.get(to); if (!t) { t = new Float32Array(MAT_COUNT); b.hgoods.set(to, t); } for (let m = 0; m < MAT_COUNT; m++) t[m] += g[m]; }
+  }
   for (const [k, h] of [...b.hearths]) {
     if (heads.has(k)) continue;
     b.hearths.delete(k);
@@ -372,6 +402,8 @@ export function reconcileHearths(s: Society, b: Band): void {
 }
 /** A household head moving to another band takes the hearth's food along. */
 export function carryHearth(from: Band, to: Band, id: number): void {
+  const g = from.hgoods.get(id);
+  if (g) { from.hgoods.delete(id); to.hgoods.set(id, g); }
   const h = from.hearths.get(id); if (!h) return;
   from.hearths.delete(id);
   let t = to.hearths.get(id); if (!t) { t = noFood(); to.hearths.set(id, t); }

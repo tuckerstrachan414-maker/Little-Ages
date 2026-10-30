@@ -1,7 +1,7 @@
 import { Bubble, type Look } from "../../shared/people.ts";
 import type { Society } from "./society.ts";
 import type { Person } from "./person.ts";
-import { IDEAS } from "./ideas.ts";
+import { TECHS as IDEAS, ERA_NAMES } from "../tech/tree.ts";
 
 /*
   Finding things by name: the living and the dead, bands and their camps, whole peoples. The
@@ -70,7 +70,7 @@ export function searchWorld(s: Society, raw: string, limit = 6): SearchItem[] {
     const big = bs.slice().sort((a, d) => d.members.length - a.members.length)[0];
     const pop = bs.reduce((a, b) => a + b.members.length, 0);
     const ps = score(c.lang.name, q);
-    if (ps) keep(ps + 3, { kind: "people", id: big.id, title: `The ${c.lang.name}`, sub: `${bs.length} ${bs.length === 1 ? "band" : "bands"}, ${pop} people`, x: big.x, y: big.y, band: big.id });
+    if (ps) keep(ps + 3, { kind: "people", id: big.id, title: `The ${c.lang.name}`, sub: `${bs.length} ${bs.length === 1 ? "band" : "bands"}, ${pop} people, in the ${ERA_NAMES[c.age]}`, x: big.x, y: big.y, band: big.id });
   }
   /* villages, by their name or what it means; gatherings by where they are; ruins too */
   for (const v of s.villages) {

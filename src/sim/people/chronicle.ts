@@ -1,6 +1,8 @@
 import { Species } from "../../shared/types.ts";
 import type { Society } from "./society.ts";
-import { IDEAS } from "./ideas.ts";
+import { TECHS as IDEAS } from "../tech/tree.ts";
+import { unpackHint } from "../tech/tree.ts";
+import { MATS } from "../economy/goods.ts";
 
 /*
   How much an event matters, and a headline for it. Nothing is scripted: weight comes from
@@ -26,6 +28,9 @@ const BASE: Record<string, [number, string]> = {
   hut: [0.34, "A first hut"], pit: [0.3, "Food put by"], field: [0.3, "A field sown again"], seed: [0.36, "The grain grows tame"],
   gather: [0.48, "Bands gather"], disperse: [0.32, "A gathering breaks up"],
   village: [0.84, "A village is born"], villagegrow: [0.45, "A village grows"], abandon: [0.6, "A village abandoned"], return: [0.5, "Back to the old village"],
+  drought: [0.4, "A dry year"], found: [0.3, "A deposit found"], exhausted: [0.38, "A deposit dug out"], regrown: [0.2, "The wood comes back"],
+  pots: [0.3, "The first pots"], communal: [0.44, "The village builds"], chief: [0.5, "A chief"], tier: [0.5, "A settlement grows"], age: [0.7, "A new age"], well: [0.4, "A well"], granary: [0.34, "A granary"], kiln: [0.3, "A kiln"], pen: [0.3, "A pen"], upgrade: [0.3, "A house rebuilt"], built: [0.3, "Something new built"],
+  kept: [0.22, "Young animals kept"], tamed: [0.5, "Animals tamed"], herd: [0.3, "A flock thinned"],
 };
 /** Every kind of event the simulation tells of. */
 export const KINDS = Object.keys(BASE);
@@ -37,7 +42,7 @@ const RARITY = 0.3;
   another language or a move into unknown land, 2 for twins; 1 for a feud passed down, a fight where someone
   was hurt, peace made by a go-between, a family driven out by a feud, a split along a feud or a following,
   gifts between two peoples. For know-how, `hint` is 100 times a level plus the idea: a discovery first in the
-  world (level 2) or first among a people (1); know-how crossing between peoples (1); lost to the world (1).
+  world (level 2) or first among a people (1); know-how crossing between peoples (1); lost to the world (1); see packHint.
 */
 export function weigh(s: Society, kind: string, who: number[], band: number, hint: number): Weighed {
   const [base, name] = BASE[kind] ?? [0.2, "Something happened"];
@@ -77,6 +82,18 @@ export function weigh(s: Society, kind: string, who: number[], band: number, hin
     case "pit": if (n === 0) title = "Food put by in the ground"; break;
     case "gather": sig += Math.min(0.25, Math.max(0, hint - 40) / 200); break;
     case "village": if (n === 0) title = "The first village"; break;
+    case "pots": if (hint === 1) { sig += 0.15; title = "The first pots anywhere"; } break;
+    case "age": if (hint === 1) { sig += 0.25; title = "A new age begins"; } else if (n === 0) sig += 0.1; break;
+    case "tier": if (hint === 2) { sig += 0.15; title = "A town"; } else if (hint === 3) { sig += 0.3; title = "A city"; } else if (hint === 0) { sig -= 0.1; title = "A settlement dwindles"; } break;
+    case "chief": if (hint === 1) title = "The village changes its chief"; break;
+    case "communal": title = hint === 1 ? "The village raises a granary" : "The village digs a well"; break;
+    case "well": case "granary": case "kiln": case "pen": case "built": if (hint === 1) { sig += 0.15; title = `The first ${kind === "built" ? "of its kind" : kind} anywhere`; } break;
+    case "upgrade": if (hint === 1) { sig += 0.12; title = "A house built to last"; } break;
+    case "kept": title = hint === 1 ? "Wolf pups taken in" : n === 0 ? "The first young animals carried home" : title; break;
+    case "tamed": if (hint === 2) { sig += 0.3; title = "The first tame animals anywhere"; } else title = "A people takes to herding"; break;
+    case "herd": title = hint === 1 ? "Wolves among the flock" : "Animals wander off"; break;
+    case "found": { const m = MATS[hint]; if (m) { title = `${m.name.charAt(0).toUpperCase()}${m.name.slice(1)} found`; if (hint >= 15) sig += 0.08; } break; }
+    case "exhausted": { const m = MATS[hint]; if (m) title = `The ${m.name} runs out`; break; }
     case "feud": if (hint === 1) { sig += 0.04; title = "A feud passes down"; } break;
     case "fight": if (hint === 1) { sig += 0.08; title = "Hurt in a fight"; } break;
     case "peace": if (hint === 1) { sig += 0.12; title = "A feud is settled"; } else title = "A feud cools"; break;
@@ -85,14 +102,14 @@ export function weigh(s: Society, kind: string, who: number[], band: number, hin
     case "gift": if (hint === 1) { sig += 0.2; title = "Gifts between peoples"; } break;
     case "refused": if (hint === 1) sig += 0.06; break;
     case "discover": {
-      const level = Math.floor(hint / 100), d = IDEAS[hint % 100];
+      const { level, id } = unpackHint(hint), d = IDEAS[id];
       if (level === 2) { sig += 0.42; title = d?.title || title; }
       else if (level === 1) { sig += 0.16; title = `New to a people: ${d?.name ?? "a way of doing things"}`; }
       else title = `Worked out again: ${d?.name ?? "a way of doing things"}`;
       break;
     }
-    case "spread": { const d = IDEAS[hint % 100]; if (hint >= 100) { sig += 0.12; title = `Across peoples: ${d?.name ?? "know-how"}`; } else title = `Know-how spreads: ${d?.name ?? ""}`; break; }
-    case "lost": { const d = IDEAS[hint % 100]; if (hint >= 100) { sig += 0.42; title = `Lost to the world: ${d?.name ?? "know-how"}`; } else title = `Know-how lost: ${d?.name ?? ""}`; break; }
+    case "spread": { const { level, id } = unpackHint(hint), d = IDEAS[id]; if (level >= 1) { sig += 0.12; title = `Across peoples: ${d?.name ?? "know-how"}`; } else title = `Know-how spreads: ${d?.name ?? ""}`; break; }
+    case "lost": { const { level, id } = unpackHint(hint), d = IDEAS[id]; if (level >= 1) { sig += 0.42; title = `Lost to the world: ${d?.name ?? "know-how"}`; } else title = `Know-how lost: ${d?.name ?? ""}`; break; }
     case "fireout": if (hint === 1) sig += 0.08; break;
     case "harvest": if (hint === 1) { sig += 0.3; title = "The first harvest anywhere"; } break;
   }

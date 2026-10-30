@@ -10,10 +10,10 @@ import { Journal } from "./ui/journal.ts";
 import { SearchBox } from "./ui/search.ts";
 import { Spotlight } from "./ui/spotlight.ts";
 import { BondLayer } from "./ui/bonds.ts";
-import { IdeasPanel } from "./ui/ideas.ts";
+import { TechPanel } from "./ui/tech.ts";
 import type { CampSnap, ChronicleEvent } from "./shared/people.ts";
 import type { SearchItem } from "./sim/people/search.ts";
-import type { FromWorker, ToWorker } from "./shared/protocol.ts";
+import type { FromWorker, ToWorker, DepositSnap } from "./shared/protocol.ts";
 import type { MapMode } from "./shared/types.ts";
 
 /* Boot: world creation, then the map, the simulation worker and the interface. */
@@ -31,7 +31,8 @@ let journal: Journal | null = null;
 let search: SearchBox | null = null;
 let spot: Spotlight | null = null;
 let bonds: BondLayer | null = null;
-let ideas: IdeasPanel | null = null;
+let tech: TechPanel | null = null;
+let deposits: DepositSnap[] = [];
 let camps: CampSnap[] = [];
 let lastTick = { time: 0, at: 0, speed: 1 };
 const life = { animals: 0, birds: 0, rabbits: 0, fish: 0, people: 0 };
@@ -67,6 +68,7 @@ function goTo(item: SearchItem) {
   if (item.kind === "person") { cam.flyTo(item.x, item.y, Math.max(cam.z, 14), 900); pin(item.id, 0); }
   else if (item.kind === "dead") { cam.flyTo(item.x, item.y, Math.max(cam.z, 12), 900); pui?.setPing(item.x, item.y); pin(0, 0); journal?.open({ who: item.id, name: item.title, note: "remembered" }); }
   else if (item.kind === "village") { cam.flyTo(item.x, item.y, Math.max(cam.z, 6), 900); pin(0, 0, item.id); }
+  else if (item.kind === "idea") { tech?.open(item.id); }
   else { cam.flyTo(item.x, item.y, item.kind === "people" ? 8 : 10, 900); pin(0, item.band); }
 }
 
@@ -103,7 +105,7 @@ function start() {
         ui = hud(m.world, dock, {
           onSpeed: s => { send({ type: "speed", speed: s }); lastTick.speed = s; },
           onMode: (mode: MapMode) => send({ type: "mode", mode }),
-          onNew: () => { worker?.terminate(); worker = null; renderer = null; pui = null; dock = null; ribbon = null; journal = null; search = null; spot = null; bonds = null; ideas = null; camps = []; app.className = ""; app.innerHTML = ""; start(); },
+          onNew: () => { worker?.terminate(); worker = null; renderer = null; pui = null; dock = null; ribbon = null; journal = null; search = null; spot = null; bonds = null; tech = null; camps = []; app.className = ""; app.innerHTML = ""; start(); },
           onMinimap: (u, v) => { if (renderer) { renderer.cam.x = u * renderer.world.w; renderer.cam.y = v * renderer.world.h; renderer.cam.clamp(); } },
         });
         pui = new PeopleUI(app, dock, {
@@ -116,7 +118,7 @@ function start() {
         history = new History();
         bonds = new BondLayer(app, dock, (on, view) => send({ type: "bonds", on, view }));
         journal = new Journal(dock, history, { show: lookAt });
-        ideas = new IdeasPanel(dock, history, { ask: () => send({ type: "ideas" }), show: lookAt });
+        tech = new TechPanel(dock, history, { ask: g => send({ type: "tech", group: g }), askNode: (id, g) => send({ type: "technode", id, group: g }), show: lookAt, fly: (x, y) => { spot?.userActed(performance.now()); renderer?.cam.flyTo(x, y, 12, 900); pui?.setPing(x, y); } });
         search = new SearchBox(dock, history, { ask: (q, seq) => send({ type: "search", q, seq }), go: goTo, show: lookAt });
         spot = new Spotlight(dock, { show: e => { ribbon?.note(e); showEvent(e, false, true); }, wander, slow: slowForDrama, onChange: on => { if (!on) slowForDrama(false); } });
         ribbon = new Ribbon(app, dock, history, { show: (e, settle) => { spot?.userActed(performance.now()); showEvent(e, settle); } }, open => app.classList.toggle("has-ribbon", open));
@@ -130,6 +132,10 @@ function start() {
       } else if (m.type === "fields") {
         if (renderer) renderer.fields = m;
         life.rabbits = m.rabbitTotal; life.fish = m.fishTotal; ui?.setLife(life); ui?.setFields(m);
+      } else if (m.type === "deposits") {
+        deposits = m.list; ui?.setDeposits(m.list);
+      } else if (m.type === "tiles") {
+        renderer?.applyTiles(m.changes);
       } else if (m.type === "tick") {
         if (!renderer) return;
         const now = performance.now();
@@ -146,7 +152,9 @@ function start() {
         if (Math.floor(m.time / 6) !== Math.floor((m.time - 0.1 * m.speed) / 6)) pui?.renderList(camps);
       } else if (m.type === "results") search?.results(m.seq, m.items);
       else if (m.type === "bonds") bonds?.setEdges(m.edges);
-      else if (m.type === "ideas") ideas?.set(m.list);
+      else if (m.type === "techtree") tech?.setTree(m.defs);
+      else if (m.type === "tech") tech?.set(m.data);
+      else if (m.type === "technode") { if (m.detail) tech?.setNode(m.detail); }
       else if (m.type === "person") pui?.setPerson(m.detail, m.id);
       else if (m.type === "band") pui?.setBand(m.detail, m.id);
       else if (m.type === "village") pui?.setVillage(m.detail, m.id);
@@ -199,12 +207,12 @@ function bindInput() {
   window.addEventListener("keydown", e => {
     if ((e.target as HTMLElement).tagName === "INPUT") return;
     held.add(e.key.toLowerCase());
-    if (e.key === "Escape") { const open = ["search", "journal", "ideas", "bands", "modes"].find(k => dock?.isOpen(k)); if (open) dock!.set(open, false); else pin(0, 0); }
+    if (e.key === "Escape") { if (tech && dock?.isOpen("tech") && tech.selected >= 0) { tech.selectNode(-1); tech.selected = -1; } const open = ["search", "journal", "tech", "bands", "modes"].find(k => dock?.isOpen(k)); if (open) dock!.set(open, false); else pin(0, 0); }
     if ((e.key === "/" || (e.key.toLowerCase() === "k" && (e.ctrlKey || e.metaKey))) && search) { e.preventDefault(); search.open(); return; }
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     const k = e.key.toLowerCase();
     if (k === "j") dock?.toggle("journal");
-    if (k === "i") dock?.toggle("ideas");
+    if (k === "i") dock?.toggle("tech");
     if (k === "l") spot?.toggle();
     if (k === "n") spot?.skip();
     if (k === "b") dock?.toggle("bonds");
@@ -235,7 +243,7 @@ function bindInput() {
       if (pui && dock) pui.inset = dock.isOpen("history") && !dock.isHidden ? ribbon?.height ?? 0 : 0;
       bonds?.poll(renderer.cam, now); bonds?.frame(renderer.cam, renderer.people.pos, dpr1, pui?.pinned.person ?? 0);
       pui?.frame(renderer.cam, renderer.people.pos, camps, dpr1);
-      ribbon?.frame(t, now); journal?.tick(now); ideas?.tick(now); spot?.frame(now);
+      ribbon?.frame(t, now); journal?.tick(now); tech?.tick(now); spot?.frame(now);
       ui?.setTime(t);
       ui?.drawMinimap(renderer.cam.visible());
     }
@@ -245,6 +253,6 @@ function bindInput() {
 }
 
 /* small hook for automated visual checks and the curious */
-(window as unknown as { littleAges: unknown }).littleAges = { get renderer() { return renderer; }, get camps() { return camps; }, get history() { return history; }, get ribbon() { return ribbon; }, get spot() { return spot; }, get journal() { return journal; }, get search() { return search; }, get bonds() { return bonds; }, get ideas() { return ideas; }, get dock() { return dock; }, lookAt, setSpeed: (s: number) => ui?.setSpeed(s), setTime: (t: number) => send({ type: "settime", time: t }), pin };
+(window as unknown as { littleAges: unknown }).littleAges = { get renderer() { return renderer; }, get camps() { return camps; }, get history() { return history; }, get ribbon() { return ribbon; }, get spot() { return spot; }, get journal() { return journal; }, get search() { return search; }, get bonds() { return bonds; }, get tech() { return tech; }, get dock() { return dock; }, get deposits() { return deposits; }, lookAt, setSpeed: (s: number) => ui?.setSpeed(s), setTime: (t: number) => send({ type: "settime", time: t }), pin };
 
 start();

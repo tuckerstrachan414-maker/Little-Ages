@@ -2,7 +2,9 @@ import type { Camera } from "./camera.ts";
 import { Anim, PERSON_STRIDE, PFlag, type CampSnap, type Look, type VillageSnap, type WorkSnap } from "../shared/people.ts";
 import { personSprite, tinySprite, animFrame, drawBubble, type View } from "./sprites/people.ts";
 import { fireSprite, shelterSprite, storeSprite, woodpileSprite, shelterVariant, rackSprite, weirSprite, plotSprite } from "./sprites/camp.ts";
+import { animalSprite, ANIMAL_DOT } from "./sprites/animals.ts";
 import { hutSprite, pitSprite, hutStage } from "./sprites/huts.ts";
+import { buildingSprite, buildingStage } from "./sprites/buildings.ts";
 import { isSnowy } from "../shared/seasonfx.ts";
 import type { Season, WorldData } from "../shared/types.ts";
 import type { DepthItem } from "./depth.ts";
@@ -66,13 +68,26 @@ export class PeopleLayer {
     /* plots and pits lie flat on the ground, and weirs stand in water, where nothing walks; huts stand up among the people */
     if (z >= 4) for (const w of this.works) {
       if (w.wx < v.x0 - 6 || w.wx > v.x1 + 6 || w.wy < v.y0 - 4 || w.wy > v.y1 + 6) continue;
+      const tier = w.tier ?? 0;
       if (w.kind === 1) this.stamp(ctx, cam, plotSprite(w.state, w.food, w.crop, w.fallow, w.tame ?? 0), w.x, w.y + 0.7, z / 8, 1);
-      else if (w.kind === 3) this.stamp(ctx, cam, pitSprite(!!w.open, w.food >= 3), w.x, w.y + 0.5, z / 8, 1);
-      else if (w.kind === 2) {
+      else if (w.kind === 3 && tier === 0 && w.up === undefined) this.stamp(ctx, cam, pitSprite(!!w.open, w.food >= 3), w.x, w.y + 0.5, z / 8, 1);
+      else if (w.kind === 2 && tier === 0 && w.up === undefined) {
         const i = (w.y | 0) * this.world.w + (w.x | 0), snow = isSnowy(this.world.temp[i] / 255, this.world.biome[i], season, 0.5);
         const { stage, wear } = hutStage(w.prog ?? 1, w.state);
         const spr = hutSprite({ style: w.style ?? "round", look: w.look ?? "plain", stage, wear, snow, size: w.size ?? 1, v: shelterVariant(w.x, w.y), hide: w.hide ?? "#a47b52", trim: w.trim ?? "#b4553e" });
         out.push({ x: w.x, y: w.y - 0.3, f: () => this.stamp(ctx, cam, spr, w.x, w.y, z / 8, 1) });
+      }
+      else if (w.kind >= 2) {
+        /* every building beyond the first huts and pits, and a hut or pit being rebuilt: made of parts */
+        const i = (w.y | 0) * this.world.w + (w.x | 0), snow = isSnowy(this.world.temp[i] / 255, this.world.biome[i], season, 0.5);
+        const { stage, wear } = buildingStage(w.prog ?? 1, w.state);
+        const spr = buildingSprite({ line: w.kind, tier, style: w.style ?? "round", look: w.look ?? "plain", walls: w.walls ?? "poles", roof: w.roof ?? "thatch", stage, wear, snow, size: w.size ?? 1, v: shelterVariant(w.x, w.y), hide: w.hide ?? "#a47b52", trim: w.trim ?? "#b4553e", pitch: w.pitch ?? 1, windows: w.windows ?? 1, decor: w.decor ?? 1, up: w.up });
+        /* a hut being rebuilt is still the old hut underneath */
+        if (w.up !== undefined && tier === 0 && (w.kind === 2 || w.kind === 3)) {
+          const old = w.kind === 2 ? hutSprite({ style: w.style ?? "round", look: w.look ?? "plain", stage: 2, wear: hutStage(1, w.state).wear, snow, size: w.size ?? 1, v: shelterVariant(w.x, w.y), hide: w.hide ?? "#a47b52", trim: w.trim ?? "#b4553e" }) : pitSprite(!!w.open, w.food >= 3);
+          out.push({ x: w.x, y: w.y - 0.3, f: () => { this.stamp(ctx, cam, old, w.x, w.y + (w.kind === 3 ? 0.5 : 0), z / 8, 1); ctx.globalAlpha = 0.55; this.stamp(ctx, cam, spr, w.x, w.y, z / 8, 1); ctx.globalAlpha = 1; } });
+        } else if (w.kind === 6) this.stamp(ctx, cam, spr, w.x, w.y + 0.6, z / 8, 1);   /* pens lie flat, the animals walk in them */
+        else out.push({ x: w.x, y: w.y - 0.3, f: () => this.stamp(ctx, cam, spr, w.x, w.y, z / 8, 1) });
       }
       else if (w.state > 0) this.stamp(ctx, cam, weirSprite(w.state, w.food >= 2), w.wx, w.wy + 0.6, z / 8, 1);
     }
@@ -88,6 +103,16 @@ export class PeopleLayer {
         if (c.food > 0) out.push({ x: c.x + 1.6, y: c.y - 0.6, f: () => this.stamp(ctx, cam, storeSprite(c.food * 0.6, c.food * 0.4), c.x + 1.6, c.y - 0.6, z / 8, 1) });
         out.push({ x: c.x - 1.6, y: c.y - 0.9, f: () => this.stamp(ctx, cam, woodpileSprite(3), c.x - 1.6, c.y - 0.8, z / 8, 1) });
         for (let k = 0; k < c.racks.length; k += 2) { const rx = c.racks[k], ry = c.racks[k + 1]; out.push({ x: rx, y: ry, f: () => this.stamp(ctx, cam, rackSprite(k === 0 || c.racks.length > 4), rx, ry, z / 8, 1) }); }
+        /* the animals households keep: a huddle at the fold or beside the hut, or out at grass with the herder */
+        for (let k = 0; k < c.flocks.length; k += 4) {
+          const fx = c.flocks[k], fy = c.flocks[k + 1], sp = c.flocks[k + 2], n = Math.min(10, c.flocks[k + 3]);
+          for (let m = 0; m < n; m++) {
+            const rr = Math.sqrt(m + 0.5) * 0.55, ang = m * 2.399 + sp + c.id * 0.3, ax = fx + Math.cos(ang) * rr, ay = fy + Math.sin(ang) * rr * 0.6;
+            if (z < 6) { out.push({ x: ax, y: ay, f: () => { const [sx, sy] = cam.toScreen(ax, ay); ctx.fillStyle = ANIMAL_DOT[sp] ?? "#8a7a5a"; ctx.fillRect(Math.round(sx), Math.round(sy), Math.max(2, Math.round(z / 2)), Math.max(2, Math.round(z / 2))); } }); continue; }
+            const f = Math.floor(now / 900 + m * 0.37 + c.id) % 5 === 0 ? 1 : 0, facing = (m + sp) % 2 ? 1 : -1;
+            out.push({ x: ax, y: ay, f: () => { const spr = animalSprite(sp, f, season === 3), k2 = z / 8 * 0.9, w = spr.width * k2, h = spr.height * k2, [sx, sy] = cam.toScreen(ax, ay); ctx.save(); ctx.translate(Math.round(sx), Math.round(sy)); if (facing < 0) ctx.scale(-1, 1); ctx.drawImage(spr, Math.round(-w / 2), Math.round(-h), Math.round(w), Math.round(h)); ctx.restore(); } });
+          }
+        }
         if (z >= 8 && c.fire > 0.05 && Math.random() < dtReal * 6) this.parts.push({ x: c.x + (Math.random() - 0.5) * 0.3, y: c.y - 0.4, vx: (Math.random() - 0.5) * 0.3, vy: -0.9 - Math.random() * 0.6, life: 1.6, age: 0, c: Math.random() < 0.25 ? "#ffdf7e" : "#d9d8d0", g: 0 });
       }
     }
@@ -266,8 +291,9 @@ export class PeopleLayer {
       const [sx, sy] = cam.toScreen(v.x, v.y);
       if (sx < -120 || sy < -30 || sx > cam.vw + 120 || sy > cam.vh + 60) continue;
       const village = v.kind === "village", ruins = v.kind === "ruins";
-      const label = ruins ? `ruins of ${v.name}` : village ? (z >= 1.5 ? `${v.name} \u00b7 ${v.pop}` : v.name) : `gathering at ${v.name}`;
-      ctx.font = `${village ? 700 : 600} ${village ? vfs : fs}px "Pixelify Sans", "Silkscreen", monospace`;
+      const town = village && (v.tier ?? 0) >= 2, hamlet = village && (v.tier ?? 0) === 0;
+      const label = ruins ? `ruins of ${v.name}` : village ? (z >= 1.5 ? `${hamlet ? "" : town ? "\u2302\u2302\u2302 " : ""}${v.name} \u00b7 ${v.pop}` : v.name) : `gathering at ${v.name}`;
+      ctx.font = `${village && !hamlet ? 700 : 600} ${village && !hamlet ? (town ? vfs + Math.round(2 * dpr) : vfs) : fs}px "Pixelify Sans", "Silkscreen", monospace`;
       const w = ctx.measureText(label).width, pad = 6 * dpr, h = (village ? vfs : fs) + 5 * dpr;
       const bw = Math.round(w + pad * 2), bh = Math.round(h), bx = Math.round(sx - w / 2 - pad);
       /* signs close together at world zoom: lift the later one clear, and leave out a tag or a ruin that still will not fit */

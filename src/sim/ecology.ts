@@ -47,7 +47,14 @@ export class Ecology {
   readonly rabbitK: Float32Array; readonly fishK: Float32Array; readonly grassK: Float32Array; readonly browseK: Float32Array; readonly coldness: Float32Array;
   readonly plantK: Float32Array;
   rabbits: Float32Array; fish: Float32Array; grass: Float32Array; browse: Float32Array; plants: Float32Array;
+  private readonly w: WorldData;
+  /** soil moisture per patch and what each patch is used to, shared with the weather once there is one (an ordinary year without it) */
+  private moist: Float32Array | null = null; private normal: Float32Array | null = null;
+  setMoisture(m: Float32Array, normal: Float32Array): void { this.moist = m; this.normal = normal; }
+  /** How wet a patch is against what it is used to: 1 in an ordinary year. */
+  wetness(c: number): number { return this.moist && this.normal ? Math.min(1.15, this.moist[c] / Math.max(0.02, this.normal[c])) : 1; }
   constructor(w: WorldData, seed: number) {
+    this.w = w;
     const gw = this.gw = Math.ceil(w.w / CELL), gh = this.gh = Math.ceil(w.h / CELL), n = gw * gh;
     this.rabbitK = new Float32Array(n); this.fishK = new Float32Array(n); this.grassK = new Float32Array(n); this.browseK = new Float32Array(n); this.coldness = new Float32Array(n);
     const cnt = new Float32Array(n);
@@ -67,6 +74,16 @@ export class Ecology {
     }
   }
   private cellOf(x: number, y: number): number { return Math.min(this.gh - 1, Math.max(0, (y / CELL) | 0)) * this.gw + Math.min(this.gw - 1, Math.max(0, (x / CELL) | 0)); }
+  /** What a patch can grow, counted again after its trees have changed: felled nut and fruit trees feed nobody. */
+  recount(c: number): void {
+    const w = this.w, gx = (c % this.gw) * CELL, gy = ((c / this.gw) | 0) * CELL;
+    let k = 0, n = 0;
+    for (let y = gy; y < Math.min(w.h, gy + CELL); y++) for (let x = gx; x < Math.min(w.w, gx + CELL); x++) {
+      const i = y * w.w + x; n++; if (w.flags[i] & Flag.Water) continue;
+      k += (PLANT_K[w.biome[i]] ?? 0) * (1 + (FOOD_TREE[w.tree[i]] ?? 0));
+    }
+    if (n) { this.plantK[c] = Math.min(1.4, k / n); this.plants[c] = Math.min(this.plants[c], this.plantK[c]); }
+  }
   /** A predator takes small game from the patch it stands in; returns how much it found (0..1). */
   hunt(x: number, y: number, want: number): number {
     const c = this.cellOf(x, y), got = Math.min(want, this.rabbits[c] * 0.5);
@@ -98,9 +115,11 @@ export class Ecology {
     /* grass grows back fast in spring, slowly in summer, hardly at all under snow */
     const growG = [0.12, 0.07, 0.03, 0.006][season], growB = [0.08, 0.06, 0.03, 0.008][season];
     for (let c = 0; c < this.grass.length; c++) {
-      const snow = season === 3 ? 1 - this.coldness[c] : 1;
-      this.grass[c] += growG * (this.grassK[c] - this.grass[c]) * snow;
-      this.browse[c] += growB * (this.browseK[c] - this.browse[c]) * snow;
+      /* grass and browse grow with the rain in the soil, and brown off when it is gone */
+      const snow = season === 3 ? 1 - this.coldness[c] : 1, wet = 0.25 + 0.75 * this.wetness(c);
+      this.grass[c] += growG * (this.grassK[c] - this.grass[c]) * snow * wet;
+      this.browse[c] += growB * (this.browseK[c] - this.browse[c]) * snow * wet;
+      if (this.wetness(c) < 0.5) this.grass[c] *= 1 - 0.01 * (1 - this.wetness(c) * 2);
     }
     /* plant food grows through spring and summer and ripens in autumn; in the cold, winter
        buries what is left. The tropics have no winter to speak of. */
@@ -108,9 +127,11 @@ export class Ecology {
     for (let c = 0; c < this.plants.length; c++) {
       const K = this.plantK[c]; if (K <= 0) continue;
       const cold = this.coldness[c], tropic = cold < 0.32 ? 1 : 0;
-      const g = season === 3 ? (tropic ? 0.06 : growP * Math.max(0, 1 - cold * 1.6)) : growP;
+      const m = this.wetness(c), g = (season === 3 ? (tropic ? 0.06 : growP * Math.max(0, 1 - cold * 1.6)) : growP) * (0.25 + 0.75 * m);
       let p = this.plants[c] + g * (K - this.plants[c]);
       if (season === 3 && !tropic) p *= 1 - 0.015 * Math.min(1, cold * 1.5);
+      /* in a drought the plants die back */
+      if (m < 0.5) p *= 1 - 0.01 * (1 - m * 2);
       this.plants[c] = Math.max(0.02 * K, p);
     }
     const growR = [0.09, 0.05, 0.01, 0][season], growF = [0.05, 0.04, 0.015, 0.004][season];

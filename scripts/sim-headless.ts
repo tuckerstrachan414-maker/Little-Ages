@@ -10,7 +10,11 @@ import { Ecology } from "../src/sim/ecology.ts";
 import { Birds, Bird } from "../src/sim/birds.ts";
 import { settle } from "../src/sim/settle.ts";
 import { Society } from "../src/sim/people/society.ts";
-import { IDEAS } from "../src/sim/people/ideas.ts";
+import { TECHS as IDEAS, ERA_NAMES } from "../src/sim/tech/tree.ts";
+import { MATS } from "../src/sim/economy/goods.ts";
+import { defOf } from "../src/sim/buildings/build.ts";
+import { dietScore } from "../src/sim/economy/diet.ts";
+import { mostRefined } from "../src/sim/tech/refine.ts";
 import { DAY_SECONDS, DAYS_PER_SEASON, SEASON_NAMES, SPECIES_NAMES, type SizeKey } from "../src/shared/types.ts";
 
 const arg = (k: string, d: string) => { const i = process.argv.indexOf(`--${k}`); return i >= 0 ? process.argv[i + 1] : d; };
@@ -56,6 +60,36 @@ const report = (label: string) => {
       const h = people.stats.homes, c = people.stats.camp;
       const pl = people.stats.places, live = people.villages.filter(v => !v.abandoned);
       line += `\n${"".padEnd(16)} places: ${people.gatherings.length} gatherings now (${pl.gatherings} in all), ${live.length} villages lived in${live.length ? ` (${live.map(v => `${v.name} "${v.gloss}" ${v.pop}`).join(", ")})` : ""}, ${pl.villages} founded, ${pl.abandoned} given up, ${pl.returns} returned to | fields ${people.works.filter(w => w.kind === 1 && (w.sown ?? 1) > 1).length} sown again, ${people.works.filter(w => w.kind === 1 && w.fallow).length} resting, best seed line ${Math.max(0, ...people.bands.flatMap(b => Object.values(b.seed))).toFixed(2)}`;
+      const r = people.resources, rs = r.stats, known = new Set<number>(); for (const set of r.known.values()) for (const id of set) known.add(id);
+      const byKind = new Map<number, number>(); for (const id of known) { const d = r.byId(id)!; byKind.set(d.kind, (byKind.get(d.kind) ?? 0) + 1); }
+      {
+        const vs = people.villages.filter(v => !v.abandoned), tiers = [0, 0, 0, 0]; for (const v of vs) tiers[v.tier]++;
+        const chiefs = vs.filter(v => v.chief).length, communal = vs.reduce((n, v) => n + v.communal.length, 0), calls = vs.filter(v => v.call).length;
+        line += `\n${"".padEnd(16)} settlements: ${tiers[0]} hamlets, ${tiers[1]} villages, ${tiers[2]} towns, ${tiers[3]} cities | ${chiefs} chiefs, ${communal} shared buildings, ${calls} works called for | ages: ${people.cultures.map(c => `${c.lang.name} ${ERA_NAMES[c.age].replace(" Age", "")}`).join(", ")}`;
+      }
+      {
+        const top = mostRefined(people, 5);
+        line += `\n${"".padEnd(16)} refined: ${top.length ? top.map(([c, i, r]) => `${IDEAS[i].name} ${r.toFixed(2)} (${people.cultures[c].lang.name})`).join(", ") : "nothing much yet"}`;
+      }
+      const wsum = people.weather.summary(), wells = people.works.filter(w => w.kind === 4 && (w.prog ?? 1) >= 1 && w.state > 0.2).length;
+      line += `\n${"".padEnd(16)} weather: soil ${wsum.mean.toFixed(2)} wet, ${wsum.drought} patches in drought (${people.weather.stats.droughtDays} patch-days so far), ${wells} wells standing`;
+      line += `\n${"".padEnd(16)} land: ${known.size} of ${r.deposits.length} deposits found${byKind.size ? ` (${[...byKind].sort((a, b) => a[0] - b[0]).map(([k, n]) => `${MATS[k].name.replace(/ ore$/, "")} ${n}`).join(", ")})` : ""}, ${rs.exhausted} dug out | wood cut ${Math.round(rs.cut)} loads, ${rs.felled} trees felled, ${rs.regrown} grown back | forest left around camps ${mean(people.bands.map(b => r.forestLeft(b.x, b.y, 16))).toFixed(2)}`;
+      {
+        const bl = people.stats.buildings, byName = new Map<string, number>(), goingUp = new Map<string, number>();
+        for (const w of people.works) { if (w.kind < 2 || (w.kind <= 3 && !(w.tier ?? 0))) continue; const name = defOf(w).name; if ((w.prog ?? 1) < 1) goingUp.set(name, (goingUp.get(name) ?? 0) + 1); else if (w.state > 0.2) byName.set(name, (byName.get(name) ?? 0) + 1); }
+        line += `\n${"".padEnd(16)} buildings: ${byName.size ? [...byName].map(([n, k]) => `${k} ${n}`).join(", ") : "none beyond huts and pits"}${goingUp.size ? ` | going up: ${[...goingUp].map(([n, k]) => `${k} ${n}`).join(", ")}` : ""} | ${bl.built} finished, ${bl.upgrades} rebuilt, ${Math.round(bl.delivered)} loads delivered, ${Math.round(bl.quarried)} quarried`;
+      }
+      {
+        const adults = people.people.filter(p => people.age(p) >= 5), hs = people.stats.health, ps = people.stats.pots;
+        let pots = 0; for (const b of people.bands) for (const g of b.hgoods.values()) pots += g[11];
+        line += `\n${"".padEnd(16)} health: diet ${mean(adults.map(p => dietScore(p))).toFixed(2)} (plant share ${mean(adults.map(p => p.diet[0])).toFixed(2)}), illness deaths ${people.stats.causes.get("illness") ?? 0}, tended with herbs ${hs.tended} | pots: ${Math.round(pots)} in use, ${ps.made} made (${ps.kiln} in kilns), ${ps.broke} cracked`;
+      }
+      {
+        const hs = people.stats.herds, bySp = new Map<number, number>(), tame = new Map<number, number>();
+        for (const f of people.flocks) { bySp.set(f.sp, (bySp.get(f.sp) ?? 0) + f.n + f.young); tame.set(f.sp, Math.max(tame.get(f.sp) ?? 0, f.tame)); }
+        const pens = people.works.filter(w => w.kind === 6 && (w.prog ?? 1) >= 1 && w.state > 0.2).length;
+        line += `\n${"".padEnd(16)} herds: ${people.flocks.length} flocks${bySp.size ? ` (${[...bySp].map(([sp, n]) => `${n} ${SPECIES_NAMES[sp].replace("Wild ", "").toLowerCase()}, tame ${(tame.get(sp) ?? 0).toFixed(2)}`).join("; ")})` : ""} | ${hs.kept} young carried home, ${hs.pups} pups taken in, ${hs.born} born in keeping, ${hs.lost} taken by wolves, ${hs.escaped} escaped, ${hs.died} died in keeping, ${hs.strayed} dogs strayed, ${hs.slaughtered} killed for meat, ${Math.round(hs.milk)} milk drunk | ${hs.spells} spells of herding | ${pens} folds standing`;
+      }
       line += `\n${"".padEnd(16)} homes: ${huts} huts standing, ${going} going up, ${ruins} fallen in (${h.huts} raised) | ${pits} pits holding ${Math.round(inPits)} (${h.pits} dug; ${Math.round(h.stored)} put by, ${Math.round(h.fetched)} fetched, ${Math.round(h.eaten)} eaten from them) | ${Math.round(c.left)} food left behind on moves, ${c.home} moves home`;
     }
     line += `\n${"".padEnd(16)} shared ${(o.shared / Math.max(1, o.shared + o.kept) * 100).toFixed(0)}% into the pot | ${Math.round(o.given)} food passed between hearths (${Math.round(o.rounds)} in the evening rounds, ${Math.round(o.family)} eaten at family hearths), ${o.asks} asked for, ${o.refused} refused, ${Math.round(o.repaid)} paid back | feuds ${o.feuds} begun (${people.feuds.length} burning, ${o.peace} settled, ${o.cooled} cooled, ${o.inherited} passed down), fights ${o.fights}, families driven out ${o.driven}, feud/faction splits ${o.factionSplits} | ${led}/${people.bands.length} bands led, new leaders ${o.leaders}, two voices ${o.contests}, mocked ${o.mocked} | gifts ${o.gifts}, left for another ${o.leftFor}`;
@@ -64,6 +98,8 @@ const report = (label: string) => {
 };
 
 const tr = performance.now();
+/* the head count at the end of some years, for the balance sweep */
+const popAt: Record<number, number> = {};
 let lastSeason = seasonAt(time);
 report(`Y1 ${SEASON_NAMES[lastSeason]}`);
 const end = time + years * 4 * DAYS_PER_SEASON * DAY_SECONDS, dt = people ? 2 : 1;
@@ -73,7 +109,7 @@ while (time < end) {
   wild.update(dt, s, day); birds.update(dt, s);
   if (day !== lastDay) { lastDay = day; eco.daily(s); }
   people?.update(dt, time, s);
-  if (s !== lastSeason) { lastSeason = s; if (s === 0 || years <= 3) report(`Y${Math.floor(day / (4 * DAYS_PER_SEASON)) + 1} ${SEASON_NAMES[s]}`); }
+  if (s !== lastSeason) { lastSeason = s; const y = Math.floor(day / (4 * DAYS_PER_SEASON)); if (s === 0 && people && (y === 10 || y === 25 || y === 50 || y === 75)) popAt[y] = people.people.length; if (s === 0 || years <= 3) report(`Y${y + 1} ${SEASON_NAMES[s]}`); }
 }
 if (people) {
   const s = people.stats, k = s.kills;
@@ -101,6 +137,8 @@ if (people) {
 if (people && summary) {
   const s = people.stats, c = s.camp;
   const cause = (k: string) => s.causes.get(k) ?? 0;
+  /* the year a way of doing things was first worked out anywhere (0 if never) */
+  const firstYear = (key: string) => { const d = IDEAS.find(o => o.key === key); const f = d ? people.ideas[d.id].first : null; return f ? +(f.t / 2400 + 1).toFixed(1) : 0; };
   const out: Record<string, number | string> = {
     seed, years, pop: people.people.length, maxPop: s.maxPop, bands: people.bands.length, births: s.births, deaths: s.deaths,
     hunger: cause("hunger"), cold: cause("the cold"), illness: cause("illness"), thirst: cause("thirst"),
@@ -110,6 +148,22 @@ if (people && summary) {
     hutsRaised: s.homes.huts, pitsDug: s.homes.pits, firstHut: s.homes.firstHut ? +(s.homes.firstHut / 2400 + 1).toFixed(1) : 0, firstPit: s.homes.firstPit ? +(s.homes.firstPit / 2400 + 1).toFixed(1) : 0,
     gatherings: s.places.gatherings, villages: s.places.villages, liveVillages: people.villages.filter(v => !v.abandoned).length, firstVillage: s.places.firstVillage ? +(s.places.firstVillage / 2400 + 1).toFixed(1) : 0,
     ideas: IDEAS.filter(d => !d.start && people.ideas[d.id].knowers > 0).map(d => d.name).join("|"),
+    buildings: people.stats.buildings.built, upgrades: people.stats.buildings.upgrades,
+    pots: people.stats.pots.made, dietMean: +mean(people.people.filter(p => people.age(p) >= 5).map(p => dietScore(p))).toFixed(3), illnessDeaths: people.stats.causes.get("illness") ?? 0,
+    towns: people.villages.filter(v => !v.abandoned && v.tier >= 2).length, maxSettlement: Math.max(0, ...people.villages.filter(v => !v.abandoned).map(v => v.pop)), maxEra: Math.max(0, ...people.cultures.map(c => c.age)), chiefs: people.villages.filter(v => !v.abandoned && v.chief).length,
+    droughtDays: people.weather.stats.droughtDays, wells: people.works.filter(w => w.kind === 4 && (w.prog ?? 1) >= 1 && w.state > 0.2).length,
+    felled: people.resources.stats.felled, regrown: people.resources.stats.regrown, found: people.resources.stats.found, exhausted: people.resources.stats.exhausted,
+    flocks: people.flocks.length, animals: people.flocks.reduce((n, f) => n + f.n + f.young, 0), tameFlocks: people.flocks.filter(f => f.tame >= 0.3).length, dogs: people.flocks.filter(f => f.sp === 9).reduce((n, f) => n + f.n, 0),
+    kept: people.stats.herds.kept, herdLoss: people.stats.herds.lost, milk: Math.round(people.stats.herds.milk), pens: people.works.filter(w => w.kind === 6 && (w.prog ?? 1) >= 1 && w.state > 0.2).length,
+    firstFlock: people.stats.herds.firstFlock ? +(people.stats.herds.firstFlock / 2400 + 1).toFixed(1) : 0, firstTame: people.stats.herds.firstTame ? +(people.stats.herds.firstTame / 2400 + 1).toFixed(1) : 0,
+    maxRefine: +(mostRefined(people, 1)[0]?.[2] ?? 0).toFixed(2),
+    /* what the plan's acceptance targets ask for: the head count along the way, when each of the checkpoint's ways first came, how many ways are known, what stands */
+    pop10: popAt[10] ?? 0, pop25: popAt[25] ?? 0, pop50: popAt[50] ?? 0, pop75: popAt[75] ?? 0,
+    techs: IDEAS.filter(d => !d.start && people.ideas[d.id].knowers > 0).length,
+    firstPottery: firstYear("pottery"), firstWells: firstYear("wells"), firstGranary: firstYear("granary"), firstHerd: Math.min(...["herding-goats-and-sheep", "herding-cattle", "herding-pigs"].map(firstYear).filter(y => y > 0), Infinity) === Infinity ? 0 : Math.min(...["herding-goats-and-sheep", "herding-cattle", "herding-pigs"].map(firstYear).filter(y => y > 0)),
+    firstDogs: firstYear("taming-dogs"), firstBow: firstYear("bow-and-arrow"), firstHouse1: Math.min(...["mud-brick", "wattle-and-daub", "timber-framing"].map(firstYear).filter(y => y > 0), Infinity) === Infinity ? 0 : Math.min(...["mud-brick", "wattle-and-daub", "timber-framing"].map(firstYear).filter(y => y > 0)),
+    granaries: people.works.filter(w => w.kind === 3 && (w.tier ?? 0) >= 1 && w.state > 0.2).length, houses1: people.works.filter(w => w.kind === 2 && (w.tier ?? 0) >= 1 && (w.prog ?? 1) >= 1 && w.state > 0.2).length, kilns: people.works.filter(w => w.kind === 5 && (w.prog ?? 1) >= 1 && w.state > 0.2).length,
+    secsPerYear: +(((performance.now() - tr) / 1000) / years).toFixed(2),
     secs: +((performance.now() - tr) / 1000).toFixed(1),
   };
   console.log("SUMMARY " + JSON.stringify(out));

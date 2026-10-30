@@ -1,6 +1,7 @@
 import type { Genome, Looks } from "./genetics.ts";
 import type { Bubble, HairStyle, Stage } from "../../shared/people.ts";
 import { DAY_SECONDS, DAYS_PER_YEAR } from "../../shared/types.ts";
+import { Mat } from "../economy/goods.ts";
 
 /*
   One person. Everything they are is here: their genes and the body those genes built,
@@ -21,6 +22,7 @@ export const Goal = {
   Ask: 27, Fight: 28, Mediate: 29, Call: 30,
   Kindle: 31, Ember: 32, Show: 33, Learn: 34, Dry: 35, Build: 36, Sow: 37,
   Hut: 38, Pit: 39, Store: 40, Fetch: 41,
+  Quarry: 42, Construct: 43, Pot: 44, Herd: 45,
 } as const;
 export type Goal = (typeof Goal)[keyof typeof Goal];
 
@@ -30,6 +32,7 @@ export const St = {
   Ask: 22, Fight: 23,
   Kindle: 24, Ember: 25, Dry: 26, Build: 27, Sow: 28,
   Raise: 29, Pit: 30, Store: 31, Fetch: 32,
+  Quarry: 33, Shape: 34, Bake: 35, Herd: 36,
 } as const;
 export type St = (typeof St)[keyof typeof St];
 
@@ -51,10 +54,11 @@ export interface Step {
 }
 export const step = (k: St, x = 0, y = 0, id = 0, dur = 0, extra: Partial<Step> = {}): Step => ({ k, x, y, id, dur, t: 0, ...extra });
 
-export const Food = { None: 0, Plant: 1, Meat: 2, Fish: 3, Wood: 4 } as const;
+/** What a person carries: the foods, firewood, and every material the land gives up (one id space, see economy/goods.ts). */
+export const Food = Mat;
 
-export const Place = { Water: 0, Plants: 1, Fish: 2, Game: 3, Rabbits: 4, Site: 5, Carcass: 6, Camp: 7, Danger: 8, Home: 9 } as const;
-export const PLACE_NAMES = ["water", "plant food", "fish", "game", "small game", "a camp site", "a carcass", "a camp", "danger", "home"];
+export const Place = { Water: 0, Plants: 1, Fish: 2, Game: 3, Rabbits: 4, Site: 5, Carcass: 6, Camp: 7, Danger: 8, Home: 9, Deposit: 10 } as const;
+export const PLACE_NAMES = ["water", "plant food", "fish", "game", "small game", "a camp site", "a carcass", "a camp", "danger", "home", "a deposit"];
 export interface KnownPlace {
   k: number; x: number; y: number;
   /** how good it looked: food units for food, herd size for game, a score for sites */
@@ -88,6 +92,7 @@ export const Mem = {
   Paired: 11, Parted: 12, Moved: 13, Split: 14, Learned: 15, Found: 16, Cold: 17, Rejected: 18, Freeloader: 19, Helped: 20, Feast: 21,
   Refused: 22, Fight: 23, Peace: 24, Gift: 25, Mocked: 26, Left: 27, Feud: 28, Repaid: 29, Stingy: 30,
   Discovered: 31, FireOut: 32, Taught: 33, Harvest: 34,
+  HerdLoss: 35, Kept: 36, Missed: 37,
 } as const;
 export interface Memory { t: number; k: number; who: number; v: number; x: number; y: number; n: number; }
 
@@ -97,10 +102,12 @@ export interface Person {
   /** bravery, kindness, greed, ambition, curiosity, sociability, temper, diligence */
   traits: number[];
   skills: number[];
-  /** how well they know each idea (see ideas.ts), 0 for not at all */
-  know: number[];
+  /** how well they know each idea (see tech/tree.ts), 0 for not at all */
+  know: Float32Array;
   /** where each idea came from: whoever they learned it from, -1 if they worked it out, -2 if they worked it out from something others made, 0 if they grew up with it */
-  from: number[];
+  from: Int32Array;
+  /** the ideas they know, by index in rising order (kept beside `know`, so loops over what someone knows stay short) */
+  knownIds: number[];
   mother: number; father: number; partner: number; children: number[];
   /** who looks after a child whose parents are gone */
   guardian: number;
@@ -120,6 +127,12 @@ export interface Person {
   mood: number;
   /** how hungry childhood has been, 0..1 (stunts growth) */
   childHunger: number;
+  /** what they have been eating, as running shares of plant food, meat and fish, milk; and today's meals by kind, in days of food */
+  diet: Float32Array; dayDiet: Float32Array;
+  /** pots shaped and not yet fired, in hand */
+  raw: number;
+  /** when someone last sat with them while they were sick, and when that someone knew which herbs help */
+  tendedAt: number; herbsAt: number;
   injury: number; sick: number;
   /** what has been wearing their health down lately: hunger, thirst, cold, illness, injury */
   harm: number[];

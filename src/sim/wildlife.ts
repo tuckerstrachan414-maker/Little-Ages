@@ -5,6 +5,8 @@ import type { Ecology } from "./ecology.ts";
 /*
   Herds and packs. Grazers wander from pasture to pasture and rest to graze; wolves track
   the nearest herd and run it down, and the herd bolts; bears roam the woods alone.
+  Goats keep to the scrub and the mountain edges, sheep to the cold grass of the steppe and
+  the hills, boar to the woods and the swamp; these are the beasts people will come to keep.
   Every herd carries a condition, how well fed it has been lately. Well-fed herds raise
   young in spring; hungry ones lose the weak and the old and go looking for better grass.
   Packs breed when the hunting is good and dwindle when it isn't. So numbers rise and fall
@@ -13,15 +15,15 @@ import type { Ecology } from "./ecology.ts";
 
 export interface Herd { id: number; sp: number; x: number; y: number; n: number; tx: number; ty: number; state: number; timer: number; heading: number; hunger: number; prey: number; cond: number; }
 
-const SPEED = [1.2, 0.8, 0.55, 1.35, 1.45, 0.7];
-const RANGE = [16, 24, 30, 26, 40, 20];
-const MAXN = [10, 16, 8, 14, 7, 1];
+const SPEED = [1.2, 0.8, 0.55, 1.35, 1.45, 0.7, 1.3, 1.1, 1.2, 1.4];
+const RANGE = [16, 24, 30, 26, 40, 20, 18, 16, 20, 10];
+const MAXN = [10, 16, 8, 14, 7, 1, 12, 14, 8, 6];
 /* forage eaten per animal per day, as a share of what a patch of open grassland grows */
-const EATS = [0.01, 0.01, 0.018, 0.009, 0, 0.006];
+export const EATS = [0.01, 0.01, 0.018, 0.009, 0, 0.006, 0.006, 0.007, 0.009, 0];
 /* how much of that is grass rather than browse: deer and bears browse, the rest graze */
-const GRASS = [0.15, 0.9, 0.7, 1, 0, 0.1];
+export const GRASS = [0.15, 0.9, 0.7, 1, 0, 0.1, 0.4, 0.95, 0.3, 0];
 /* per animal per year: young raised when well fed, and deaths from age and accident */
-const FECUND = [0.45, 0.36, 0.16, 0.36, 0.8, 0.25], MORTAL = [0.16, 0.11, 0.05, 0.11, 0.22, 0.08];
+export const FECUND = [0.45, 0.36, 0.16, 0.36, 0.8, 0.25, 0.5, 0.45, 0.55, 0.8], MORTAL = [0.16, 0.11, 0.05, 0.11, 0.22, 0.08, 0.18, 0.18, 0.2, 0.2];
 
 export class Wildlife {
   herds: Herd[] = [];
@@ -34,12 +36,23 @@ export class Wildlife {
     this.rng = new Rng(seed * 17 + 3);
     let land = 0; for (let i = 0; i < w.biome.length; i++) if (!(w.flags[i] & Flag.Water)) land++;
     const target = Math.round(land / 900);
+    const place = (sp: number, x: number, y: number) => {
+      const n = sp === Species.Bear ? 1 : this.rng.int(Math.ceil(MAXN[sp] * 0.4), MAXN[sp]);
+      this.herds.push({ id: this.nextId++, sp, x: x + 0.5, y: y + 0.5, n, tx: x, ty: y, state: 0, timer: this.rng.range(0, 40), heading: this.rng.range(0, 6.28), hunger: this.rng.range(0, 1), prey: -1, cond: 0.8 });
+    };
     for (let tries = 0; this.herds.length < target && tries < target * 30; tries++) {
       const x = this.rng.int(2, w.w - 3), y = this.rng.int(2, w.h - 3), i = y * w.w + x;
       if (w.flags[i] & Flag.Water) continue;
       const sp = this.speciesFor(w.biome[i]); if (sp < 0) continue;
-      const n = sp === Species.Bear ? 1 : this.rng.int(Math.ceil(MAXN[sp] * 0.4), MAXN[sp]);
-      this.herds.push({ id: this.nextId++, sp, x: x + 0.5, y: y + 0.5, n, tx: x, ty: y, state: 0, timer: this.rng.range(0, 40), heading: this.rng.range(0, 6.28), hunger: this.rng.range(0, 1), prey: -1, cond: 0.8 });
+      place(sp, x, y);
+    }
+    /* the goats, sheep and boar live alongside the rest, in the scrub, on the hills and in the woods, without thinning the herds the hunters have always known */
+    const extra = Math.round(target * 0.3);
+    for (let tries = 0, placed = 0; placed < extra && tries < extra * 40; tries++) {
+      const x = this.rng.int(2, w.w - 3), y = this.rng.int(2, w.h - 3), i = y * w.w + x;
+      if (w.flags[i] & Flag.Water) continue;
+      const sp = this.keptKindFor(w.biome[i]); if (sp < 0) continue;
+      place(sp, x, y); placed++;
     }
   }
   private speciesFor(b: number): number {
@@ -54,13 +67,27 @@ export class Wildlife {
       default: return -1;
     }
   }
+  /** The beasts people will come to keep, by the land they live on: goats in the scrub and on the mountain edges, sheep on the grass of the steppe and the hills, boar in the woods and the swamp. */
+  private keptKindFor(b: number): number {
+    const r = this.rng.next();
+    switch (b) {
+      case Biome.Shrubland: return r < 0.7 ? Species.Goat : Species.Sheep;
+      case Biome.Mountain: return r < 0.7 ? Species.Goat : -1;
+      case Biome.Grassland: case Biome.Savanna: return r < 0.6 ? Species.Sheep : Species.Goat;
+      case Biome.ColdSteppe: return r < 0.8 ? Species.Sheep : Species.Goat;
+      case Biome.TemperateForest: case Biome.TemperateRainforest: case Biome.TropicalForest: case Biome.Rainforest: return r < 0.4 ? Species.Boar : -1;
+      case Biome.Swamp: return r < 0.6 ? Species.Boar : -1;
+      case Biome.Taiga: return r < 0.25 ? Species.Boar : -1;
+      default: return -1;
+    }
+  }
   private ok(x: number, y: number, sp: number): boolean {
     const w = this.w, xi = Math.floor(x), yi = Math.floor(y);
     if (xi < 1 || yi < 1 || xi >= w.w - 1 || yi >= w.h - 1) return false;
     const i = yi * w.w + xi, b = w.biome[i];
     if (w.flags[i] & Flag.Water) return false;
     if (b === Biome.SnowPeak || b === Biome.IceSheet || b === Biome.Cliff) return false;
-    if (b === Biome.Mountain && sp !== Species.Mammoth && sp !== Species.Bear && sp !== Species.Wolf) return false;
+    if (b === Biome.Mountain && sp !== Species.Mammoth && sp !== Species.Bear && sp !== Species.Wolf && sp !== Species.Goat) return false;
     return true;
   }
   /** dt in game seconds; season 0..3 */
@@ -149,6 +176,15 @@ export class Wildlife {
     }
   }
   private lastDay = -1;
+  /** Animals let go, or escaped from a people's keeping: they join the nearest wild herd of their kind, or make a new one where they stand. */
+  release(sp: number, x: number, y: number, n: number): void {
+    if (n <= 0 || sp === Species.Dog) return;
+    let best: Herd | null = null, bd = 30;
+    for (const h of this.herds) { if (h.sp !== sp || h.n <= 0) continue; const d = Math.hypot(h.x - x, h.y - y); if (d < bd) { bd = d; best = h; } }
+    if (best) { best.n += n; return; }
+    if (!this.ok(x, y, sp)) return;
+    this.herds.push({ id: this.nextId++, sp, x, y, n, tx: x, ty: y, state: 0, timer: 5, heading: 0, hunger: 0.5, prey: -1, cond: 0.6 });
+  }
   private nearestPrey(w: Herd): number {
     let best = -1, bd = 32;
     for (const h of this.herds) { if (h.sp === Species.Wolf || h.sp === Species.Bear || h.sp === Species.Mammoth || h.n <= 0) continue; const d = Math.hypot(h.x - w.x, h.y - w.y); if (d < bd) { bd = d; best = h.id; } }

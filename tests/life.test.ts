@@ -4,14 +4,14 @@ import { Wildlife } from "../src/sim/wildlife.ts";
 import { Ecology } from "../src/sim/ecology.ts";
 import { Birds, Bird } from "../src/sim/birds.ts";
 import { settle } from "../src/sim/settle.ts";
-import { DAY_SECONDS, DAYS_PER_SEASON, Species } from "../src/shared/types.ts";
+import { DAY_SECONDS, DAYS_PER_SEASON, Species, SPECIES_NAMES } from "../src/shared/types.ts";
 
 /* Runs a medium world's wildlife for some years and samples it at the start of each season. */
 function run(seed: number, years: number) {
   const world = generateWorld("medium", seed, () => {});
   const eco = new Ecology(world, seed), wild = new Wildlife(world, seed, eco), birds = new Birds(world, seed);
   settle(wild, eco, 8, () => {});
-  const counts = () => { const c = new Array(6).fill(0); for (const h of wild.herds) c[h.sp] += h.n; return c; };
+  const counts = () => { const c = new Array(SPECIES_NAMES.length).fill(0); for (const h of wild.herds) c[h.sp] += h.n; return c; };
   const samples: { season: number; counts: number[]; rabbits: number; geeseLat: number }[] = [];
   const seasonAt = (t: number) => Math.floor(t / DAY_SECONDS / DAYS_PER_SEASON) % 4;
   let time = (DAYS_PER_SEASON + 0.32) * DAY_SECONDS, lastDay = -1, last = -1;
@@ -35,7 +35,8 @@ describe("wildlife", () => {
 
   it("no species dies out on its own, and none runs away", () => {
     const first = samples[0].counts, lastC = samples[samples.length - 1].counts;
-    for (let sp = 0; sp < 6; sp++) {
+    for (let sp = 0; sp < SPECIES_NAMES.length; sp++) {
+      if (sp === Species.Dog) { expect(lastC[sp]).toBe(0); continue; }
       expect(lastC[sp]).toBeGreaterThan(0);
       if (first[sp] >= 20) { expect(lastC[sp] / first[sp]).toBeGreaterThan(0.33); expect(lastC[sp] / first[sp]).toBeLessThan(3); }
     }

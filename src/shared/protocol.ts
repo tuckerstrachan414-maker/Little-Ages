@@ -1,7 +1,7 @@
 import type { MapMode, Season, SizeKey, WorldData } from "./types.ts";
 import type { CampSnap, ChronicleEvent, Look, Stage, VillageSnap, WorkSnap } from "./people.ts";
 import type { SearchItem } from "../sim/people/search.ts";
-import type { IdeaSummary } from "../sim/people/ideas.ts";
+import type { TechDefLite, TechGroup, TechPanelData, TechNodeDetail } from "./tech.ts";
 
 /* Messages between the page and the simulation worker. */
 
@@ -16,8 +16,10 @@ export type ToWorker =
   | { type: "search"; q: string; seq: number }
   /** relationship threads for everyone in this stretch of map (off turns them off) */
   | { type: "bonds"; on: boolean; view: { x0: number; y0: number; x1: number; y1: number } }
-  /** what the world knows: answered with `ideas` */
-  | { type: "ideas" };
+  /** the tree of knowledge for a group (the world, a people, a settlement): answered with `tech` */
+  | { type: "tech"; group: TechGroup }
+  /** one node of it, for the card: answered with `technode` */
+  | { type: "technode"; id: number; group: TechGroup };
 
 export type FromWorker =
   | { type: "progress"; stage: number; pct: number }
@@ -27,15 +29,25 @@ export type FromWorker =
       people: Float32Array; peopleCount: number; camps: CampSnap[]; looks: Look[]; events: ChronicleEvent[]; pop: number;
       /* weirs, plots, huts and pits, sent only when they have changed; villages and gatherings likewise */
       works?: WorkSnap[]; villages?: VillageSnap[] }
-  /* small game and fish per 16x16-tile patch, 0..255, sent once a game day */
-  | { type: "fields"; gw: number; gh: number; cell: number; rabbits: Uint8Array; fish: Uint8Array; rabbitTotal: number; fishTotal: number }
+  /* small game and fish per 16x16-tile patch, 0..255, and what is left of each deposit, sent once a game day */
+  | { type: "fields"; gw: number; gh: number; cell: number; rabbits: Uint8Array; fish: Uint8Array; rabbitTotal: number; fishTotal: number; left: Uint8Array; moist: Uint8Array }
+  /** what lies in the ground, once after the world; `left` in `fields` says how much of each remains */
+  | { type: "deposits"; list: DepositSnap[] }
+  /** tiles whose tree changed (felled, fallen, grown back), as [tile index, tree] pairs, sent once a game day when any */
+  | { type: "tiles"; changes: Int32Array }
   | { type: "results"; seq: number; items: SearchItem[] }
   /** triples of [person a, person b, bond] (see Bond) */
   | { type: "bonds"; edges: Int32Array }
-  | { type: "ideas"; list: IdeaSummary[] }
+  /** the tree itself, once after the world */
+  | { type: "techtree"; defs: TechDefLite[] }
+  | { type: "tech"; data: TechPanelData }
+  | { type: "technode"; detail: TechNodeDetail | null }
   | { type: "person"; detail: PersonDetail | null; id: number }
   | { type: "band"; detail: BandDetail | null; id: number }
   | { type: "village"; detail: VillageDetail | null; id: number };
+
+/** A deposit as the page knows it: where, what, how big. */
+export interface DepositSnap { id: number; kind: number; name: string; x: number; y: number; r: number; amount: number; }
 
 export interface Kin {
   id: number; name: string; rel: string; alive: boolean; age: number; sex: "f" | "m";
@@ -59,6 +71,10 @@ export interface PersonDetail {
   /** what they know how to do: how well (0..1), and how they came to know it ("worked it out", "from her mother, Ama") */
   knows: { id: number; name: string; m: number; how: string; start: boolean }[];
   looks: string; look: Look;
+  /** what they have been eating ("eats mostly meat and fish; little plant food") */
+  diet: string;
+  /** the animals the household keeps, in words ("keeps 6 goats and 3 kids"), or nothing */
+  keeps: string;
   mother: Kin | null; father: Kin | null; partner: Kin | null;
   children: Kin[]; siblings: Kin[]; friends: Kin[]; rivals: Kin[];
   memories: { text: string; ago: number; v: number }[];
@@ -88,10 +104,17 @@ export interface VillageDetail {
   id: number; name: string; gloss: string; why: string; story: string; people: string;
   founded: number; founder: { id: number; name: string; alive: boolean };
   bands: { id: number; name: string; pop: number; color: string; leader: { id: number; name: string } | null }[];
-  /** whom most of the grown-ups in the village listen to, across its bands, and how many */
+  /** whom most of the grown-ups in the village listen to, across its bands, and how many; and whether that one is its chief */
   listened: { id: number; name: string; n: number } | null;
+  chief: { id: number; name: string; n: number; since: number } | null;
+  /** hamlet (0), village (1), town (2), city (3) */
+  tier: number;
+  /** the work the chief has called everyone to, if any */
+  call: string;
   pop: number; peak: number; huts: number; building: number; ruins: number; pits: number; pitDays: number;
   fields: { crop: string; n: number; tame: number }[]; weirs: number;
+  /** the animals kept in the village, in words, or nothing */
+  herds: string;
   /** empty since (0 if lived in) and given up (0 if not) */
   empty: number; abandoned: number;
   events: ChronicleEvent[];
@@ -100,6 +123,8 @@ export interface VillageDetail {
 
 export interface BandDetail {
   id: number; name: string; people: string; pop: number; adults: number; children: number; couples: number;
+  /** the age the band's people is in ("New Stone Age") */
+  age: string;
   respected: { id: number; name: string } | null;
   /** how many listen to the leader and for how many days they have led; a second voice with a following of their own */
   followers: number; ledDays: number;
@@ -118,6 +143,10 @@ export interface BandDetail {
   works: { kind: "weir" | "plot"; text: string; x: number; y: number }[];
   /** huts, pits and fields at this camp, in a line ("7 huts (2 going up), 5 storage pits holding 140 days of food"), and how long they have stayed and what holds them */
   homes: string; stay: string;
+  /** the animals the band's households keep, in words, or nothing */
+  herds: string;
+  /** what the band is short of, in a few words ("little to eat, cold nights") */
+  needs: string;
   /** the village the band lives in ("" if none) */
   village: string;
   days: number; fire: number; moves: number; camp: string;

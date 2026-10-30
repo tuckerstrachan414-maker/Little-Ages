@@ -1,9 +1,15 @@
+import { defOf } from "../buildings/build.ts";
+import { dietWords } from "../economy/diet.ts";
+import { ERA_NAMES } from "../tech/tree.ts";
+import { Mat } from "../economy/goods.ts";
+import { WALL_WORDS } from "../buildings/defs.ts";
 import { DAY_SECONDS, DAYS_PER_SEASON, DAYS_PER_YEAR, SEASON_NAMES, SPECIES_NAMES } from "../../shared/types.ts";
 import type { BandDetail, BandFeud, Feuding, Kin, PersonDetail, VillageDetail } from "../../shared/protocol.ts";
 import { TRAITS } from "./genetics.ts";
 import { Goal, Mem, SKILL_NAMES, St, kinWord, type Person } from "./person.ts";
 import { storeFood, campFood, homeOf, type Band } from "./band.ts";
-import { IDEAS, Idea, howKnown } from "./ideas.ts";
+import { howKnown } from "./ideas.ts";
+import { TECHS as IDEAS, Idea } from "../tech/tree.ts";
 import { Work, worksAround } from "./works.ts";
 import { pitFood, pitOf, hutOf, hutWords } from "./homes.ts";
 import { villageOf } from "./villages.ts";
@@ -12,6 +18,8 @@ import { hearthDays, household, appetiteOf, householdAppetite } from "./sharing.
 import { feudsWith, sideOf } from "./feuds.ts";
 import { followersOf, leads } from "./leaders.ts";
 import type { Society } from "./society.ts";
+import { needsLine } from "../tech/problems.ts";
+import { keepsWords, herdsLine, flocksOf, flockWords, speciesWords } from "./herding.ts";
 
 /*
   Turning a mind into words for the pinned tag: what someone is doing and why, how they
@@ -29,6 +37,7 @@ const GOAL_WORDS: Partial<Record<number, string>> = {
   [Goal.Kindle]: "Lighting the fire", [Goal.Ember]: "Fetching fire", [Goal.Show]: "Showing how", [Goal.Learn]: "Learning", [Goal.Dry]: "Drying meat",
   [Goal.Build]: "Building a weir", [Goal.Sow]: "Sowing",
   [Goal.Hut]: "Raising a hut", [Goal.Pit]: "Digging a storage pit", [Goal.Store]: "Putting food by", [Goal.Fetch]: "Fetching food from the pit",
+  [Goal.Quarry]: "Fetching clay and stone", [Goal.Construct]: "Building", [Goal.Pot]: "Making pots", [Goal.Herd]: "Minding the animals",
 };
 const TRAIT_WORDS: [string, string][] = [
   ["timid", "brave"], ["cold", "kind"], ["generous", "greedy"], ["easygoing", "ambitious"],
@@ -50,6 +59,9 @@ function memoryText(s: Society, p: Person, m: Person["mem"][number]): string {
   const whoRel = rel ? `${p.sex === "f" ? "her" : "his"} ${rel}, ${who}` : who;
   const her = p.sex === "f" ? "her" : "him", she = p.sex === "f" ? "she" : "he";
   switch (m.k) {
+    case Mem.HerdLoss: return m.v < -0.3 ? `Wolves got in among the animals the family keeps` : `An animal the family kept wandered off in the night`;
+    case Mem.Kept: return `Carried young animals home from a kill and fed them at the hearth`;
+    case Mem.Missed: return `A throw that fell short, and the game got away`;
     case Mem.Fed: return `${who} gave ${her} food in a hungry time`;
     case Mem.Refused: return `${who} turned ${her} away when ${she} asked for food`;
     case Mem.Repaid: return `${who} paid back the food ${she} gave`;
@@ -115,7 +127,7 @@ export function personDetail(s: Society, id: number): PersonDetail | null {
     traits: traits.slice(0, 3).map(t => ({ word: t.word, v: t.v, key: t.key })),
     skills: p.skills.map((v, i) => ({ name: SKILL_NAMES[i], v })),
     knows: IDEAS.filter(d => p.know[d.id] > 0).map(d => ({ id: d.id, name: d.name, m: p.know[d.id], how: howKnown(s, p, d.id), start: d.start })),
-    looks: s.describeLooks(p), look: s.look_(p),
+    looks: s.describeLooks(p), look: s.look_(p), diet: age < 2 ? "" : dietWords(p), keeps: keepsWords(s, p),
     mother: kin(s, p, p.mother), father: kin(s, p, p.father), partner: kin(s, p, p.partner),
     children: p.children.map(c => kin(s, p, c)!).filter(Boolean), siblings, friends, rivals, memories,
     pregnant: !!p.pregnantBy, carrying, prestige: p.prestige, respected: b.respected === p.id,
@@ -166,24 +178,35 @@ function workText(s: Society, band: number, w: Work): string {
 /** Where someone's household lives, in words, and the days of food in its pit. */
 function homeOfPerson(s: Society, p: Person, b: Band): { home: string; pit: number } {
   const head = homeOf(p, s.byId, s.time), hut = hutOf(s, b, head), pit = pitOf(s, b, head);
-  const home = b.moving ? "on the move" : !hut ? `a ${s.cultures[b.culture].shelter === "leanto" ? "lean-to" : s.cultures[b.culture].shelter === "tent" ? "hide tent" : "dome of grass"}` : (hut.prog ?? 1) < 1 ? `a ${hutWords(hut)} going up, ${Math.round((hut.prog ?? 0) * 100)}% done` : hut.state < 0.2 ? `a fallen-in ${hutWords(hut)}` : `a ${hutWords(hut)}${(hut.size ?? 1) > 1 ? ` of ${hut.size} bays` : ""}`;
-  return { home, pit: pit ? pitFood(pit) / householdAppetite(s, b, head) : -1 };
+  const home = b.moving ? "on the move" : !hut ? `a ${s.cultures[b.culture].shelter === "leanto" ? "lean-to" : s.cultures[b.culture].shelter === "tent" ? "hide tent" : "dome of grass"}` : (hut.prog ?? 1) < 1 ? `a ${hutWords(hut)} going up, ${Math.round((hut.prog ?? 0) * 100)}% done` : hut.state < 0.2 ? `a fallen-in ${hutWords(hut)}` : `a ${hutWords(hut)}${(hut.size ?? 1) > 1 ? ` of ${hut.size} bays` : ""}${hut.up ? ", being rebuilt" : ""}`;
+  const pots = Math.floor(b.hgoods.get(head)?.[Mat.Pots] ?? 0);
+  return { home: pots > 0 ? `${home}, with ${pots} ${pots === 1 ? "pot" : "pots"}` : home, pit: pit ? pitFood(pit) / householdAppetite(s, b, head) : -1 };
 }
 /** "spring of year 4" */
 export const seasonYear = (t: number) => `${SEASON_NAMES[Math.floor(t / DAY_SECONDS / DAYS_PER_SEASON) % 4].toLowerCase()} of year ${Math.floor(t / DAY_SECONDS / DAYS_PER_YEAR) + 1}`;
 /** The band's huts and pits at this camp, in a line. */
 function homesLine(s: Society, b: Band): string {
   if (b.moving) return "";
-  let huts = 0, going = 0, ruins = 0, bays = 0, pits = 0, food = 0;
+  let huts = 0, going = 0, ruins = 0, bays = 0, pits = 0, granaries = 0, food = 0, rebuilt = 0, rebuilding = 0, wallsOf = "";
+  const others = new Map<string, { up: number; going: number }>();
   for (const w of worksAround(s, b.x, b.y, 14)) {
-    if (w.kind === Work.Hut) { if ((w.prog ?? 1) < 1) going++; else if (w.state < 0.2) ruins++; else { huts++; bays += Math.max(0, (w.size ?? 1) - 1); } }
-    else if (w.kind === Work.Pit && w.band === b.id) { pits++; food += pitFood(w); }
+    if (w.kind === Work.Hut) { if ((w.prog ?? 1) < 1) going++; else if (w.state < 0.2) ruins++; else { huts++; bays += Math.max(0, (w.size ?? 1) - 1); if ((w.tier ?? 0) >= 1) { rebuilt++; wallsOf ||= WALL_WORDS[w.walls ?? "poles"]; } if (w.up) rebuilding++; } }
+    else if (w.kind === Work.Pit && w.band === b.id) { if ((w.tier ?? 0) >= 1) granaries++; else pits++; food += pitFood(w); }
+    else if (w.kind >= 4 && (w.band === b.id || (w.owner ?? 0) >= 1)) { const d = defOf(w), o = others.get(d.name) ?? { up: 0, going: 0 }; if ((w.prog ?? 1) < 1) o.going++; else if (w.state > 0.2) o.up++; others.set(d.name, o); }
   }
   const parts: string[] = [];
-  if (huts || going) parts.push(`${huts} ${huts === 1 ? "hut" : "huts"}${bays ? ` (${bays} added ${bays === 1 ? "bay" : "bays"})` : ""}${going ? `, ${going} going up` : ""}`);
-  if (pits) { const days = Math.round(food / Math.max(1, b.appetite)); parts.push(`${pits} storage ${pits === 1 ? "pit" : "pits"} ${food < 1 ? "standing empty" : days < 1 ? "with a little food put by" : `holding ${days} ${days === 1 ? "day" : "days"} of food`}`); }
+  if (huts || going) parts.push(`${huts} ${huts === 1 ? "hut" : "huts"}${rebuilt ? ` (${rebuilt} rebuilt in ${wallsOf})` : ""}${bays ? ` (${bays} added ${bays === 1 ? "bay" : "bays"})` : ""}${going ? `, ${going} going up` : ""}${rebuilding ? `, ${rebuilding} being rebuilt` : ""}`);
+  if (pits || granaries) { const days = Math.round(food / Math.max(1, b.appetite)); const what = [pits ? `${pits} storage ${pits === 1 ? "pit" : "pits"}` : "", granaries ? `${granaries} ${granaries === 1 ? "granary" : "granaries"}` : ""].filter(Boolean).join(" and "); parts.push(`${what} ${food < 1 ? "standing empty" : days < 1 ? "with a little food put by" : `holding ${days} ${days === 1 ? "day" : "days"} of food`}`); }
+  for (const [name, o] of others) parts.push(`${o.up ? `${o.up === 1 ? `a ${name}` : `${o.up} ${name}s`}` : ""}${o.up && o.going ? ", " : ""}${o.going ? `${o.going === 1 ? `a ${name}` : `${o.going} ${name}s`} going up` : ""}`);
   if (ruins) parts.push(`${ruins} fallen-in ${ruins === 1 ? "hut" : "huts"}`);
   return parts.join("; ");
+}
+/** The animals kept across a village's bands: "14 goats and 6 kids, 3 dogs". */
+function villageHerds(s: Society, bands: Band[]): string {
+  const bySp = new Map<number, { n: number; young: number }>();
+  for (const b of bands) for (const f of flocksOf(s, b)) { const o = bySp.get(f.sp) ?? { n: 0, young: 0 }; o.n += f.n; o.young += f.young; bySp.set(f.sp, o); }
+  void speciesWords;
+  return [...bySp].filter(([, o]) => o.n + o.young > 0).map(([sp, o]) => flockWords({ sp, n: o.n, young: o.young } as Parameters<typeof flockWords>[0])).join(", ");
 }
 /** How long the band has been at this camp, and what keeps it there. */
 function stayLine(s: Society, b: Band): string {
@@ -214,8 +237,10 @@ export function villageDetail(s: Society, id: number): VillageDetail | null {
     founded: v.founded, founder: { id: v.founder, name: v.founderName, alive: !!founder },
     bands: bands.map(b => { const l = s.byId.get(b.respected); return { id: b.id, name: b.name, pop: b.members.length, color: b.color, leader: l ? { id: l.id, name: l.name } : null }; }),
     listened: top && s.byId.get(top[0]) ? { id: top[0], name: s.byId.get(top[0])!.name, n: top[1] } : null,
+    chief: v.chief && s.byId.get(v.chief) ? { id: v.chief, name: s.byId.get(v.chief)!.name, n: count.get(v.chief) ?? 0, since: v.chiefSince } : null,
+    tier: v.tier, call: v.call ? (s.works.find(w => w.id === v.call!.work) ? defOf(s.works.find(w => w.id === v.call!.work)!).name : "") : "",
     pop: v.pop, peak: v.peak, huts, building, ruins, pits, pitDays: appetite ? food / appetite : 0,
-    fields: [...fields].map(([crop, f]) => ({ crop, n: f.n, tame: f.tame })), weirs,
+    fields: [...fields].map(([crop, f]) => ({ crop, n: f.n, tame: f.tame })), weirs, herds: villageHerds(s, bands),
     empty: v.empty, abandoned: v.abandoned,
     events: s.events.filter(e => Math.hypot(e.x - v.x, e.y - v.y) < 18 && (e.t >= v.founded - DAY_SECONDS * DAYS_PER_YEAR || e.kind === "hut")).slice(-8).reverse(),
     x: v.x, y: v.y,
@@ -230,7 +255,7 @@ export function bandDetail(s: Society, id: number): BandDetail | null {
   const resp = s.byId.get(b.respected);
   const couples = ms.filter(q => q.sex === "f" && q.partner && s.byId.get(q.partner)?.band === b.id).length;
   return {
-    id, name: b.name, people: cult.lang.name, pop: ms.length,
+    id, name: b.name, people: cult.lang.name, age: ERA_NAMES[cult.age], pop: ms.length,
     adults: ms.filter(q => s.age(q) >= 16).length, children: ms.filter(q => s.age(q) < 16).length, couples,
     respected: resp ? { id: resp.id, name: resp.name } : null,
     followers: b.followers, ledDays: (s.time - b.ledSince) / 60,
@@ -246,7 +271,7 @@ export function bandDetail(s: Society, id: number): BandDetail | null {
       return { id: d.id, name: d.name, start: d.start, n: who.length, who: who.slice(0, 3).map(q => ({ id: q.id, name: q.name })) };
     }),
     works: worksAround(s, b.x, b.y, 18).filter(w => (w.kind === Work.Weir || w.kind === Work.Plot) && (w.band === b.id || !s.bandById.has(w.band))).map(w => ({ kind: w.kind === Work.Weir ? "weir" as const : "plot" as const, text: workText(s, b.id, w), x: w.x, y: w.y })),
-    homes: homesLine(s, b), stay: stayLine(s, b), village: villageOf(s, b)?.name ?? "",
+    homes: homesLine(s, b), stay: stayLine(s, b), herds: herdsLine(s, b), needs: needsLine(b), village: villageOf(s, b)?.name ?? "",
     days: campFood(b) / Math.max(1, b.appetite), fire: b.fire, moves: b.moves, camp: b.siteName,
     yesterday: { brought: Math.round(b.yesterday.plant + b.yesterday.meat + b.yesterday.fish), eaten: Math.round(b.yesterday.eaten) },
     shelter: cult.shelter, sharing: cult.sharing, cousins: cult.cousins,

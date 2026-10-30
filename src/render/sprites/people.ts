@@ -34,8 +34,10 @@ const TIMING: Record<string, number[]> = {
   play: [90, 80, 90, 80], wave: [180, 180, 180, 180], drink: [500, 400, 500, 400], eat: [360, 300, 360, 300], sick: [900, 900, 900, 900],
   /* raising a hut: crouch back to lift, reach up to lash, bring it down and tamp (the impact held), straighten */
   build: [260, 150, 220, 300],
+  /* shaping a pot: seated, the hands turning and pinching the clay */
+  shape: [300, 220, 300, 220],
 };
-const NAMES = ["idle", "walk", "run", "carry", "gather", "dig", "fish", "throw", "butcher", "chop", "knap", "sew", "talk", "sit", "sleep", "cook", "holdbaby", "cane", "canewalk", "play", "wave", "drink", "eat", "sick", "build"];
+const NAMES = ["idle", "walk", "run", "carry", "gather", "dig", "fish", "throw", "butcher", "chop", "knap", "sew", "talk", "sit", "sleep", "cook", "holdbaby", "cane", "canewalk", "play", "wave", "drink", "eat", "sick", "build", "shape"];
 export function animName(a: number): string { return NAMES[a] ?? "idle"; }
 export function animFrame(anim: number, t: number, phase: number): number {
   const d = TIMING[animName(anim)] ?? TIMING.idle, total = d[0] + d[1] + d[2] + d[3];
@@ -50,7 +52,7 @@ const MAX = 6000;
 
 /** A person sprite: feet at the bottom center of the canvas (one transparent pixel row for the outline). */
 export function personSprite(l: Look, anim: number, frame: number, view: View, flags: number, load: number): Drawn {
-  const key = `${l.id}|${l.stage}|${l.wear}|${l.style}|${(l.gray * 6) | 0}|${anim}|${frame}|${view}|${flags & (PFlag.Sling | PFlag.Spear | PFlag.Pregnant | PFlag.Sad | PFlag.Happy | PFlag.Wood | PFlag.Carrying | PFlag.Meat | PFlag.Injured | PFlag.Leader)}|${load}`;
+  const key = `${l.id}|${l.stage}|${l.wear}|${l.style}|${(l.gray * 6) | 0}|${anim}|${frame}|${view}|${flags & (PFlag.Sling | PFlag.Spear | PFlag.Pregnant | PFlag.Sad | PFlag.Happy | PFlag.Wood | PFlag.Carrying | PFlag.Meat | PFlag.Injured | PFlag.Leader | PFlag.Chief)}|${load}`;
   let d = cache.get(key);
   if (d) return d;
   if (cache.size > MAX) { let n = 0; for (const k of cache.keys()) { cache.delete(k); if (++n > MAX / 4) break; } }
@@ -82,7 +84,7 @@ function personGrid(l: Look, anim: number, f: number, view: View, flags: number,
   if (st === "adult" || st === "elder") A.lh = Math.max(3, A.lh + (l.tall > 0 ? 1 : l.tall < 0 ? -1 : 0));
   const g = grid(24, 27), cx = 12, fy = 25;
   const a = animName(anim);
-  const sit = a === "sit" || a === "cook" || a === "holdbaby" || a === "sew" || a === "knap" || a === "eat";
+  const sit = a === "sit" || a === "cook" || a === "holdbaby" || a === "sew" || a === "knap" || a === "eat" || a === "shape";
   const crouch = a === "gather" || a === "drink" || a === "butcher";
   const sad = (flags & PFlag.Sad) !== 0 && (a === "idle" || a === "walk" || a === "sit");
   const legH = sit ? 1 : crouch ? Math.max(1, A.lh - 2) : A.lh;
@@ -202,10 +204,11 @@ function personGrid(l: Look, anim: number, f: number, view: View, flags: number,
       tip = [sx + sw + 4, ty + 3 + b];
     }
     else if (a === "eat" && !back) { armDown(sx - 1, sleeve); const up = f % 2 === 0; if (up) { put(g, sx + sw, ty, sleeveD); put(g, sx + sw - 1, ty - 1, skin); } else armDown(sx + sw, sleeveD, skinD); }
-    else if ((a === "sew" || a === "knap") && !back) {
-      /* hands working in the lap: a needle glints, or a stone strikes a stone */
+    else if ((a === "sew" || a === "knap" || a === "shape") && !back) {
+      /* hands working in the lap: a needle glints, a stone strikes a stone, or a lump of clay rises into a pot */
       put(g, sx - 1, ty, sleeve); put(g, sx, ty + 1, skin); put(g, sx + sw, ty, sleeveD); put(g, sx + sw - 1, ty + 1 - (f % 2), skin);
       if (a === "sew") { rect(g, cx - 2, ty + 2, 4, 1, P.fur); if (f % 2) put(g, cx, ty + 1, "#f2efe6"); }
+      else if (a === "shape") { const h = f < 2 ? 1 : 2; rect(g, cx - 1, ty + 3 - h, 3, h, "#b5603a"); put(g, cx, ty + 3 - h, "#c8744a"); if (f === 3) { put(g, cx - 2, ty + 2, "#b5603a"); put(g, cx + 2, ty + 2, "#b5603a"); } }
       else { put(g, cx - 1, ty + 2, P.stoneL); put(g, cx, ty + 2 - (f % 2), P.stone); if (f === 2) hit = [cx, ty + 1]; }
     }
     else if (a === "cane" && !back) { armDown(sx - 1, sleeve); put(g, sx + sw, ty, sleeveD); put(g, sx + sw, ty + 1, sleeveD); put(g, sx + sw + 1, ty + 2, skin); for (let y = ty + 3; y <= fy; y++) put(g, sx + sw + 1, y, handle); }
@@ -329,10 +332,15 @@ function personGrid(l: Look, anim: number, f: number, view: View, flags: number,
   }
 
   /* the one the band listens to wears a feather in the hair, set at the back of the head */
-  if (flags & PFlag.Leader && (st === "adult" || st === "elder")) {
+  if (flags & (PFlag.Leader | PFlag.Chief) && (st === "adult" || st === "elder")) {
     const quill = "#8a6a3a", vane = "#f2ead6", tipC = "#b5502a";
     if (side) { put(g, hx, hY - 1, quill); put(g, hx - 1, hY - 2, vane); put(g, hx - 1, hY - 3, vane); put(g, hx - 2, hY - 4, tipC); }
     else { const fx = hx + hw - (back ? 2 : 1); put(g, fx, hY - 1, quill); put(g, fx, hY - 2, vane); put(g, fx + 1, hY - 3, vane); put(g, fx + 1, hY - 4, tipC); }
+    /* the one a whole village listens to wears a second, taller feather */
+    if (flags & PFlag.Chief) {
+      if (side) { put(g, hx + 1, hY - 2, quill); put(g, hx, hY - 3, vane); put(g, hx, hY - 4, vane); put(g, hx, hY - 5, vane); put(g, hx - 1, hY - 6, tipC); }
+      else { const fx = hx + hw - (back ? 3 : 2); put(g, fx, hY - 2, quill); put(g, fx, hY - 3, vane); put(g, fx, hY - 4, vane); put(g, fx + 1, hY - 5, vane); put(g, fx + 1, hY - 6, tipC); }
+    }
   }
 
   /* loads: a basket on the head (berries, roots, fish), meat over the shoulder, a bundle of firewood */
@@ -438,6 +446,8 @@ const ICONS: Record<number, { c: Record<string, string>; px: string[] }> = {
   21: { c: { a: "#d9b45a", b: "#9a2f45", d: "#6f8a44" }, px: ["a...a", ".a.a.", "b.d.b", ".bdb."] },   /* gift: a string of beads */
   22: { c: { a: "#6f9a44", b: "#4e7a34", d: "#8a6a3a" }, px: ["..a.a", ".aba.", "a.b..", "..d.."] },   /* peace: a green sprig */
   23: { c: { a: "#a47b52", b: "#6e5442", d: "#d9a277" }, px: ["....d", "...d.", "abbba", ".aaa."] },   /* asking: an empty bowl held out */
+  24: { c: { a: "#b5603a", b: "#7a3a22", d: "#d08a5a" }, px: ["a...a", ".dba.", ".aba.", "..b.."] },   /* a pot */
+  25: { c: { a: "#a89272", b: "#5a4a3a" }, px: ["b...b", ".b.b.", ".aaa.", "a.a.a"] },                /* a goat's head: horns and a beard */
 };
 /** A speech bubble with a little picture, its tail pointing down at (x, y). Drawn at screen scale `k` (1 at true size). */
 export function drawBubble(ctx: CanvasRenderingContext2D, x: number, y: number, icon: number, k: number): void {

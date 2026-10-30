@@ -4,11 +4,23 @@ import { storeFood, estimate, homeOf, keepingDays } from "./band.ts";
 import { Goal, Place, St, Skill, step, kinWord, type KnownPlace, type Person, type Step } from "./person.ts";
 import { MEAT, compass, type Society } from "./society.ts";
 import { askTarget, reachFood, familyDays, householdAppetite } from "./sharing.ts";
+import { flocksOf, pastureFor, flockWords } from "./herding.ts";
 import { feudOf, peaceToMake } from "./feuds.ts";
 import { visitTarget } from "./friends.ts";
-import { IDEAS, Idea, knows, bandKnows, showTarget } from "./ideas.ts";
-import { Work, weirSite, weirFor, sownThisYear, sowSite, ripePlot, worksAround } from "./works.ts";
+import { knows, bandKnows, showTarget } from "./ideas.ts";
+import { TECHS as IDEAS, Idea } from "../tech/tree.ts";
+import { Work, weirSite, weirFor, sownThisYear, sowSite, ripePlot, worksAround, harvestSpell } from "./works.ts";
 import { pitOf, pitFood, pitRoom, pitSite, hutJob, hutWords, hutWordsOf, stayHope, freezing } from "./homes.ts";
+import { wants, nextMaterial, type Want } from "../buildings/wants.ts";
+import { needsOf, RAISE, OWNER } from "../buildings/build.ts";
+import { defIndex } from "../buildings/defs.ts";
+import { Mat, isFood } from "../economy/goods.ts";
+import { hgoodsOf } from "./sharing.ts";
+import { Problem } from "../tech/problems.ts";
+import { techIx } from "../tech/tree.ts";
+import { Line } from "../buildings/defs.ts";
+import { standing } from "../buildings/build.ts";
+const POTTERY = () => techIx("pottery"), HERBS = () => techIx("herb-lore");
 import type { Band } from "./band.ts";
 
 /*
@@ -112,7 +124,7 @@ export function decide(s: Society, p: Person, forced?: Goal): void {
   /* --- food: from the family's hearth or the band's pot, or asked for at another hearth --- */
   const reach = reachFood(s, p), hh = b.hearths.get(homeOf(p, s.byId, s.time));
   if (hunger > 0.3) {
-    if (p.carryAmt > 0 && p.carryKind > 0 && p.carryKind < 4) add({ g: Goal.Eat, v: hunger * 1.9, plan: () => [step(St.Eat, p.x, p.y, 0, 3, { a: 1 })], why: () => `${p.name} is eating some of the ${foodWord(p.carryKind)} ${she(p)} is carrying, because ${she(p)} is hungry.`, icon: Bubble.Meat });
+    if (p.carryAmt > 0 && isFood(p.carryKind)) add({ g: Goal.Eat, v: hunger * 1.9, plan: () => [step(St.Eat, p.x, p.y, 0, 3, { a: 1 })], why: () => `${p.name} is eating some of the ${foodWord(p.carryKind)} ${she(p)} is carrying, because ${she(p)} is hungry.`, icon: Bubble.Meat });
     if (reach > 0.4) {
       const cook = (b.store.meat + b.store.fish + (hh ? hh.meat + hh.fish : 0) > 0.5) && worker && b.fire > 0.05;
       add({ g: Goal.Eat, v: hunger * 1.8 / (1 + dc / 40), plan: () => [step(St.Go, fx, fy), ...(cook ? [step(St.Cook, fx, fy, 0, 2.5)] : []), step(St.Eat, fx, fy, 0, 2.5)], why: () => eatWhy(s, p, cook), icon: Bubble.Meat });
@@ -139,9 +151,11 @@ export function decide(s: Society, p: Person, forced?: Goal): void {
     /* a basket carries half as much again as arms and a hide sling */
     const basket = knows(p, Idea.Baskets), carry = st === "child" ? (basket ? 3 : 2) : basket ? 7.5 : 5;
     let bestPlant: KnownPlace | null = null, bp = 0, bestFish: KnownPlace | null = null, bf = 0, bestRab: KnownPlace | null = null, br = 0, bestGame: KnownPlace | null = null, bg = 0, bestCarc: KnownPlace | null = null, bc = 0;
+    /* a bow brings game within reach that a spear would not */
+    const bowReach = knows(p, BOW()) ? 4 : 0;
     for (const pl of p.places) {
       const d = Math.hypot(pl.x - p.x, pl.y - p.y), dfromCamp = Math.hypot(pl.x - b.x, pl.y - b.y);
-      if (dfromCamp > range) continue;
+      if (dfromCamp > range + (pl.k === Place.Game ? bowReach : 0)) continue;
       const dF = 1 / (1 + (d + dfromCamp * 0.6) / 16), e = estimate(pl, s.time);
       if (pl.k === Place.Plants) { const E = Math.min(carry, e * 0.35) * (0.6 + p.skills[Skill.Gather] * 0.6), v = E / (E + 1.5) * dF; if (v > bp) { bp = v; bestPlant = pl; } }
       else if (pl.k === Place.Fish && knows(p, Idea.Fishing) && st !== "child") { const E = Math.min(carry, e * 0.3) * (0.5 + p.skills[Skill.Fish] * 0.8), v = E / (E + 1.5) * dF; if (v > bf) { bf = v; bestFish = pl; } }
@@ -168,7 +182,7 @@ export function decide(s: Society, p: Person, forced?: Goal): void {
     const crop = ripePlot(s, p);
     const damp = (g: Goal, k: number) => 1 / (1 + busy(g) * k);
     if (weir) { const w = weir; add({ g: Goal.Fish, v: foodDrive * bw * 2.4, plan: () => [step(St.Go, w.x, w.y), step(St.Fish, w.x, w.y, w.id, 3), step(St.Go, fx, fy), step(St.Drop, fx, fy)], why: () => `${p.name} is taking the fish out of ${w.band === b.id ? "the band's" : "an old"} weir ${where(s, p, w.wx, w.wy)}, because ${foodReason(s, p, hunger, kidsHungry, short)}.`, icon: Bubble.Fish }); }
-    if (crop) { const w = crop, E = Math.min(carry, w.food), v = E / (E + 1.5) / (1 + Math.hypot(w.x - p.x, w.y - p.y) / 16); add({ g: Goal.Gather, v: (foodDrive + 0.25) * v * 2.3, plan: () => [step(St.Go, w.x, w.y), step(St.Gather, w.x, w.y, w.id, 4.5, { a: carry }), step(St.Go, fx, fy), step(St.Drop, fx, fy)], why: () => `${p.name} is bringing in the ${w.crop} ${w.home === homeOf(p, s.byId, s.time) ? `${her(p)} household sowed` : "sown here"} in the spring, now that it is ripe.`, icon: Bubble.Berries }); }
+    if (crop) { const w = crop, E = Math.min(carry, w.food), v = E / (E + 1.5) / (1 + Math.hypot(w.x - p.x, w.y - p.y) / 16); add({ g: Goal.Gather, v: (foodDrive + 0.25) * v * 2.3, plan: () => [step(St.Go, w.x, w.y), step(St.Gather, w.x, w.y, w.id, harvestSpell(p), { a: carry }), step(St.Go, fx, fy), step(St.Drop, fx, fy)], why: () => `${p.name} is bringing in the ${w.crop} ${w.home === homeOf(p, s.byId, s.time) ? `${her(p)} household sowed` : "sown here"} in the spring, now that it is ripe.`, icon: Bubble.Berries }); }
     if (bestPlant) { const pl = bestPlant; add({ g: Goal.Gather, v: foodDrive * bp * 2.1 * damp(Goal.Gather, 0.03), plan: () => gatherPlan(s, p, pl, carry), why: () => workWhy(s, p, Goal.Gather, pl, hunger, kidsHungry, short), icon: Bubble.Berries }); }
     if (bestFish) { const pl = bestFish; add({ g: Goal.Fish, v: foodDrive * bf * 2.1 * damp(Goal.Fish, 0.05), plan: () => fishPlan(s, p, pl), why: () => workWhy(s, p, Goal.Fish, pl, hunger, kidsHungry, short), icon: Bubble.Fish }); }
     if (bestRab) { const pl = bestRab; add({ g: Goal.Snare, v: foodDrive * br * 1.7 * damp(Goal.Snare, 0.12), plan: () => snarePlan(s, p, pl), why: () => workWhy(s, p, Goal.Snare, pl, hunger, kidsHungry, short) }); }
@@ -233,7 +247,7 @@ export function decide(s: Society, p: Person, forced?: Goal): void {
       add({ g: Goal.Mediate, v: (0.55 + pm.f.heat * 0.5) * (0.6 + tr[1] * 0.6) * (1 - foodDrive * 0.4) / (1 + busy(Goal.Mediate) * 2), plan: () => [step(St.Go, 0, 0, pm.a.id), step(St.Talk, 0, 0, pm.a.id, 6, { a: 8, o: pm.b.id }), step(St.Go, 0, 0, pm.b.id), step(St.Talk, 0, 0, pm.b.id, 6, { a: 8, o: pm.a.id })], why: () => `${p.name} is trying to make peace between ${pm.a.name} and ${pm.b.name}, ${leader ? `as the one the ${b.name} listen to` : "as an elder they both respect"}. The feud began when ${pm.b.name} ${pm.f.cause}.`, icon: Bubble.Peace });
     }
     const sickOne = tendTarget(s, p);
-    if (sickOne) add({ g: Goal.Tend, v: sickOne.v / (1 + busy(Goal.Tend) * 1.2), plan: () => [step(St.Go, sickOne.q.x, sickOne.q.y, sickOne.q.id), step(St.Tend, 0, 0, sickOne.q.id, 14)], why: () => `${p.name} is looking after ${sickOne.q.name}, who is ${sickOne.q.sick > 0 ? "sick" : "hurt"}${sickOne.kin ? `, because family looks after family` : `, because ${she(p)} is kind-hearted`}.`, icon: Bubble.Heart });
+    if (sickOne) add({ g: Goal.Tend, v: sickOne.v * (knows(p, HERBS()) ? 1.3 : 1) / (1 + busy(Goal.Tend) * 1.2), plan: () => [step(St.Go, sickOne.q.x, sickOne.q.y, sickOne.q.id), step(St.Tend, 0, 0, sickOne.q.id, 14)], why: () => `${p.name} is looking after ${sickOne.q.name}, who is ${sickOne.q.sick > 0 ? "sick" : "hurt"}${sickOne.kin ? `, because family looks after family` : `, because ${she(p)} is kind-hearted`}.`, icon: Bubble.Heart });
   }
 
   /* --- showing someone how a thing is done --- */
@@ -249,7 +263,7 @@ export function decide(s: Society, p: Person, forced?: Goal): void {
   /* --- children: play, and tag along to learn --- */
   if ((st === "child" || (st === "teen" && age < 14)) && !dark) {
     add({ g: Goal.Play, v: 0.48 + (1 - tr[7]) * 0.14 + tr[5] * 0.16, plan: () => [step(St.Play, b.x + Math.cos(p.id * 7 + s.time / 60) * 3, b.y + Math.sin(p.id * 7 + s.time / 60) * 2.2, 0, 9)], why: () => playWhy(s, p), icon: Bubble.Sun });
-    const parent = [s.byId.get(p.mother), s.byId.get(p.father)].find(q => q && q.band === p.band && (q.goal === Goal.Gather || q.goal === Goal.Fish || q.goal === Goal.Snare || q.goal === Goal.Wood || q.goal === Goal.Craft || q.goal === Goal.Dry || q.goal === Goal.Sow || q.goal === Goal.Build || q.goal === Goal.Kindle || q.goal === Goal.Hut || q.goal === Goal.Pit));
+    const parent = [s.byId.get(p.mother), s.byId.get(p.father)].find(q => q && q.band === p.band && (q.goal === Goal.Gather || q.goal === Goal.Fish || q.goal === Goal.Snare || q.goal === Goal.Wood || q.goal === Goal.Craft || q.goal === Goal.Dry || q.goal === Goal.Sow || q.goal === Goal.Build || q.goal === Goal.Kindle || q.goal === Goal.Hut || q.goal === Goal.Pit || q.goal === Goal.Construct || q.goal === Goal.Pot || q.goal === Goal.Herd));
     if (parent && age >= 5) add({ g: Goal.Follow, v: 0.42 + tr[4] * 0.3, plan: () => [step(St.Follow, 0, 0, parent.id, 24)], why: () => `${p.name} is tagging along with ${her(p)} ${parent.id === p.mother ? "mother" : "father"} to learn ${LEARN[parent.goal] ?? "how things are done"}.` });
   }
 
@@ -321,6 +335,41 @@ export function decide(s: Society, p: Person, forced?: Goal): void {
       }
     }
   }
+  /* --- pots: clay shaped at the hearth and baked in the fire or the kiln, when the family has none or too few for the food put by --- */
+  if (worker && !dark && !b.moving && age >= 12 && age < 70 && knows(p, POTTERY()) && foodDrive < 0.75 && !busy(Goal.Pot) && s.time - b.movedAt > DAY_SECONDS * 2) {
+    const head = homeOf(p, s.byId, s.time), hg = hgoodsOf(s, p), want = 2 + Math.ceil(householdAppetite(s, b, head) * 0.7);
+    if (hg[Mat.Pots] < want && (hg[Mat.Pots] < 1 || b.problems[Problem.Storage] > 0.2 || b.problems[Problem.Spoilage] > 0.2)) {
+      const clayHave = (p.carryKind === Mat.Clay ? p.carryAmt : 0) + b.goods[Mat.Clay];
+      const dep = clayHave >= 3 ? null : s.resources.knownDeposit(b.culture, b.x, b.y, 16, Mat.Clay);
+      if (clayHave >= 3 || dep) {
+        const kiln = worksAround(s, b.x, b.y, 12).find(w => w.kind === Line.Kiln && standing(w) && (w.band === b.id || (w.owner ?? 0) >= 1)) ?? null;
+        const [hx2, hy2] = s.homeSpot(p), q = dep ? s.dryNear(dep.x, dep.y, 4) : null;
+        add({ g: Goal.Pot, v: (0.3 + tr[7] * 0.25) * (hg[Mat.Pots] < 1 ? 1.2 : 0.8) * (1 - foodDrive * 0.6), icon: Bubble.Pot,
+          plan: () => [...(q && dep ? [step(St.Go, q[0], q[1]), step(St.Quarry, q[0], q[1], dep.id, 8, { a: Mat.Clay })] : []), step(St.Go, hx2, hy2), step(St.Shape, hx2, hy2, 0, 12, { a: kiln ? 8 : 4 }), ...(kiln ? [step(St.Go, kiln.x, kiln.y + 1), step(St.Bake, kiln.x, kiln.y + 1, kiln.id, 10)] : [step(St.Go, fx, fy), step(St.Bake, fx, fy, 0, 10)])],
+          why: () => `${p.name} is ${dep ? "fetching clay from the bank and " : ""}shaping pots to bake ${kiln ? "in the kiln" : "in the fire"}, because ${hg[Mat.Pots] < 1 ? `${her(p)} family has nothing to boil food in or keep it from the mice` : "the family's pots are too few for all the food put by"}.` });
+      }
+    }
+  }
+  /* --- the family's animals: fed and watched, and led out to grass when the ground by camp is cropped bare --- */
+  if (!dark && !b.moving && age >= 8 && age < 70 && p.injury < 0.4 && p.sick <= 0) {
+    for (const f of flocksOf(s, b, homeOf(p, s.byId, s.time))) {
+      if (f.n + f.young <= 0 || (f.herder && f.herder !== p.id)) continue;
+      const pasture = f.sp !== Species.Dog && f.cond < 0.55 ? pastureFor(s, b, f) : null;
+      /* a family that keeps animals minds them, the children most readily of all; once seen to for the day, the animals can wait while the rest gets done */
+      const minded = s.time - f.mindedAt < DAY_SECONDS * 0.35;
+      const v = (0.38 + (f.cond < 0.5 ? 0.25 : 0) + (f.young > 0 && f.tame < 0.3 ? 0.1 : 0)) * (worker ? 1 : 1.1) * (1 - foodDrive * 0.3) * (minded ? 0.35 : 1) / (1 + busy(Goal.Herd));
+      add({ g: Goal.Herd, v, icon: Bubble.Goat,
+        plan: () => pasture ? [step(St.Go, pasture[0], pasture[1]), step(St.Herd, pasture[0], pasture[1], f.id, 10, { a: 1 })] : [step(St.Go, f.x, f.y), step(St.Herd, f.x, f.y, f.id, 6)],
+        why: () => pasture ? `${p.name} is leading the family's ${flockWords(f)} out to better grass, because the ground by camp is cropped bare and they are going thin.` : f.sp === Species.Dog ? `${p.name} is feeding the family's ${flockWords(f)} and seeing they stay by the fire.` : `${p.name} is feeding the family's ${flockWords(f)} and keeping an eye on them, so they stay ${f.tame < 0.3 ? "and grow used to people" : "close"}.` });
+    }
+  }
+  /* --- buildings: what the household or the band is short of and someone knows how to build, or a hand lent to one going up --- */
+  if (worker && !dark && !b.moving && age >= 14 && age < 66 && s.time - b.movedAt > DAY_SECONDS * 3 && foodDrive < 0.7 && p.injury < 0.3 && !p.pregnantBy) {
+    for (const wt of wants(s, p, b).slice(0, 2)) {
+      const mk = buildPlan(s, p, b, wt); if (!mk) continue;
+      add({ g: Goal.Construct, v: wt.v * (0.8 + tr[7] * 0.4) * (1 - foodDrive * 0.6) / (1 + busy(Goal.Construct) * 0.25), plan: mk, why: () => wt.why, icon: Bubble.Home });
+    }
+  }
   if (worker && !night && knows(p, Idea.Hides) && b.store.hides >= 1) {
     const who = needsClothes(s, p);
     if (who) add({ g: Goal.Craft, v: 0.55 * (0.4 + tr[7] * 0.6), plan: () => [step(St.Go, fx, fy), step(St.Craft, fx, fy, who.id, 14)], why: () => `${p.name} is sewing ${s.tempC(b.x, b.y) < 0 ? "furs" : "hide clothes"} for ${who === p ? "${her}self".replace("${her}", her(p)) : who.name} because ${who === p ? `${her(p)} own are worn thin` : `${who.name} has nothing warm to wear`}.` });
@@ -380,7 +429,7 @@ function stranded(s: Society, p: Person): void {
   if (w && thirst > 0.35 && s.walker.reach(p.x, p.y, w[0], w[1])) add({ g: Goal.Drink, v: thirst * 2.3, plan: () => [step(St.Go, w[0], w[1]), step(St.Drink, w[0], w[1], 0, 1.5)], why: () => `${alone}, and is going for a drink.`, icon: Bubble.Drop });
   if (night || p.rest < 0.3) add({ g: Goal.Sleep, v: (night ? 1.15 : 0) + tired, plan: () => [step(St.Sleep, p.x, p.y, 0, night ? 40 : 14)], why: () => `${alone}, and is sleeping rough.`, icon: Bubble.Zzz });
   if (!night) {
-    if (p.carryAmt > 0 && p.carryKind > 0 && p.carryKind < 4 && hunger > 0.2) add({ g: Goal.Eat, v: hunger * 1.9, plan: () => [step(St.Eat, p.x, p.y, 0, 3, { a: 1 })], why: () => `${alone}, and is eating the ${foodWord(p.carryKind)} ${she(p)} found.`, icon: Bubble.Meat });
+    if (p.carryAmt > 0 && isFood(p.carryKind) && hunger > 0.2) add({ g: Goal.Eat, v: hunger * 1.9, plan: () => [step(St.Eat, p.x, p.y, 0, 3, { a: 1 })], why: () => `${alone}, and is eating the ${foodWord(p.carryKind)} ${she(p)} found.`, icon: Bubble.Meat });
     let patch: [number, number] = [p.x, p.y], bv = s.eco.plantsAt(p.x, p.y) * 0.06;
     for (const pl of p.places) if (pl.k === Place.Plants) { const d = Math.hypot(pl.x - p.x, pl.y - p.y); const v = estimate(pl, s.time) / (1 + d / 10); if (d < 25 && v > bv && s.walker.reach(p.x, p.y, pl.x, pl.y)) { bv = v; patch = [pl.x, pl.y]; } }
     add({ g: Goal.Gather, v: 0.2 + hunger * 1.5, plan: () => [step(St.Go, patch[0], patch[1]), step(St.Gather, patch[0], patch[1], 0, 4.5, { a: 3 }), step(St.Eat, patch[0], patch[1], 0, 3, { a: 1 })], why: () => `${alone}, and is living off the land, gathering what ${she(p)} can find to eat.`, icon: Bubble.Berries });
@@ -400,7 +449,27 @@ function pick(s: Society, p: Person, opts: Option[]): void {
   const [fx, fy] = s.fireSpot(p);
   commit(s, p, { g: Goal.Rest, v: 0.1, plan: () => [step(St.Go, fx, fy), step(St.Sit, fx, fy, 0, 6)], why: () => restWhy(s, p) });
 }
-const TRIPS = new Set<Goal>([Goal.Gather, Goal.Fish, Goal.Snare, Goal.Hunt, Goal.Haul, Goal.Wood, Goal.Explore, Goal.Visit, Goal.Call, Goal.Ember, Goal.Hut]);
+const TRIPS = new Set<Goal>([Goal.Gather, Goal.Fish, Goal.Snare, Goal.Hunt, Goal.Haul, Goal.Wood, Goal.Explore, Goal.Visit, Goal.Call, Goal.Ember, Goal.Hut, Goal.Construct, Goal.Quarry]);
+/**
+  The steps that answer a want: fetch the material the site still needs most (wood from the trees, clay or stone from a
+  deposit the people knows), carry it there, and a spell of work; or, with everything delivered, just the work.
+*/
+function buildPlan(s: Society, p: Person, b: Band, wt: Want): (() => Step[]) | null {
+  const w = wt.up ?? wt.help ?? null;
+  const needs = w ? (w.up ? w.up.needs : w.needs) : needsOf(wt.def);
+  const a = w ? (w.up || wt.up ? RAISE.Upgrade : RAISE.Household + (w.owner ?? 0)) : RAISE.Household + OWNER[wt.owner];
+  const o = defIndex(wt.def.id), id = w?.id ?? 0;
+  const spell = (dur: number) => step(St.Raise, wt.x, wt.y, id, dur, { a, o });
+  const m = nextMaterial(needs);
+  if (m < 0) return () => [step(St.Go, wt.x, wt.y), spell(12)];
+  if (m === Mat.Wood) {
+    const spot = woodSpot(s, wt.x, wt.y); if (!spot) return null;
+    return () => [step(St.Go, spot[0], spot[1]), step(St.Wood, spot[0], spot[1], 0, knows(p, Idea.Axe) ? 5 : 6, { a: 2 }), step(St.Go, wt.x, wt.y), spell(8)];
+  }
+  const dep = s.resources.knownDeposit(b.culture, b.x, b.y, 18, m); if (!dep) return null;
+  const [qx, qy] = s.dryNear(dep.x, dep.y, 4);
+  return () => [step(St.Go, qx, qy), step(St.Quarry, qx, qy, dep.id, 8, { a: m }), step(St.Go, wt.x, wt.y), spell(8)];
+}
 function commit(s: Society, p: Person, o: Option): boolean {
   const plan = o.plan(); if (!plan || !plan.length) return false;
   const b = s.band(p), dc = Math.hypot(p.x - b.x, p.y - b.y);
@@ -474,10 +543,11 @@ function explorePlan(s: Society, p: Person): Step[] | null {
 
 /* ---------------- helpers ---------------- */
 
-export const HUNT_P = [0.42, 0.24, 0.17, 0.32, 0, 0.12];
-export const DANGER = [0.004, 0.04, 0.05, 0.01, 0, 0.12];
-export const SPECIES_SHORT = ["deer", "aurochs", "mammoth", "horses", "wolves", "bear"];
-const LEARN: Partial<Record<number, string>> = { [Goal.Gather]: "which plants are good to eat", [Goal.Fish]: "how to fish", [Goal.Snare]: "how to set snares", [Goal.Wood]: "how to keep a fire", [Goal.Craft]: "how to work hides", [Goal.Dry]: "how to dry meat", [Goal.Sow]: "how to plant", [Goal.Build]: "how to build a weir", [Goal.Kindle]: "how to make fire", [Goal.Hut]: "how to raise a hut", [Goal.Pit]: "how to dig a storage pit" };
+export const HUNT_P = [0.42, 0.24, 0.17, 0.32, 0, 0.12, 0.36, 0.4, 0.3, 0];
+const BOW = () => techIx("bow-and-arrow");
+export const DANGER = [0.004, 0.04, 0.05, 0.01, 0, 0.12, 0.002, 0.001, 0.03, 0];
+export const SPECIES_SHORT = ["deer", "aurochs", "mammoth", "horses", "wolves", "bear", "goats", "sheep", "boar", "dogs"];
+const LEARN: Partial<Record<number, string>> = { [Goal.Gather]: "which plants are good to eat", [Goal.Fish]: "how to fish", [Goal.Snare]: "how to set snares", [Goal.Wood]: "how to keep a fire", [Goal.Craft]: "how to work hides", [Goal.Dry]: "how to dry meat", [Goal.Sow]: "how to plant", [Goal.Build]: "how to build a weir", [Goal.Kindle]: "how to make fire", [Goal.Hut]: "how to raise a hut", [Goal.Pit]: "how to dig a storage pit", [Goal.Construct]: "how to build", [Goal.Quarry]: "where the good clay and stone are", [Goal.Pot]: "how to shape a pot", [Goal.Herd]: "how to mind the animals" };
 
 function canHunt(s: Society, p: Person, age: number): boolean {
   if (age < 15 || age > 62 || p.spear < 0.1 || !knows(p, Idea.Spear) || p.injury > 0.25) return false;
@@ -497,6 +567,8 @@ function nearestWater(s: Society, p: Person): [number, number] | null {
   const consider = (x: number, y: number) => { const c = cost(x, y); if (c < bc && s.walker.reach(p.x, p.y, x, y)) { bc = c; best = [x, y]; } };
   for (const pl of p.places) if (pl.k === Place.Water) consider(pl.x, pl.y);
   consider(b.water[0], b.water[1]);
+  /* a well standing by the camp, or on the way */
+  const well = s.wellSpot(p.x, p.y, 16); if (well) consider(well[0], well[1]);
   if (bc > 4) {
     const w = s.waterNear(p.x, p.y, 16);
     if (w && cost(w[0], w[1]) < bc && s.walker.reach(p.x, p.y, w[0], w[1])) { s.learnPlace(p, Place.Water, w[0], w[1], 1, 0, 0); best = w; }
@@ -530,10 +602,11 @@ function foodReason(s: Society, p: Person, hunger: number, kidsHungry: number, s
 export function woodSpot(s: Society, x: number, y: number): [number, number] | null {
   const W = s.w.w;
   let best: [number, number] | null = null, bd = 1e9;
+  /* the nearer trees first; once a camp has cut them, the walk for wood gets longer */
   for (let k = 0; k < 40; k++) {
-    const a = s.rng.next() * Math.PI * 2, r = 2 + s.rng.next() * 16, tx = Math.floor(x + Math.cos(a) * r), ty = Math.floor(y + Math.sin(a) * r);
+    const a = s.rng.next() * Math.PI * 2, r = 2 + s.rng.next() * (k < 24 ? 16 : 30), tx = Math.floor(x + Math.cos(a) * r), ty = Math.floor(y + Math.sin(a) * r);
     if (tx < 1 || ty < 1 || tx >= W - 1 || ty >= s.w.h - 1) continue;
-    const t = s.w.tree[ty * W + tx]; if (!t || t === Tree.Reeds || t === Tree.Cactus) continue;
+    if (!s.resources.cuttable(ty * W + tx)) continue;
     /* stand beside the tree, on dry ground */
     for (const [dx, dy] of [[0, 1], [1, 0], [-1, 0], [0, -1]]) { const sx = tx + dx + 0.5, sy = ty + dy + 0.5; if (s.walker.dry(sx, sy)) { const d = Math.hypot(sx - x, sy - y); if (d < bd) { bd = d; best = [sx, sy]; } break; } }
   }
