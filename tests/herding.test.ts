@@ -254,6 +254,10 @@ describe("how keeping animals comes to a people", () => {
     for (let k = 0; k < 600 && !dogs; k++) { b.yesterday.spoiled = 5; days(s, 1, 2); dogs = flocksOf(s, b).find(f => f.sp === Species.Dog); }
     expect(dogs).toBeTruthy();
     expect(dogs!.n + dogs!.young).toBeGreaterThanOrEqual(1); expect(dogs!.tame).toBeGreaterThanOrEqual(0.5);
+    /* pups with no grown dog among them are fed like any flock: their condition is a number, not nothing divided by nothing */
+    days(s, 1, 2);
+    expect(Number.isFinite(dogs!.cond)).toBe(true); expect(dogs!.cond).toBeGreaterThan(0);
+    expect(s.eco.hunt(b.x, b.y, 0)).toBe(0);
     expect(s.stats.herds.pups).toBe(2);
     const e = s.events.find(e => e.kind === "kept" && e.title === "Wolf pups taken in")!;
     expect(e).toBeTruthy(); expect(e.text).toContain("wolf pups"); expect(e.title).toBe("Wolf pups taken in");

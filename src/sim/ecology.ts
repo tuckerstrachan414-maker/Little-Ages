@@ -86,6 +86,7 @@ export class Ecology {
   }
   /** A predator takes small game from the patch it stands in; returns how much it found (0..1). */
   hunt(x: number, y: number, want: number): number {
+    if (want <= 0) return 0;
     const c = this.cellOf(x, y), got = Math.min(want, this.rabbits[c] * 0.5);
     this.rabbits[c] -= got; return this.rabbitK[c] > 0 ? got / want : 0;
   }

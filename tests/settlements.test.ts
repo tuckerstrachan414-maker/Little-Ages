@@ -9,8 +9,8 @@ import { homeOf, type Band } from "../src/sim/people/band.ts";
 import { Idea, learn } from "../src/sim/people/ideas.ts";
 import { techIx, techByKey, Era } from "../src/sim/tech/tree.ts";
 import { Problem } from "../src/sim/tech/problems.ts";
-import { addWork, Work } from "../src/sim/people/works.ts";
-import { raise, hutOf, hutStands, hutJob } from "../src/sim/people/homes.ts";
+import { addWork, Work, worksDay } from "../src/sim/people/works.ts";
+import { raise, hutOf, hutStands, hutJob, sharedStore, pitOf } from "../src/sim/people/homes.ts";
 import { villagesDay, type Village } from "../src/sim/people/villages.ts";
 import { settlementsDay, cultureAge, listenedAt, villageBuildings, TIER_NAMES, isChief } from "../src/sim/people/settlements.ts";
 import { wants } from "../src/sim/buildings/wants.ts";
@@ -151,6 +151,45 @@ describe("the chief", () => {
     expect(chief.prestige).toBeGreaterThan(pr);
     expect(v.communal).toContain(w.id);
     expect(villageDetail(s, v.id)!.call).toBe("");
+  });
+});
+
+describe("the chief's granary", () => {
+  it("is raised by the villagers while the call stands, and then is everyone's to put by in", () => {
+    const { s } = fresh();
+    const b = s.bands.slice().sort((a, c) => c.members.length - a.members.length)[0];
+    const v = villageOf(s, b);
+    const all = b.members.map(id => s.byId.get(id)!).filter(q => s.age(q) >= 16), chief = grown(s, b)[0];
+    for (const q of all) q.follows = chief.id;
+    know(s, chief, "pits"); know(s, chief, "huts"); know(s, chief, "granary");
+    for (const o of s.bands) { o.problems[Problem.Water] = 0; o.problems[Problem.Storage] = 0; }
+    expect(b.hearths.size).toBeGreaterThanOrEqual(3);
+    b.problems[Problem.Storage] = 0.9;
+    settlementsDay(s);
+    expect(v.chief).toBe(chief.id);
+    expect(v.call).toBeTruthy();
+    const w = s.works.find(o => o.id === v.call!.work)!;
+    expect(w.kind).toBe(Line.Store); expect(w.def).toBe("store1"); expect(w.owner).toBe(OWNER.settlement); expect(w.prog).toBe(0);
+    /* a villager sees it as work to lend a hand to, like a well; and the call stands the next day, with nothing yet delivered */
+    const helper = all.find(q => q !== chief && s.age(q) < 60)!;
+    expect(wants(s, helper, b).some(x => x.help === w)).toBe(true);
+    s.time += DAY_SECONDS; settlementsDay(s);
+    expect(v.call).toBeTruthy();
+    /* a frame on posts nobody has worked on wears like any other going up; kept, it waits */
+    worksDay(s);
+    expect(s.works.includes(w)).toBe(true);
+    const st = step(St.Raise, w.x, w.y, w.id, 1, { a: RAISE.Settlement, o: 0 });
+    helper.carryKind = Mat.Wood; helper.carryAmt = 16;
+    for (let k = 0; k < 80 && !standing(w); k++) buildSpell(s, helper, st);
+    expect(standing(w)).toBe(true);
+    expect(s.events.some(e => e.kind === "granary" && e.text.includes("for everyone"))).toBe(true);
+    settlementsDay(s);
+    expect(v.call).toBeNull(); expect(v.communal).toContain(w.id);
+    expect(sharedStore(s, b)).toBe(w);
+    /* a household with no pit of its own puts by in it */
+    const home = homeOf(helper, s.byId, s.time);
+    if (!s.works.some(o => o.kind === Work.Pit && o.band === b.id && o.home === home)) expect(pitOf(s, b, home)).toBe(w);
+    expect(w.size).toBeGreaterThanOrEqual(100);
   });
 });
 

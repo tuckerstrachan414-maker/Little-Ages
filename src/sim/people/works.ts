@@ -268,7 +268,7 @@ export function worksDay(s: Society): void {
   for (const w of s.works) {
     const T = s.tempC(w.x, w.y);
     /* wells, kilns, pens and the rest wear by their own kind; houses and stores keep their old ways */
-    if (w.kind >= 4) { if (buildingDay(s, w)) keep.push(w); else s.worksVersion++; continue; }
+    if (w.kind >= 4 || (w.kind === Work.Pit && (w.prog ?? 1) < 1)) { if (buildingDay(s, w)) keep.push(w); else s.worksVersion++; continue; }
     if (w.kind === Work.Hut) { if (hutDay(s, w)) keep.push(w); else s.worksVersion++; continue; }
     if (w.kind === Work.Pit) {
       const b = s.bandById.get(w.band), kept = !!b && !b.moving && Math.hypot(b.x - w.x, b.y - w.y) < 14;

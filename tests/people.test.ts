@@ -65,6 +65,15 @@ describe("people: founding", () => {
       expect(b.members.length).toBeGreaterThanOrEqual(12);
     }
   });
+  it("a band's number is never given twice, even after the band is gone", () => {
+    const { s: t } = fresh("bands", 4);
+    const ids = new Set(t.bands.map(b => b.id)); expect(ids.size).toBe(t.bands.length);
+    const last = t.bands[t.bands.length - 1];
+    t.endBand(last, "is no more", false);
+    expect(t.bandById.has(last.id)).toBe(false);
+    const nb = t.newBand(t.bands[0].x, t.bands[0].y, t.bands[0].culture, t.bands[0].id);
+    expect(nb.id).not.toBe(last.id); expect(ids.has(nb.id)).toBe(false);
+  });
   it("peoples of two bands share a culture, and different peoples do not", () => {
     const byCulture = new Map<number, number>();
     for (const b of s.bands) byCulture.set(b.culture, (byCulture.get(b.culture) ?? 0) + 1);

@@ -11,8 +11,8 @@ import { techIx, techByKey } from "../src/sim/tech/tree.ts";
 import { Work, worksDay, workById } from "../src/sim/people/works.ts";
 import { digPit, pitOf, pitRoom, pitSite, raise, hutOf, hutJob, hutHomes, hutStands, hutWords, hutDay } from "../src/sim/people/homes.ts";
 import { DEFS, Line, defById, baseDef, materialTotal, houseWords } from "../src/sim/buildings/defs.ts";
-import { startBuilding, startUpgrade, buildSpell, deliver, deliveredFraction, buildingDay, defOf, canStart, canUpgradeTo, standing, needsOf, undelivered, RAISE } from "../src/sim/buildings/build.ts";
-import { wants, materialsInReach, communalSite } from "../src/sim/buildings/wants.ts";
+import { startBuilding, startUpgrade, buildSpell, deliver, deliveredFraction, buildingDay, defOf, canStart, canUpgradeTo, standing, needsOf, undelivered, buildingOf, RAISE } from "../src/sim/buildings/build.ts";
+import { wants, materialsInReach, communalSite, householdSite } from "../src/sim/buildings/wants.ts";
 import { Problem } from "../src/sim/tech/problems.ts";
 import { Mat, MAT_COUNT } from "../src/sim/economy/goods.ts";
 import { bandDetail } from "../src/sim/people/inspect.ts";
@@ -112,10 +112,14 @@ describe("raising a building", () => {
     const def = defById("kiln0"); know(s, p, "kiln-firing");
     const w = startBuilding(s, p, def, b.x + 6, b.y, "household", homeOf(p, s.byId, s.time));
     expect(w.prog).toBe(0);
+    /* kept, with nothing yet delivered, it waits for its first load; untouched for a season it begins to go; with the band gone it goes fast */
+    for (let d = 0; d < 10; d++) expect(buildingDay(s, w)).toBe(true);
+    expect(w.prog).toBe(0);
+    s.time += DAY_SECONDS * 25; expect(buildingDay(s, w)).toBe(true); expect(w.prog).toBeLessThan(0);
     w.prog = 0.3; b.x += 100;
-    let alive = true; for (let d = 0; d < 40 && alive; d++) alive = buildingDay(s, w);
+    let alive = true, days = 0; for (; days < 90 && alive; days++) alive = buildingDay(s, w);
     b.x -= 100;
-    expect(alive).toBe(false);
+    expect(alive).toBe(false); expect(days).toBeGreaterThan(30);
   });
 });
 
@@ -198,6 +202,52 @@ describe("what people want to build", () => {
     expect(materialsInReach(s, b, defById("house1-timber"))).toBe(true);
     const clayKnown = !!s.resources.knownDeposit(b.culture, b.x, b.y, 18, Mat.Clay);
     expect(materialsInReach(s, b, defById("house1-mudbrick"))).toBe(clayKnown);
+  });
+  it("two who set out for the same well raise one between them, never two on one spot, and one standing there needs nothing more", () => {
+    const { s: t } = fresh();
+    const b = t.bands[1], ps = grown(t, b).slice(0, 2);
+    for (const p of ps) { know(t, p, "digging-sticks"); know(t, p, "wells"); }
+    const def = defById("well0"), o = DEFS.indexOf(def), at = communalSite(t, b, def, b.id)!;
+    expect(at).toBeTruthy();
+    /* both planned the same spot before either began; the second finds the first's frame and brings their load to it */
+    const stA = step(St.Raise, at[0], at[1], 0, 1, { a: RAISE.Band, o }), stB = step(St.Raise, at[0], at[1], 0, 1, { a: RAISE.Band, o });
+    ps[0].carryKind = Mat.Wood; ps[0].carryAmt = 2; buildSpell(t, ps[0], stA);
+    ps[1].carryKind = Mat.Wood; ps[1].carryAmt = 2; buildSpell(t, ps[1], stB);
+    const wells = t.works.filter(w => w.kind === Line.Well);
+    expect(wells.length).toBe(1); expect(stB.id).toBe(stA.id); expect(undelivered(wells[0].needs)).toBe(0);
+    for (let k = 0; k < 80 && !standing(wells[0]); k++) buildSpell(t, ps[0], stA);
+    expect(standing(wells[0])).toBe(true);
+    /* a third who set out for the same spot finds the well dug, and starts nothing */
+    buildSpell(t, ps[1], step(St.Raise, at[0], at[1], 0, 1, { a: RAISE.Band, o }));
+    expect(t.works.filter(w => w.kind === Line.Well).length).toBe(1);
+  });
+  it("a fold fallen in does not hide the one standing beside it, nor take its place; a worn fold is mended before it falls", () => {
+    const { s: t } = fresh();
+    const b = t.bands[2], p = headOf(t, b), home = homeOf(p, t.byId, t.time);
+    know(t, p, "huts"); know(t, p, "penning");
+    const def = defById("pen0"), at1 = householdSite(t, b, def, home)!;
+    expect(at1).toBeTruthy();
+    const ruin = startBuilding(t, p, def, at1[0], at1[1], "household", home); ruin.prog = 1; ruin.needs = undefined; ruin.state = 0.1;
+    expect(standing(ruin)).toBe(false); expect(buildingOf(t, b, Line.Pen, home)).toBe(ruin);
+    /* the household's own fallen fold stands in the way of the next one, which goes elsewhere */
+    const at2 = householdSite(t, b, def, home)!;
+    expect(at2).toBeTruthy(); expect(Math.hypot(at2[0] - at1[0], at2[1] - at1[1])).toBeGreaterThan(1);
+    const pen = startBuilding(t, p, def, at2[0], at2[1], "household", home); pen.prog = 1; pen.needs = undefined; pen.state = 0.9;
+    expect(buildingOf(t, b, Line.Pen, home)).toBe(pen);
+    /* worn, it is mended: a want with no materials to carry, and a spell that puts it right */
+    pen.state = 0.4;
+    const wt = wants(t, p, b).find(x => x.mend && x.help === pen)!;
+    expect(wt).toBeTruthy(); expect(wt.why).toContain("mending");
+    const mended = t.stats.buildings.mended;
+    buildSpell(t, p, step(St.Raise, pen.x, pen.y, pen.id, 1, { a: RAISE.Mend, o: DEFS.indexOf(def) }));
+    expect(pen.state).toBeGreaterThan(0.4); expect(t.stats.buildings.mended).toBe(mended + 1);
+    expect(wants(t, p, b).some(x => x.mend && x.help === pen)).toBe(pen.state < 0.6);
+    /* a sound fold is nobody's to mend, and a kiln beside it is not sited on top of it */
+    pen.state = 1;
+    expect(wants(t, p, b).some(x => x.mend)).toBe(false);
+    know(t, p, "pottery"); know(t, p, "kiln-firing");
+    const kat = householdSite(t, b, defById("kiln0"), home);
+    if (kat) expect(Math.hypot(kat[0] - pen.x, kat[1] - pen.y)).toBeGreaterThan(1.5);
   });
   it("the decision loop offers the work, and the step switch carries it out", () => {
     const b = s.bands[3], p = headOf(s, b);

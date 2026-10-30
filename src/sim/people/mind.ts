@@ -10,7 +10,7 @@ import { visitTarget } from "./friends.ts";
 import { knows, bandKnows, showTarget } from "./ideas.ts";
 import { TECHS as IDEAS, Idea } from "../tech/tree.ts";
 import { Work, weirSite, weirFor, sownThisYear, sowSite, ripePlot, worksAround, harvestSpell } from "./works.ts";
-import { pitOf, pitFood, pitRoom, pitSite, hutJob, hutWords, hutWordsOf, stayHope, freezing } from "./homes.ts";
+import { pitOf, pitFood, pitRoom, pitSite, sharedStore, hutJob, hutWords, hutWordsOf, stayHope, freezing } from "./homes.ts";
 import { wants, nextMaterial, type Want } from "../buildings/wants.ts";
 import { needsOf, RAISE, OWNER } from "../buildings/build.ts";
 import { defIndex } from "../buildings/defs.ts";
@@ -310,6 +310,13 @@ export function decide(s: Society, p: Person, forced?: Goal): void {
       const room = pitRoom(pit) - pitFood(pit), spare = keepable - app * keepDays;
       if (room > 2 && spare > app && (b.busy.get(Goal.Store) ?? 0) < 2) add({ g: Goal.Store, v: (0.22 + tr[7] * 0.2 + (leanWinter ? 0.2 : 0)) * clamp01(spare / (app * 4)) * (1 - hunger * 0.7), plan: () => [step(St.Go, pit.x, pit.y), step(St.Store, pit.x, pit.y, pit.id, 4)], why: () => `${p.name} is putting the family's ${hh && hh.dried > hh.plant ? "dried meat" : "plant food"} by in the pit, ${leanWinter ? "against the winter" : "where it keeps far longer than at the hearth"}.`, icon: Bubble.Home });
       const hd = hh ? storeFood(hh) / app : 0;
+      /* the granary everyone at the place shares: the family's spare goes there once its own pit is full, and comes back from there when the pit is bare */
+      const shared = sharedStore(s, b);
+      if (shared && shared !== pit && shared.foods) {
+        const sroom = pitRoom(shared) - pitFood(shared);
+        if (room <= 2 && sroom > 2 && spare > app && (b.busy.get(Goal.Store) ?? 0) < 3) add({ g: Goal.Store, v: (0.2 + tr[7] * 0.2 + (leanWinter ? 0.2 : 0)) * clamp01(spare / (app * 4)) * (1 - hunger * 0.7), plan: () => [step(St.Go, shared.x, shared.y), step(St.Store, shared.x, shared.y, shared.id, 4)], why: () => `${p.name} is putting the family's spare ${hh && hh.dried > hh.plant ? "dried meat" : "plant food"} by in the granary everyone at ${b.siteName} shares, the family's own pit being full.`, icon: Bubble.Home });
+        if (hd < 1 && pitFood(pit) <= 1 && pitFood(shared) > 1 && !night) add({ g: Goal.Fetch, v: (0.28 + Math.max(hunger, kidsHungry) * 0.9) * (1 - hd), plan: () => [step(St.Go, shared.x, shared.y), step(St.Fetch, shared.x, shared.y, shared.id, 3), step(St.Go, hx, hy)], why: () => `${p.name} is fetching food from the granary everyone at ${b.siteName} shares, because the hearth is bare and the family's pit is empty.`, icon: Bubble.Berries });
+      }
       if (hd < 1 && pitFood(pit) > 1 && !night) add({ g: Goal.Fetch, v: (0.3 + Math.max(hunger, kidsHungry) * 0.9) * (1 - hd), plan: () => [step(St.Go, pit.x, pit.y), step(St.Fetch, pit.x, pit.y, pit.id, 3), step(St.Go, hx, hy)], why: () => `${p.name} is opening the family's pit for food, because the hearth is bare${kidsHungry > 0.3 ? " and the children are hungry" : ""}.`, icon: Bubble.Berries });
     }
     /* a hut: whoever knows how starts one; the rest of the household helps with one going up */
@@ -456,9 +463,11 @@ const TRIPS = new Set<Goal>([Goal.Gather, Goal.Fish, Goal.Snare, Goal.Hunt, Goal
 */
 function buildPlan(s: Society, p: Person, b: Band, wt: Want): (() => Step[]) | null {
   const w = wt.up ?? wt.help ?? null;
-  const needs = w ? (w.up ? w.up.needs : w.needs) : needsOf(wt.def);
-  const a = w ? (w.up || wt.up ? RAISE.Upgrade : RAISE.Household + (w.owner ?? 0)) : RAISE.Household + OWNER[wt.owner];
   const o = defIndex(wt.def.id), id = w?.id ?? 0;
+  if (wt.mend && w) return () => [step(St.Go, wt.x, wt.y), step(St.Raise, wt.x, wt.y, id, 10, { a: RAISE.Mend, o })];
+  /* a rebuild not yet begun takes the new def's materials; one under way, what it still wants; a fresh building, its def's */
+  const needs = w ? (w.up ? w.up.needs : wt.up ? needsOf(wt.def) : w.needs) : needsOf(wt.def);
+  const a = w ? (w.up || wt.up ? RAISE.Upgrade : RAISE.Household + (w.owner ?? 0)) : RAISE.Household + OWNER[wt.owner];
   const spell = (dur: number) => step(St.Raise, wt.x, wt.y, id, dur, { a, o });
   const m = nextMaterial(needs);
   if (m < 0) return () => [step(St.Go, wt.x, wt.y), spell(12)];

@@ -23,8 +23,8 @@ export const WELLS = () => techIx("wells");
 
 export interface Want {
   def: BuildingDef;
-  /** where it goes, or the building it rebuilds or helps with */
-  x: number; y: number; up?: Work; help?: Work;
+  /** where it goes, or the building it rebuilds or helps with (or mends, when `mend` is set) */
+  x: number; y: number; up?: Work; help?: Work; mend?: boolean;
   v: number; why: string; owner: Owner; home: number;
 }
 
@@ -53,8 +53,9 @@ export function communalSite(s: Society, b: Band, def: BuildingDef, seed: number
 /** Somewhere beside a household's hut for its own building. */
 export function householdSite(s: Society, b: Band, def: BuildingDef, home: number): [number, number] | null {
   const h = b.homes.get(home); if (!h) return null;
-  for (let k = 0; k < 10; k++) {
-    const a = (k * 0.785 + home * 0.53) % (Math.PI * 2), r = 2.4 + (k % 2) * 0.8, x = h[0] + Math.cos(a) * r, y = h[1] + 0.3 + Math.sin(a) * r * 0.8;
+  /* three rings out from the hut, seven spots each: a kiln, a fold and the fallen fold before it all find room */
+  for (let k = 0; k < 21; k++) {
+    const a = (k * 0.9 + home * 0.53) % (Math.PI * 2), r = 2.4 + Math.floor(k / 7) * 0.8, x = h[0] + Math.cos(a) * r, y = h[1] + 0.3 + Math.sin(a) * r * 0.8;
     if (clearAt(s, b, x, y, def.reach, home) && s.walker.reach(b.x, b.y, x, y)) return [x, y];
   }
   return null;
@@ -71,9 +72,17 @@ export function wants(s: Society, p: Person, b: Band): Want[] {
   const near = worksAround(s, b.x, b.y, 14);
   /* a building already going up that is the household's own, or the band's or the village's: everyone lends a hand */
   for (const w of near) {
-    if (w.kind < 4 && !w.up) continue;
+    /* huts and the old pits go their own way (hutJob and the pit options); a granary begun on posts, like a well or a kiln, is raised here */
+    if ((w.kind === Line.House || (w.kind === Line.Store && !w.def)) && !w.up) continue;
     const mine = (w.owner ?? 0) === 0 ? w.home === home : w.band === b.id || s.bandById.get(w.band)?.culture === b.culture;
-    if (!mine || (!w.up && (w.prog ?? 1) >= 1)) continue;
+    if (!mine) continue;
+    /* a worn well, kiln or fold that stands: a day's mending before it falls in */
+    if (w.kind >= 4 && !w.up && standing(w) && w.state < 0.6) {
+      const def = defOf(w);
+      out.push({ def, x: w.x, y: w.y, help: w, mend: true, v: 0.22 + (0.6 - w.state) * 0.6, owner: (["household", "band", "settlement"] as Owner[])[w.owner ?? 0], home, why: `${p.name} is mending the ${def.name} ${w.owner ? `the ${b.name} share` : `${her} family keeps`} at ${b.siteName}, before it falls in.` });
+      continue;
+    }
+    if (!w.up && (w.prog ?? 1) >= 1) continue;
     const def = targetDef(w), left = undelivered(w.up ? w.up.needs : w.needs);
     /* a work the village's chief called for: those who go along with the chief come readily, those who cannot stand the chief mostly stay away */
     let v = 0.4 + ((w.owner ?? 0) >= 1 ? 0.05 : 0.1);

@@ -317,7 +317,7 @@ function dogsFed(s: Society, b: Band, f: Flock): number {
   /* the pot feeds the dogs too, when it has plenty */
   if (got < want && b.store.meat + b.store.fish + b.store.dried > b.appetite) flesh(b.store, want);
   /* and dogs hunt for themselves a little */
-  const hunted = s.eco.hunt(f.x, f.y, 0.008 * f.n) * 0.2;
+  const hunted = f.n > 0 ? s.eco.hunt(f.x, f.y, 0.008 * f.n) * 0.2 : 0;
   const fed = Math.min(1, got / want + hunted);
   f.unfed = fed < 0.3 ? f.unfed + 1 : 0;
   if (f.unfed > (f.tame >= 1 ? 6 : 3) && f.n + f.young > 0) {

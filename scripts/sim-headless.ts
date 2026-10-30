@@ -77,7 +77,7 @@ const report = (label: string) => {
       {
         const bl = people.stats.buildings, byName = new Map<string, number>(), goingUp = new Map<string, number>();
         for (const w of people.works) { if (w.kind < 2 || (w.kind <= 3 && !(w.tier ?? 0))) continue; const name = defOf(w).name; if ((w.prog ?? 1) < 1) goingUp.set(name, (goingUp.get(name) ?? 0) + 1); else if (w.state > 0.2) byName.set(name, (byName.get(name) ?? 0) + 1); }
-        line += `\n${"".padEnd(16)} buildings: ${byName.size ? [...byName].map(([n, k]) => `${k} ${n}`).join(", ") : "none beyond huts and pits"}${goingUp.size ? ` | going up: ${[...goingUp].map(([n, k]) => `${k} ${n}`).join(", ")}` : ""} | ${bl.built} finished, ${bl.upgrades} rebuilt, ${Math.round(bl.delivered)} loads delivered, ${Math.round(bl.quarried)} quarried`;
+        line += `\n${"".padEnd(16)} buildings: ${byName.size ? [...byName].map(([n, k]) => `${k} ${n}`).join(", ") : "none beyond huts and pits"}${goingUp.size ? ` | going up: ${[...goingUp].map(([n, k]) => `${k} ${n}`).join(", ")}` : ""} | ${bl.built} finished, ${bl.upgrades} rebuilt, ${bl.mended} mended, ${Math.round(bl.delivered)} loads delivered, ${Math.round(bl.quarried)} quarried`;
       }
       {
         const adults = people.people.filter(p => people.age(p) >= 5), hs = people.stats.health, ps = people.stats.pots;

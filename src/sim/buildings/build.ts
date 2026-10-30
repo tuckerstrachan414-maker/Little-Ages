@@ -3,10 +3,12 @@ import { Bubble } from "../../shared/people.ts";
 import { DEFS, Line, defById, baseDef, materialTotal, houseWords, type BuildingDef, type Owner, type WallKind, type RoofKind } from "./defs.ts";
 import { addWork, workById, worksAround, type Work } from "../people/works.ts";
 import { homeOf, noFood, type Band } from "../people/band.ts";
+import { clearAt } from "../people/homes.ts";
 import { Food, Skill, type Person, type Step } from "../people/person.ts";
 import { knows, practice } from "../people/ideas.ts";
 import { Idea, techIx } from "../tech/tree.ts";
 import { MAT_COUNT } from "../economy/goods.ts";
+import { DAY_SECONDS } from "../../shared/types.ts";
 import type { Society } from "../people/society.ts";
 
 /*
@@ -50,10 +52,11 @@ export function chooseMaterials(s: Society, b: Band, def: BuildingDef): { walls:
   const roof: RoofKind = roofs.includes("turf") && c.winter < -6 ? "turf" : roofs.includes("plank") && walls === "timber" && s.resources.forestLeft(b.x, b.y, 16) > 0.5 ? "plank" : roofs[0];
   return { walls, roof };
 }
-/** The building of a line a household has at its band's camp, if any (any tier). */
+/** The building of a line a household has at its band's camp, if any (any tier): one standing or going up before one fallen in. */
 export function buildingOf(s: Society, b: Band, line: number, home: number): Work | null {
-  for (const w of worksAround(s, b.x, b.y, 14)) if (w.kind === line && w.band === b.id && w.home === home) return w;
-  return null;
+  let fallen: Work | null = null;
+  for (const w of worksAround(s, b.x, b.y, 14)) if (w.kind === line && w.band === b.id && w.home === home) { if (standing(w) || (w.prog ?? 1) < 1) return w; fallen ??= w; }
+  return fallen;
 }
 /** Buildings of a line standing near a spot, owned by anyone. */
 export function buildingsNear(s: Society, x: number, y: number, r: number, line: number, finished = true): Work[] {
@@ -70,7 +73,7 @@ export function startBuilding(s: Society, p: Person, def: BuildingDef, x: number
   const b = s.band(p), m = chooseMaterials(s, b, def);
   const w = addWork(s, {
     kind: def.line, x, y, wx: x, wy: y, band: b.id, home: owner === "household" ? home : 0, by: p.id, t: s.time, state: 1, food: 0, crop: "", ripe: 0,
-    prog: 0, tier: def.tier, def: def.id, walls: m.walls, roof: m.roof, owner: OWNER[owner], needs: needsOf(def), labor: def.labor, style: s.cultures[b.culture].hut, look: "plain",
+    prog: 0, kept: s.time, tier: def.tier, def: def.id, walls: m.walls, roof: m.roof, owner: OWNER[owner], needs: needsOf(def), labor: def.labor, style: s.cultures[b.culture].hut, look: "plain",
     ...(def.line === Line.Store ? { foods: noFood(), opened: s.time, size: def.effects.room } : {}),
   });
   s.stats.buildings.started++;
@@ -99,15 +102,25 @@ export function deliver(s: Society, p: Person, w: Work): number {
 export function buildSpell(s: Society, p: Person, st: Step): void {
   const b = s.band(p), home = homeOf(p, s.byId, s.time);
   let w = st.id ? workById(s, st.id) ?? null : null;
+  if (st.a === RAISE.Mend) { if (w) mendSpell(s, p, w); return; }
   if (st.a === RAISE.Upgrade) {
     if (!w || (w.prog ?? 1) < 1) return;
-    if (!w.up) { const def = DEFS[st.o ?? -1]; if (!def || !canStart(p, def) || def.from !== fromKey(w)) return; startUpgrade(s, w, def); }
+    if (!w.up) { const def = DEFS[st.o ?? -1]; if (!def || !canStart(p, def) || !canUpgradeTo(w, def)) return; startUpgrade(s, w, def); }
   } else if (!w) {
     const def = DEFS[st.o ?? -1]; if (!def || !canStart(p, def)) return;
-    w = startBuilding(s, p, def, st.x, st.y, OWNERS[Math.max(0, Math.min(2, (st.a ?? 3) - 3))], home);
-    st.id = w.id;
+    const owner = OWNERS[Math.max(0, Math.min(2, (st.a ?? 3) - 3))];
+    /* someone else may have begun it since this plan was made (the spot is the same for everyone who wanted it): lend a hand to that one rather than start a second on top of it; one already standing there needs nothing */
+    const there = worksAround(s, st.x, st.y, 2).filter(o => o.kind === def.line && Math.hypot(o.x - st.x, o.y - st.y) < 1.5);
+    const begun = there.find(o => (o.prog ?? 1) < 1) ?? (owner === "household" ? [buildingOf(s, b, def.line, home)].find(o => o && (o.prog ?? 1) < 1) ?? null : null);
+    if (begun) { w = begun; st.id = w.id; }
+    else {
+      if (there.some(o => standing(o)) || !clearAt(s, b, st.x, st.y, def.reach, owner === "household" ? home : 0)) return;
+      w = startBuilding(s, p, def, st.x, st.y, owner, home);
+      st.id = w.id;
+    }
   }
   deliver(s, p, w);
+  w.kept = s.time;
   const def = targetDef(w);
   const labor = Math.max(1, w.up ? w.up.labor : (w.labor ?? def.labor));
   /* a people that has raised many of a kind raises the next faster */
@@ -128,8 +141,16 @@ export function buildSpell(s: Society, p: Person, st: Step): void {
   if ((before < 0.4) !== (w.prog < 0.4) || w.prog >= 1) s.worksVersion++;
   if (w.prog >= 1 && before < 1) finishBuilding(s, p, b, w);
 }
-/** The `from` key a rebuild of this work must name: its def, or its line and tier ("house1" for any first-tier house). */
-function fromKey(w: Work): string { const def = defOf(w); return def.id; }
+/** A spell of mending on a worn building that stands: no new materials, the know-how and a day's work put it right by its def's measure. */
+function mendSpell(s: Society, p: Person, w: Work): void {
+  if (!standing(w) || w.up || w.state >= 1) return;
+  const def = defOf(w), before = w.state;
+  w.state = Math.min(1, w.state + def.decay.mend * (0.7 + p.skills[Skill.Craft] * 0.6));
+  p.skills[Skill.Craft] = Math.min(1, p.skills[Skill.Craft] + 0.003);
+  for (const k of def.tech) { const ix = techIx(k); if (knows(p, ix)) practice(s, p, ix, 0.01); }
+  if ((before >= 0.55) !== (w.state >= 0.55)) s.worksVersion++;
+  s.stats.buildings.mended++;
+}
 /** Whether a def can be reached by rebuilding this work. */
 export function canUpgradeTo(w: Work, def: BuildingDef): boolean {
   if (!def.from || def.line !== w.kind || def.tier !== (w.tier ?? 0) + 1) return false;
@@ -142,7 +163,9 @@ function builtText(p: Person, b: Band, w: Work, firstEver: boolean): string {
   const def = defOf(w), her = p.sex === "f" ? "her" : "his";
   switch (def.line) {
     case Line.Well: return `${p.name} of the ${b.name} and the others have dug a well at ${b.siteName}: days of digging, and the water comes up clear. Nobody need walk to the river for it now.${firstEver ? " It is the first well anywhere." : ""}`;
-    case Line.Store: return `${p.name}'s family raised a granary on posts by their house at ${b.siteName}, roofed with thatch, with room for a whole winter's food out of reach of the mice.${firstEver ? " Nobody has built one before." : ""}`;
+    case Line.Store: return (w.owner ?? 0) >= 1
+      ? `${p.name} and the others have raised a granary for everyone at ${b.siteName}: a box on posts under thatch, with room for a whole winter's food out of reach of the mice, that any family of the place may put by in.${firstEver ? " Nobody has built one before." : ""}`
+      : `${p.name}'s family raised a granary on posts by their house at ${b.siteName}, roofed with thatch, with room for a whole winter's food out of reach of the mice.${firstEver ? " Nobody has built one before." : ""}`;
     case Line.Kiln: return `${p.name} built a kiln of daub beside ${her} family's hut: a beehive with a mouth for the fire, in which pots bake harder than on any hearth.${firstEver ? " It is the first kiln anywhere." : ""}`;
     case Line.Pen: return `${p.name} wove a fold of brush beside ${her} family's hut, to keep the animals in at night where the wolves cannot get at them.`;
     default: return `${p.name} of the ${b.name} finished a ${def.name} at ${b.siteName}${firstEver ? ", the first anywhere" : ""}.`;
@@ -151,6 +174,8 @@ function builtText(p: Person, b: Band, w: Work, firstEver: boolean): string {
 function finishBuilding(s: Society, p: Person, b: Band, w: Work): void {
   const def = defOf(w);
   w.state = 1; w.built = s.time; w.site = b.siteName; w.needs = undefined;
+  /* a granary built by people who have built many holds more */
+  if (def.line === Line.Store && def.effects.room) w.size = Math.round(def.effects.room * quality(s, b.culture, techIx(def.tech[0])));
   p.prestige += 0.08 + def.labor * 0.004;
   s.stats.buildings.built++;
   const firstEver = !s.stats.buildings.firstOf[def.line]; if (firstEver) s.stats.buildings.firstOf[def.line] = s.time;
@@ -182,7 +207,12 @@ function finishUpgrade(s: Society, p: Person, b: Band, w: Work): void {
 export function buildingDay(s: Society, w: Work): boolean {
   const def = defOf(w), b = s.bandById.get(w.band);
   const kept = !!b && !b.moving && Math.hypot(b.x - w.x, b.y - w.y) < 14;
-  if ((w.prog ?? 1) < 1) { if (!kept) w.prog = (w.prog ?? 0) - 0.01; return (w.prog ?? 0) > 0; }
+  if ((w.prog ?? 1) < 1) {
+    /* a frame rots once nobody works on it: fast with the band gone, slowly at a camp where it has stood untouched for a season; a frame just marked out waits for its first load */
+    const idle = s.time - (w.kept ?? w.t) > DAY_SECONDS * 20;
+    if (!kept) w.prog = (w.prog ?? 0) - 0.01; else if (idle) w.prog = (w.prog ?? 0) - 0.003;
+    return (w.prog ?? 0) > -0.3;
+  }
   if (w.up && !kept) { w.up.prog -= 0.01; if (w.up.prog <= 0) { w.up = undefined; s.worksVersion++; } }
   const before = w.state;
   /* a people that has built many of a kind builds them to last */

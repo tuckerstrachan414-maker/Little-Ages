@@ -67,6 +67,8 @@ export class Society {
   carcasses: Carcass[] = [];
   time = 0; season = 1; day = 0; sun = 1;
   nextId = 1; nextEvent = 1; private lastDay = -1; private lastNoon = -1;
+  /** Band ids are never given twice: a place, a feud, a work or a village that remembers a band that is gone must not find a new one under its number. */
+  nextBand = 1;
   events: ChronicleEvent[] = [];
   fresh: ChronicleEvent[] = [];
   /** how many events of each kind there have been, so rare ones weigh more */
@@ -83,7 +85,7 @@ export class Society {
     camp: { stays: [0, 0, 0, 0, 0, 0], stayDays: 0, bandDays: 0, longDays: 0, offer: 0, fresh: 0, home: 0, left: 0 },
     /* storage pits dug and huts raised, food put by in pits, taken back out, and eaten straight from them */
     homes: { pits: 0, huts: 0, stored: 0, fetched: 0, eaten: 0, firstHut: 0, firstPit: 0 },
-    buildings: { started: 0, built: 0, upgrades: 0, delivered: 0, quarried: 0, firstOf: {} as Record<number, number> },
+    buildings: { started: 0, built: 0, upgrades: 0, mended: 0, delivered: 0, quarried: 0, firstOf: {} as Record<number, number> },
     health: { tended: 0 }, pots: { made: 0, broke: 0, kiln: 0 },
     /* animals kept: young carried home and pups taken in, born in keeping, lost to wolves, escaped, dogs that strayed, milk drunk, animals killed for meat; when the first was kept and when the first came when called */
     herds: { kept: 0, pups: 0, born: 0, lost: 0, escaped: 0, strayed: 0, died: 0, milk: 0, slaughtered: 0, spells: 0, firstFlock: 0, firstTame: 0 },
@@ -293,7 +295,7 @@ export class Society {
   }
 
   newBand(x: number, y: number, culture: number, parent: number): Band {
-    const id = this.bands.length ? Math.max(...this.bands.map(b => b.id)) + 1 : 1;
+    const id = this.nextBand++;
     const name = placeName(this.cultures[culture].lang, this.rng);
     const b: Band = { id, name, culture, color: BAND_COLORS[(id - 1) % BAND_COLORS.length], x, y, fire: 0.8, store: { ...noFood(), wood: 2, hides: 0 }, hearths: new Map(),
       members: [], founded: this.time, movedAt: this.time, moves: 0, homes: new Map(), busy: new Map(), respected: 0, followers: 0, ledSince: this.time, contender: 0, parent, met: new Set(), appetite: 1, moving: null, siteName: placeName(this.cultures[culture].lang, this.rng), water: [x, y], past: [], today: newDay(), yesterday: newDay(), can: new Int32Array(IDEA_COUNT), keeper: new Int32Array(IDEA_COUNT), outAt: 0, pit: 0, seed: {}, problems: newProblems(), meatAt: this.time, regrownAt: 0, goods: new Float32Array(MAT_COUNT), broke: 0, hgoods: new Map(), dryDays: 0, droughtAt: 0, well: 0, keptAt: 0, herdAt: 0, pupsAt: 0 };
@@ -1511,7 +1513,7 @@ export class Society {
       const o: WorkSnap = { id: w.id, kind: w.kind, x: w.x, y: w.y, wx: w.wx, wy: w.wy, state: Math.round(w.state * 20) / 20, food: Math.round(w.food), crop: w.crop };
       if (w.kind === Work.Hut || w.kind >= 4 || (w.tier ?? 0) > 0) {
         const b = this.bandById.get(w.band), c = this.cultures[b ? b.culture : 0];
-        o.prog = Math.round((w.prog ?? 1) * 20) / 20; o.style = w.style; o.look = w.look; o.size = w.size ?? 1; o.hide = c.hide; o.trim = c.dyes[0];
+        o.prog = Math.max(0, Math.round((w.prog ?? 1) * 20) / 20); o.style = w.style; o.look = w.look; o.size = w.size ?? 1; o.hide = c.hide; o.trim = c.dyes[0];
         o.pitch = c.build.pitch; o.windows = c.build.windows; o.decor = c.build.decor;
       }
       if (w.kind === Work.Pit) { o.food = Math.round(pitFood(w)); o.open = this.time - (w.opened ?? 0) < DAY_SECONDS * 0.3; }

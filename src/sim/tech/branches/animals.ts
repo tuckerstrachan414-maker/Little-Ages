@@ -5,7 +5,7 @@ import { Anim, Bubble } from "../../../shared/people.ts";
 const E = Era, n = branch(Branch.Animals);
 /** Animals and herding: the beasts people keep, and what they give. */
 export const ANIMALS = [
-  n("taming-dogs", "dogs", "how to raise a wolf pup into a dog", E.OldStone, [], { title: "The first dogs", during: [{ step: St.Herd, rank: 1 }, { step: St.Butcher, rank: 3 }], ctx: ["pups", "wolves"], problems: { Meat: 0.4, HerdLoss: 0.4 },
+  n("taming-dogs", "dogs", "how to raise a wolf pup into a dog", E.OldStone, [], { title: "The first dogs", during: [{ step: St.Herd, rank: 1 }], ctx: ["pups"], problems: { Meat: 0.4, HerdLoss: 0.4 },
     story: "{name} of the {band}, {problem}, {context}, had fed the pups at {her} hearth from the day they came; grown, they slept by the fire, growled at the dark, and ran at {her} side after the deer. The {band} have dogs.",
     age: 10, child: 0.04, watch: 0.008, show: 0.5, skill: Skill.Hunt, worth: 0.6, spark: 0.006, anim: Anim.Wave, icon: Bubble.Wolf, place: [["dog", "camp"], "Dog Camp"], active: true }),
   n("herding-goats-and-sheep", "keeping goats and sheep", "how to keep goats and sheep", E.NewStone, ["snares"], { title: "The first flocks", during: [{ step: St.Herd, rank: 1 }], ctx: ["goats"], problems: { Meat: 0.5, Hunger: 0.3, HerdLoss: 0.2 },

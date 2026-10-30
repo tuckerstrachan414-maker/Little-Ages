@@ -486,7 +486,8 @@ function stalk(s: Society, p: Person, st: Step, dt: number): void {
   const cover = s.w.tree[(h.y | 0) * s.w.w + (h.x | 0)] ? 0.85 : 1;
   /* dogs run the quarry down and hold it at bay; an arrow flies further and truer than a thrown spear */
   const bow = knows(p, BOW());
-  const chance = HUNT_P[h.sp] * (0.5 + p.skills[Skill.Hunt]) * (1 + 0.45 * (party.length - 1)) * (h.cond < 0.6 ? 1.3 : 1) * cover * (hasDogs(s, s.band(p)) ? 1.2 : 1) * (bow ? 1.3 : 1);
+  /* no hunter is sure of a kill: dogs, a bow and a party help, but a miss is always on the cards */
+  const chance = Math.min(0.92, HUNT_P[h.sp] * (0.5 + p.skills[Skill.Hunt]) * (1 + 0.45 * (party.length - 1)) * (h.cond < 0.6 ? 1.3 : 1) * cover * (hasDogs(s, s.band(p)) ? 1.2 : 1) * (bow ? 1.3 : 1));
   if (bow) practice(s, p, BOW(), 0.006);
   /* a point struck as a blade breaks less often */
   p.spear -= knows(p, Idea.Blades) ? 0.075 : 0.12;
