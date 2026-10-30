@@ -48,7 +48,7 @@ export function problemsDay(s: Society, b: Band): void {
   pr[Problem.Storage] = clamp01((kept - b.pit - b.appetite * 6) / Math.max(4, b.appetite * 6));
   pr[Problem.Wood] = (b.store.wood < 2 ? 0.5 : 0) + (s.resources.forestLeft(b.x, b.y, 16) < 0.5 ? 0.4 : 0);
   let crowd = 0; for (const o of s.bands) if (Math.hypot(o.x - b.x, o.y - b.y) < 16) crowd += o.members.length;
-  pr[Problem.Crowding] = clamp01(crowd / 40);
+  pr[Problem.Crowding] = clamp01(crowd / 40); b.crowd = crowd;
   pr[Problem.Carry] = clamp01(adults.reduce((n, q) => n + (q.tripYield > 4.8 ? 1 : 0), 0) / Math.max(1, adults.length));
   pr[Problem.Illness] = clamp01(ms.filter(q => q.sick > 0).length / Math.max(1, ms.length) * 4);
   let far = 0, nFar = 0; for (const q of adults) for (const pl of q.places) if (pl.k === Place.Plants || pl.k === Place.Fish || pl.k === Place.Game) { far += Math.hypot(pl.x - b.x, pl.y - b.y); nFar++; }

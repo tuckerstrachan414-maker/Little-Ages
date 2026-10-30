@@ -146,7 +146,24 @@ describe("wells", () => {
     const nearOnly = (() => { let n = 0; for (let k = 0; k < 40; k++) { const sp = s.campSpot(b.x + (k % 7) * 9, b.y + Math.floor(k / 7) * 9, 14); if (sp && !s.waterNear(sp[0], sp[1], 5)) n++; } return n; })();
     expect(nearOnly).toBe(0);
     expect(tries).toBeGreaterThan(0);
-    expect(far).toBeGreaterThanOrEqual(0);
+    expect(far).toBeGreaterThan(0);
     void homeOf; void startBuilding;
+  });
+});
+
+describe("a dry year told", () => {
+  it("is told in a band's first year too: never having seen one is not the same as having just seen one", () => {
+    const { s } = society(4);
+    const b = s.bands[0];
+    expect(b.droughtAt).toBe(0); expect(s.time).toBeLessThan(YEAR);
+    (s.weather as unknown as { droughtAt: (c: number) => boolean }).droughtAt = () => true;
+    const before = s.events.length;
+    for (let d = 0; d < 10; d++) (s as unknown as { landDay(): void }).landDay();
+    const told = s.events.slice(before).filter(e => e.kind === "drought" && e.band === b.id);
+    expect(told.length).toBe(1);
+    expect(b.droughtAt).toBe(s.time);
+    /* and not again within the year */
+    for (let d = 0; d < 20; d++) (s as unknown as { landDay(): void }).landDay();
+    expect(s.events.slice(before).filter(e => e.kind === "drought" && e.band === b.id).length).toBe(1);
   });
 });

@@ -77,7 +77,7 @@ const report = (label: string) => {
       {
         const bl = people.stats.buildings, byName = new Map<string, number>(), goingUp = new Map<string, number>();
         for (const w of people.works) { if (w.kind < 2 || (w.kind <= 3 && !(w.tier ?? 0))) continue; const name = defOf(w).name; if ((w.prog ?? 1) < 1) goingUp.set(name, (goingUp.get(name) ?? 0) + 1); else if (w.state > 0.2) byName.set(name, (byName.get(name) ?? 0) + 1); }
-        line += `\n${"".padEnd(16)} buildings: ${byName.size ? [...byName].map(([n, k]) => `${k} ${n}`).join(", ") : "none beyond huts and pits"}${goingUp.size ? ` | going up: ${[...goingUp].map(([n, k]) => `${k} ${n}`).join(", ")}` : ""} | ${bl.built} finished, ${bl.upgrades} rebuilt, ${Math.round(bl.delivered)} loads delivered, ${Math.round(bl.quarried)} quarried`;
+        line += `\n${"".padEnd(16)} buildings: ${byName.size ? [...byName].map(([n, k]) => `${k} ${n}`).join(", ") : "none beyond huts and pits"}${goingUp.size ? ` | going up: ${[...goingUp].map(([n, k]) => `${k} ${n}`).join(", ")}` : ""} | ${bl.built} finished, ${bl.upgrades} rebuilt, ${bl.mended} mended, ${Math.round(bl.delivered)} loads delivered, ${Math.round(bl.quarried)} quarried`;
       }
       {
         const adults = people.people.filter(p => people.age(p) >= 5), hs = people.stats.health, ps = people.stats.pots;
@@ -162,7 +162,7 @@ if (people && summary) {
     techs: IDEAS.filter(d => !d.start && people.ideas[d.id].knowers > 0).length,
     firstPottery: firstYear("pottery"), firstWells: firstYear("wells"), firstGranary: firstYear("granary"), firstHerd: Math.min(...["herding-goats-and-sheep", "herding-cattle", "herding-pigs"].map(firstYear).filter(y => y > 0), Infinity) === Infinity ? 0 : Math.min(...["herding-goats-and-sheep", "herding-cattle", "herding-pigs"].map(firstYear).filter(y => y > 0)),
     firstDogs: firstYear("taming-dogs"), firstBow: firstYear("bow-and-arrow"), firstHouse1: Math.min(...["mud-brick", "wattle-and-daub", "timber-framing"].map(firstYear).filter(y => y > 0), Infinity) === Infinity ? 0 : Math.min(...["mud-brick", "wattle-and-daub", "timber-framing"].map(firstYear).filter(y => y > 0)),
-    granaries: people.works.filter(w => w.kind === 3 && (w.tier ?? 0) >= 1 && w.state > 0.2).length, houses1: people.works.filter(w => w.kind === 2 && (w.tier ?? 0) >= 1 && (w.prog ?? 1) >= 1 && w.state > 0.2).length, kilns: people.works.filter(w => w.kind === 5 && (w.prog ?? 1) >= 1 && w.state > 0.2).length,
+    granaries: people.works.filter(w => w.kind === 3 && (w.tier ?? 0) >= 1 && (w.prog ?? 1) >= 1 && w.state > 0.2).length, houses1: people.works.filter(w => w.kind === 2 && (w.tier ?? 0) >= 1 && (w.prog ?? 1) >= 1 && w.state > 0.2).length, kilns: people.works.filter(w => w.kind === 5 && (w.prog ?? 1) >= 1 && w.state > 0.2).length,
     secsPerYear: +(((performance.now() - tr) / 1000) / years).toFixed(2),
     secs: +((performance.now() - tr) / 1000).toFixed(1),
   };

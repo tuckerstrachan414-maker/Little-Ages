@@ -55,6 +55,17 @@ export const FOOD_DAY: Record<Stage, number> = { baby: 0, toddler: 0.45, child: 
 /** Meat on one animal, in days of food for one person. */
 export const MEAT = [25, 100, 400, 60, 0, 60, 14, 16, 30, 0];
 const BAND_COLORS = ["#c0563f", "#4f74a8", "#c99a32", "#7d5a96", "#4e8a5c", "#b5683a", "#3f8a8c", "#a8456a", "#6e7d3a", "#8a5a3a", "#5a6ab0", "#b0804a", "#507a8c", "#9a4a8a", "#6a9a4a", "#c07a5a"];
+/**
+  Is a point within r of another? The squared distance settles it unless it falls within a
+  hair of r², where the exact `Math.hypot` test is asked as before, so nothing that these
+  bounds decide ever differs from `Math.hypot(dx, dy) <= r`; they only save the square root
+  for the crowds and herds everybody looks over every few seconds. A negative or NaN radius
+  takes nobody, as before.
+*/
+export const withinLo = (r: number) => r < 0 ? -1 : r * r * (1 - 1e-9);
+export const withinHi = (r: number) => r < 0 ? -1 : r * r * (1 + 1e-9);
+/** Scratch lists for `kin`. */
+const KIN_A: number[] = [], KIN_B: number[] = [];
 
 export class Society {
   readonly w: WorldData; readonly eco: Ecology; readonly wild: Wildlife; readonly walker: Walker; readonly rng: Rng;
@@ -67,6 +78,8 @@ export class Society {
   carcasses: Carcass[] = [];
   time = 0; season = 1; day = 0; sun = 1;
   nextId = 1; nextEvent = 1; private lastDay = -1; private lastNoon = -1;
+  /** Band ids are never given twice: a place, a feud, a work or a village that remembers a band that is gone must not find a new one under its number. */
+  nextBand = 1;
   events: ChronicleEvent[] = [];
   fresh: ChronicleEvent[] = [];
   /** how many events of each kind there have been, so rare ones weigh more */
@@ -83,7 +96,7 @@ export class Society {
     camp: { stays: [0, 0, 0, 0, 0, 0], stayDays: 0, bandDays: 0, longDays: 0, offer: 0, fresh: 0, home: 0, left: 0 },
     /* storage pits dug and huts raised, food put by in pits, taken back out, and eaten straight from them */
     homes: { pits: 0, huts: 0, stored: 0, fetched: 0, eaten: 0, firstHut: 0, firstPit: 0 },
-    buildings: { started: 0, built: 0, upgrades: 0, delivered: 0, quarried: 0, firstOf: {} as Record<number, number> },
+    buildings: { started: 0, built: 0, upgrades: 0, mended: 0, delivered: 0, quarried: 0, firstOf: {} as Record<number, number> },
     health: { tended: 0 }, pots: { made: 0, broke: 0, kiln: 0 },
     /* animals kept: young carried home and pups taken in, born in keeping, lost to wolves, escaped, dogs that strayed, milk drunk, animals killed for meat; when the first was kept and when the first came when called */
     herds: { kept: 0, pups: 0, born: 0, lost: 0, escaped: 0, strayed: 0, died: 0, milk: 0, slaughtered: 0, spells: 0, firstFlock: 0, firstTame: 0 },
@@ -293,10 +306,10 @@ export class Society {
   }
 
   newBand(x: number, y: number, culture: number, parent: number): Band {
-    const id = this.bands.length ? Math.max(...this.bands.map(b => b.id)) + 1 : 1;
+    const id = this.nextBand++;
     const name = placeName(this.cultures[culture].lang, this.rng);
     const b: Band = { id, name, culture, color: BAND_COLORS[(id - 1) % BAND_COLORS.length], x, y, fire: 0.8, store: { ...noFood(), wood: 2, hides: 0 }, hearths: new Map(),
-      members: [], founded: this.time, movedAt: this.time, moves: 0, homes: new Map(), busy: new Map(), respected: 0, followers: 0, ledSince: this.time, contender: 0, parent, met: new Set(), appetite: 1, moving: null, siteName: placeName(this.cultures[culture].lang, this.rng), water: [x, y], past: [], today: newDay(), yesterday: newDay(), can: new Int32Array(IDEA_COUNT), keeper: new Int32Array(IDEA_COUNT), outAt: 0, pit: 0, seed: {}, problems: newProblems(), meatAt: this.time, regrownAt: 0, goods: new Float32Array(MAT_COUNT), broke: 0, hgoods: new Map(), dryDays: 0, droughtAt: 0, well: 0, keptAt: 0, herdAt: 0, pupsAt: 0 };
+      members: [], founded: this.time, movedAt: this.time, moves: 0, homes: new Map(), busy: new Map(), respected: 0, followers: 0, ledSince: this.time, contender: 0, parent, met: new Set(), appetite: 1, moving: null, siteName: placeName(this.cultures[culture].lang, this.rng), water: [x, y], past: [], today: newDay(), yesterday: newDay(), can: new Int32Array(IDEA_COUNT), keeper: new Int32Array(IDEA_COUNT), outAt: 0, pit: 0, seed: {}, problems: newProblems(), crowd: 0, meatAt: this.time, regrownAt: 0, goods: new Float32Array(MAT_COUNT), broke: 0, hgoods: new Map(), dryDays: 0, droughtAt: 0, well: 0, keptAt: 0, herdAt: 0, pupsAt: 0 };
     this.bands.push(b); this.bandById.set(id, b);
     return b;
   }
@@ -452,13 +465,37 @@ export class Society {
     for (const cid of p.children) { const c = this.byId.get(cid); if (c && this.age(c) < 12 && c.band !== to.id && (c.mother === p.id || !this.byId.has(c.mother))) move(c); }
   }
 
-  /** Are two people close kin (parent, child, sibling, grandparent, aunt or uncle, first cousin)? */
+  /**
+    Are two people close kin (parent, child, sibling, grandparent, aunt or uncle, first cousin)?
+    Each side's forebears up to `depth` generations are gathered and the two lists compared;
+    for the depths everyone asks about (1 and 2) that is at most seven ids each, kept in two
+    scratch lists, since this is asked for every pair of adults in a band every day.
+  */
   kin(a: Person, b: { id: number; mother: number; father: number }, depth = 2): boolean {
+    if (depth <= 2) {
+      if (depth < 0) return false;
+      if (depth < 1) return !!a.id && a.id === b.id;
+      const na = this.forebears(a.id, depth, KIN_A), nb = this.forebears(b.id, depth, KIN_B);
+      for (let i = 0; i < na; i++) { const x = KIN_A[i]; for (let j = 0; j < nb; j++) if (KIN_B[j] === x) return true; }
+      return false;
+    }
     const up = (id: number, d: number, out: Set<number>) => { if (!id || d < 0) return; out.add(id); const r = this.byId.get(id) ?? this.archive.get(id); if (r) { up(r.mother, d - 1, out); up(r.father, d - 1, out); } };
     const A = new Set<number>(), B = new Set<number>();
     up(a.id, depth, A); up(b.id, depth, B);
     for (const x of A) if (B.has(x)) return true;
     return false;
+  }
+  /** Someone, their parents and, at depth 2, their grandparents, as far as they are on record; written into `out`, the count returned. */
+  private forebears(id: number, depth: number, out: number[]): number {
+    let n = 0;
+    if (!id) return 0;
+    out[n++] = id;
+    const r = this.byId.get(id) ?? this.archive.get(id);
+    if (!r) return n;
+    const m = r.mother, f = r.father;
+    if (m) { out[n++] = m; if (depth > 1) { const q = this.byId.get(m) ?? this.archive.get(m); if (q) { if (q.mother) out[n++] = q.mother; if (q.father) out[n++] = q.father; } } }
+    if (f) { out[n++] = f; if (depth > 1) { const q = this.byId.get(f) ?? this.archive.get(f); if (q) { if (q.mother) out[n++] = q.mother; if (q.father) out[n++] = q.father; } } }
+    return n;
   }
 
   /* ---------------- camps ---------------- */
@@ -625,6 +662,8 @@ export class Society {
       /* never left standing in a lake: step out to the nearest dry ground */
       if (!this.walker.passable(p.x, p.y)) { [p.x, p.y] = this.dryNear(p.x, p.y, 6); p.path = null; }
       if (time >= p.nextDanger) { p.nextDanger = time + 0.8 + (p.id % 7) * 0.05; this.danger(p); }
+      /* wolves or a bear may have killed them, and a last member's band has ended with them: the dead do nothing more this tick */
+      if (!this.byId.has(p.id)) continue;
       if (time >= p.nextLook) { p.nextLook = time + 2.5 + (p.id % 11) * 0.1; this.look(p); this.feel(p); }
       if (p.si >= p.plan.length || (isInterruptible(p.goal) && time - p.whyAt > 7) || this.urgent(p)) decide(this, p);
       doStep(this, p, dt);
@@ -653,15 +692,17 @@ export class Society {
   /** People within r tiles of (x, y). */
   near(x: number, y: number, r: number, out: Person[] = []): Person[] {
     out.length = 0;
+    const lo = withinLo(r), hi = withinHi(r);
     const x0 = Math.floor((x - r) / 8), x1 = Math.floor((x + r) / 8), y0 = Math.floor((y - r) / 8), y1 = Math.floor((y + r) / 8);
-    for (let gy = y0; gy <= y1; gy++) for (let gx = x0; gx <= x1; gx++) { const a = this.grid.get(gy * 4096 + gx); if (a) for (const p of a) if (Math.hypot(p.x - x, p.y - y) <= r) out.push(p); }
+    for (let gy = y0; gy <= y1; gy++) for (let gx = x0; gx <= x1; gx++) { const a = this.grid.get(gy * 4096 + gx); if (a) for (const p of a) { const dx = p.x - x, dy = p.y - y, d2 = dx * dx + dy * dy; if (d2 <= lo || (d2 <= hi && Math.hypot(dx, dy) <= r)) out.push(p); } }
     return out;
   }
   herdsNear(x: number, y: number, r: number): Herd[] {
     const out: Herd[] = [];
     if (this.time - this.herdGridAt > 1) this.rebuildHerdGrid();
+    const lo = withinLo(r), hi = withinHi(r);
     const x0 = Math.floor((x - r) / 16), x1 = Math.floor((x + r) / 16), y0 = Math.floor((y - r) / 16), y1 = Math.floor((y + r) / 16);
-    for (let gy = y0; gy <= y1; gy++) for (let gx = x0; gx <= x1; gx++) { const a = this.herdGrid.get(gy * 4096 + gx); if (a) for (const h of a) if (h.n > 0 && Math.hypot(h.x - x, h.y - y) <= r) out.push(h); }
+    for (let gy = y0; gy <= y1; gy++) for (let gx = x0; gx <= x1; gx++) { const a = this.herdGrid.get(gy * 4096 + gx); if (a) for (const h of a) { if (h.n <= 0) continue; const dx = h.x - x, dy = h.y - y, d2 = dx * dx + dy * dy; if (d2 <= lo || (d2 <= hi && Math.hypot(dx, dy) <= r)) out.push(h); } }
     return out;
   }
 
@@ -808,7 +849,7 @@ export class Society {
       let pAttack = h.sp === Species.Bear ? (d < 2.5 ? 0.012 : 0) : h.hunger > 0.75 && company === 0 && d < 4 ? (weak ? 0.004 : this.sun < 0.2 ? 0.0012 : 0.0004) * h.n : 0;
       /* dogs about the camp bark the wolves off before they come close */
       if (pAttack > 0 && !bear) { const b = this.bandById.get(p.band); if (b && Math.hypot(b.x - p.x, b.y - p.y) < 12 && hasDogs(this, b)) pAttack *= 0.3; }
-      if (pAttack > 0 && this.rng.chance(pAttack)) this.attacked(p, h);
+      if (pAttack > 0 && this.rng.chance(pAttack)) { this.attacked(p, h); if (!this.byId.has(p.id)) return; }
       else if (p.fear > 0.45 + p.traits[0] * 0.35 && p.goal !== Goal.Flee) { abandon(this, p); decide(this, p, Goal.Flee); }
     }
   }
@@ -861,8 +902,11 @@ export class Society {
     }
     for (const c of this.carcasses) if (c.meat > 2 && Math.hypot(c.x - p.x, c.y - p.y) < r) this.learnPlace(p, Place.Carcass, c.x, c.y, c.meat, c.id, 0, this.time, c.sp);
     for (const d of this.resources.depositsNear(p.x, p.y, r)) this.learnDeposit(p, d);
+    const reach = r + 6, lo = withinLo(reach), hi = withinHi(reach);
     for (const b of this.bands) {
-      if (b.id === p.band || Math.hypot(b.x - p.x, b.y - p.y) > r + 6) continue;
+      if (b.id === p.band) continue;
+      const dx = b.x - p.x, dy = b.y - p.y, d2 = dx * dx + dy * dy;
+      if (d2 > hi || (d2 > lo && Math.hypot(dx, dy) > reach)) continue;
       this.learnPlace(p, Place.Camp, b.x, b.y, 1, b.id, 0);
       const mine = this.band(p);
       if (!mine.met.has(b.id)) {
@@ -984,13 +1028,13 @@ export class Society {
       if (well && Math.hypot(well.x - b.x, well.y + 1 - b.y) < Math.hypot(b.water[0] - b.x, b.water[1] - b.y)) b.water = [well.x, well.y + 1];
       const c = this.weather.cellOf(b.x, b.y);
       b.dryDays = this.weather.droughtAt(c) ? b.dryDays + 1 : 0;
-      if (b.dryDays === 10 && this.time - b.droughtAt > YEAR) { b.droughtAt = this.time; this.event("drought", Bubble.Sun, `The grass has gone brown around ${b.siteName} and the roots are hard to find: a dry year for the ${b.name}.`, b.x, b.y, [], b.id, 0); }
+      if (b.dryDays === 10 && (!b.droughtAt || this.time - b.droughtAt > YEAR)) { b.droughtAt = this.time; this.event("drought", Bubble.Sun, `The grass has gone brown around ${b.siteName} and the roots are hard to find: a dry year for the ${b.name}.`, b.x, b.y, [], b.id, 0); }
     }
     for (const c of res.takeDirty()) this.eco.recount(c);
     /* a wood coming back around a long-lived camp is worth telling, now and then */
     for (const i of res.regrownToday) {
       const x = i % this.w.w, y = (i / this.w.w) | 0;
-      const b = this.campNear(x, y, 14); if (!b || this.time - b.regrownAt < YEAR * 3 || res.forestLeft(b.x, b.y, 16) < 0.3) continue;
+      const b = this.campNear(x, y, 14); if (!b || (b.regrownAt > 0 && this.time - b.regrownAt < YEAR * 3) || res.forestLeft(b.x, b.y, 16) < 0.3) continue;
       b.regrownAt = this.time;
       this.event("regrown", Bubble.Home, `Around ${b.siteName}, where the ${b.name} have cut their firewood for years, young trees are growing back.`, x, y, [], b.id, 0);
     }
@@ -1511,7 +1555,7 @@ export class Society {
       const o: WorkSnap = { id: w.id, kind: w.kind, x: w.x, y: w.y, wx: w.wx, wy: w.wy, state: Math.round(w.state * 20) / 20, food: Math.round(w.food), crop: w.crop };
       if (w.kind === Work.Hut || w.kind >= 4 || (w.tier ?? 0) > 0) {
         const b = this.bandById.get(w.band), c = this.cultures[b ? b.culture : 0];
-        o.prog = Math.round((w.prog ?? 1) * 20) / 20; o.style = w.style; o.look = w.look; o.size = w.size ?? 1; o.hide = c.hide; o.trim = c.dyes[0];
+        o.prog = Math.max(0, Math.round((w.prog ?? 1) * 20) / 20); o.style = w.style; o.look = w.look; o.size = w.size ?? 1; o.hide = c.hide; o.trim = c.dyes[0];
         o.pitch = c.build.pitch; o.windows = c.build.windows; o.decor = c.build.decor;
       }
       if (w.kind === Work.Pit) { o.food = Math.round(pitFood(w)); o.open = this.time - (w.opened ?? 0) < DAY_SECONDS * 0.3; }

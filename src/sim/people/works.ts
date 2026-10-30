@@ -10,7 +10,7 @@ import { Idea } from "../tech/tree.ts";
 import { hutDay, pitDay } from "./homes.ts";
 import { buildingDay, defOf } from "../buildings/build.ts";
 import { techIx } from "../tech/tree.ts";
-import type { Society } from "./society.ts";
+import { withinLo, withinHi, type Society } from "./society.ts";
 
 /*
   Things people make that stay where they are made: fish weirs, planted plots and the
@@ -71,15 +71,17 @@ export function addWork(s: Society, w: Omit<Work, "id">): Work {
   have dozens of huts, pits and fields, and people look over what is near them all the
   time; this keeps that to the squares around them.
 */
-interface WorksIndex { v: number; byId: Map<number, Work>; cells: Map<number, Work[]>; }
+interface WorksIndex { v: number; byId: Map<number, Work>; cells: Map<number, Work[]>; /** the works are in the order they were made, so each square's list is in id order */ ordered: boolean; }
 const indexes = new WeakMap<Society, WorksIndex>();
 const CELL = 8;
 function index(s: Society): WorksIndex {
   let i = indexes.get(s);
   if (i && i.v === s.worksVersion && i.byId.size === s.works.length) return i;
-  i = { v: s.worksVersion, byId: new Map(), cells: new Map() };
+  i = { v: s.worksVersion, byId: new Map(), cells: new Map(), ordered: true };
+  let last = -1;
   for (const w of s.works) {
     i.byId.set(w.id, w);
+    if (w.id <= last) i.ordered = false; last = w.id;
     const k = cellKey(w.x, w.y); let l = i.cells.get(k); if (!l) { l = []; i.cells.set(k, l); } l.push(w);
   }
   indexes.set(s, i);
@@ -87,16 +89,37 @@ function index(s: Society): WorksIndex {
 }
 const cellKey = (x: number, y: number) => Math.floor(x / CELL) * 4096 + Math.floor(y / CELL);
 export function workById(s: Society, id: number): Work | undefined { return index(s).byId.get(id); }
-/** Every work within r tiles of (x, y), nearest squares first. */
+/** Scratch for `worksAround`: the squares within reach, and how far each has been read. */
+const LISTS: Work[][] = [], AT: number[] = [];
+/**
+  Every work within r tiles of (x, y), oldest first (in id order). Works are made in id
+  order and only ever dropped, so the lists of the squares around the point are merged,
+  which keeps their order without a sort; should the works ever be out of order, they are
+  sorted as before.
+*/
 export function worksAround(s: Society, x: number, y: number, r: number): Work[] {
-  const i = index(s), out: Work[] = [];
+  const i = index(s), out: Work[] = [], lo = withinLo(r), hi = withinHi(r);
   const x0 = Math.floor((x - r) / CELL), x1 = Math.floor((x + r) / CELL), y0 = Math.floor((y - r) / CELL), y1 = Math.floor((y + r) / CELL);
+  let n = 0;
   for (let cx = x0; cx <= x1; cx++) for (let cy = y0; cy <= y1; cy++) {
     const l = i.cells.get(cx * 4096 + cy); if (!l) continue;
-    for (const w of l) if (Math.hypot(w.x - x, w.y - y) <= r) out.push(w);
+    if (!i.ordered) { for (const w of l) if (near(w, x, y, r, lo, hi)) out.push(w); continue; }
+    LISTS[n] = l; AT[n++] = 0;
   }
-  return out.sort((a, b) => a.id - b.id);
+  if (!i.ordered) return out.sort((a, b) => a.id - b.id);
+  if (n === 1) { for (const w of LISTS[0]) if (near(w, x, y, r, lo, hi)) out.push(w); LISTS.length = 0; return out; }
+  /* merge the lists by id: whichever list has the lowest id at its head gives the next work */
+  for (;;) {
+    let best = -1, bid = Infinity;
+    for (let k = 0; k < n; k++) { const l = LISTS[k]; if (AT[k] < l.length && l[AT[k]].id < bid) { bid = l[AT[k]].id; best = k; } }
+    if (best < 0) break;
+    const w = LISTS[best][AT[best]++];
+    if (near(w, x, y, r, lo, hi)) out.push(w);
+  }
+  LISTS.length = 0;
+  return out;
 }
+const near = (w: Work, x: number, y: number, r: number, lo: number, hi: number) => { const dx = w.x - x, dy = w.y - y, d2 = dx * dx + dy * dy; return d2 <= lo || (d2 <= hi && Math.hypot(dx, dy) <= r); };
 /** A weir or plot near (x, y) of one kind, within r tiles. */
 export function worksNear(s: Society, kind: number, x: number, y: number, r: number): Work[] {
   return worksAround(s, x, y, r).filter(w => w.kind === kind);
@@ -268,7 +291,7 @@ export function worksDay(s: Society): void {
   for (const w of s.works) {
     const T = s.tempC(w.x, w.y);
     /* wells, kilns, pens and the rest wear by their own kind; houses and stores keep their old ways */
-    if (w.kind >= 4) { if (buildingDay(s, w)) keep.push(w); else s.worksVersion++; continue; }
+    if (w.kind >= 4 || (w.kind === Work.Pit && (w.prog ?? 1) < 1)) { if (buildingDay(s, w)) keep.push(w); else s.worksVersion++; continue; }
     if (w.kind === Work.Hut) { if (hutDay(s, w)) keep.push(w); else s.worksVersion++; continue; }
     if (w.kind === Work.Pit) {
       const b = s.bandById.get(w.band), kept = !!b && !b.moving && Math.hypot(b.x - w.x, b.y - w.y) < 14;

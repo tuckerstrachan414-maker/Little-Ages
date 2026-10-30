@@ -48,10 +48,15 @@ export function pitOf(s: Society, b: Band, home: number): Work | null {
   }
   return shared;
 }
-/** Counts the food in a band's pits at its camp again (for the days of food the band has). */
+/** A granary the band or the village shares at this camp, standing, if any. */
+export function sharedStore(s: Society, b: Band): Work | null {
+  for (const w of worksAround(s, b.x, b.y, 12)) if (w.kind === Work.Pit && (w.owner ?? 0) >= 1 && (w.prog ?? 1) >= 1 && w.state > 0.2 && w.foods) return w;
+  return null;
+}
+/** Counts the food in a band's pits at its camp again, and in the granary everyone at the place shares (for the days of food the band has). */
 export function recountPits(s: Society, b: Band): void {
   let v = 0;
-  if (!b.moving) for (const w of worksAround(s, b.x, b.y, 12)) if (w.kind === Work.Pit && w.band === b.id) v += pitFood(w);
+  if (!b.moving) for (const w of worksAround(s, b.x, b.y, 12)) if (w.kind === Work.Pit && (w.band === b.id || ((w.owner ?? 0) >= 1 && (w.prog ?? 1) >= 1 && w.state > 0.2))) v += pitFood(w);
   b.pit = v;
 }
 /** Days of food a household has in its pit. */
@@ -170,7 +175,8 @@ export function hutOf(s: Society, b: Band, home: number): Work | null {
 export function clearAt(s: Society, b: Band, x: number, y: number, r: number, self = 0, homes?: Map<number, [number, number, number]>): boolean {
   if (!s.walker.dry(x, y)) return false;
   for (const w of worksAround(s, x, y, 7)) {
-    if (w.kind === Work.Weir || (w.kind !== Work.Plot && w.home === self && self)) continue;
+    /* a household's own hut and pit do not stand in the way of its own building; its kiln or fold does */
+    if (w.kind === Work.Weir || ((w.kind === Work.Hut || w.kind === Work.Pit) && w.home === self && self)) continue;
     const need = w.kind === Work.Hut ? hutReach(w) + r : w.kind === Work.Pit ? 0.9 + r * 0.6 : 1.5 + r * 0.6;
     if (Math.hypot(w.x - x, w.y - y) < need) return false;
   }

@@ -1,9 +1,9 @@
 import { defOf } from "../buildings/build.ts";
 import { dietWords } from "../economy/diet.ts";
 import { ERA_NAMES } from "../tech/tree.ts";
-import { Mat } from "../economy/goods.ts";
+import { Mat, MATS } from "../economy/goods.ts";
 import { WALL_WORDS } from "../buildings/defs.ts";
-import { DAY_SECONDS, DAYS_PER_SEASON, DAYS_PER_YEAR, SEASON_NAMES, SPECIES_NAMES } from "../../shared/types.ts";
+import { DAY_SECONDS, DAYS_PER_SEASON, DAYS_PER_YEAR, SEASON_NAMES, SPECIES_NAMES, Species } from "../../shared/types.ts";
 import type { BandDetail, BandFeud, Feuding, Kin, PersonDetail, VillageDetail } from "../../shared/protocol.ts";
 import { TRAITS } from "./genetics.ts";
 import { Goal, Mem, SKILL_NAMES, St, kinWord, type Person } from "./person.ts";
@@ -59,8 +59,9 @@ function memoryText(s: Society, p: Person, m: Person["mem"][number]): string {
   const whoRel = rel ? `${p.sex === "f" ? "her" : "his"} ${rel}, ${who}` : who;
   const her = p.sex === "f" ? "her" : "him", she = p.sex === "f" ? "she" : "he";
   switch (m.k) {
+    /* a wolf raid weighs more than any night's wandering off (see herding.ts) */
     case Mem.HerdLoss: return m.v < -0.3 ? `Wolves got in among the animals the family keeps` : `An animal the family kept wandered off in the night`;
-    case Mem.Kept: return `Carried young animals home from a kill and fed them at the hearth`;
+    case Mem.Kept: return m.n === Species.Dog ? `Took in wolf pups that came for the camp's scraps and fed them at the hearth` : `Carried young animals home from a kill and fed them at the hearth`;
     case Mem.Missed: return `A throw that fell short, and the game got away`;
     case Mem.Fed: return `${who} gave ${her} food in a hungry time`;
     case Mem.Refused: return `${who} turned ${her} away when ${she} asked for food`;
@@ -118,7 +119,7 @@ export function personDetail(s: Society, id: number): PersonDetail | null {
   const friends = rels.filter(([, r]) => r.op > 0.45).sort((a, c) => c[1].op - a[1].op).slice(0, 4).map(([oid]) => kin(s, p, oid, "friend")!).filter(Boolean);
   const rivals = rels.filter(([, r]) => r.op < RIVAL_OP).sort((a, c) => a[1].op - c[1].op).slice(0, 3).map(([oid]) => kin(s, p, oid, "rival")!).filter(Boolean);
   const memories = p.mem.slice().sort((a, c) => c.t - a.t).slice(0, 8).map(m => ({ text: memoryText(s, p, m), ago: (s.time - m.t) / DAY_SECONDS, v: m.v })).filter(m => m.text);
-  const carrying = p.carryAmt > 0.2 ? `${p.carryAmt.toFixed(0)} ${["", "plant food", "meat", "fish", "firewood"][p.carryKind] ?? "things"}` : "";
+  const carrying = p.carryAmt > 0.2 ? `${p.carryAmt.toFixed(0)} ${(Math.round(p.carryAmt) === 1 ? MATS[p.carryKind]?.name : MATS[p.carryKind]?.plural) ?? "things"}` : "";
   return {
     id, name: p.name, sex: p.sex, age, stage: s.stage(p), band: { id: b.id, name: b.name }, people: cult.lang.name,
     doing: doingWord(p), why: p.why || `${p.name} is looking around.`,

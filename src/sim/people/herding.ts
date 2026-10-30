@@ -263,7 +263,8 @@ function flockDay(s: Society, b: Band, f: Flock): void {
     if (lost) {
       f.n -= lost; f.lostAt = now; s.stats.herds.escaped += lost;
       s.wild.release(f.sp, f.x, f.y, lost);
-      const head = s.byId.get(f.home); if (head) s.remember(head, Mem.HerdLoss, 0, -0.2 * lost, f.sp);
+      /* never as bitter as a wolf raid, whatever the number: the card tells the two apart by their weight */
+      const head = s.byId.get(f.home); if (head) s.remember(head, Mem.HerdLoss, 0, Math.max(-0.29, -0.2 * lost), f.sp);
       herdEvent(s, b, f, lost, false);
     }
   }
@@ -317,7 +318,7 @@ function dogsFed(s: Society, b: Band, f: Flock): number {
   /* the pot feeds the dogs too, when it has plenty */
   if (got < want && b.store.meat + b.store.fish + b.store.dried > b.appetite) flesh(b.store, want);
   /* and dogs hunt for themselves a little */
-  const hunted = s.eco.hunt(f.x, f.y, 0.008 * f.n) * 0.2;
+  const hunted = f.n > 0 ? s.eco.hunt(f.x, f.y, 0.008 * f.n) * 0.2 : 0;
   const fed = Math.min(1, got / want + hunted);
   f.unfed = fed < 0.3 ? f.unfed + 1 : 0;
   if (f.unfed > (f.tame >= 1 ? 6 : 3) && f.n + f.young > 0) {
@@ -368,7 +369,7 @@ function tamed(s: Society, b: Band, f: Flock): void {
   s.tamed.add(key);
   if (!s.stats.herds.firstTame) s.stats.herds.firstTame = s.time;
   const head = s.byId.get(f.home), w = speciesWords(f.sp), people = s.cultures[b.culture].lang.name;
-  s.event("tamed", f.sp === Species.Dog ? Bubble.Wolf : Bubble.Goat, `The ${people} keep ${w[1]} now: ${head ? `${head.name}'s family` : "a family"} at ${b.siteName} have ${flockWords(f)}, and they come when called.${first ? " Nobody anywhere has kept them before." : ""}`, f.x, f.y, head ? [head.id] : [], b.id, first ? 2 : 1);
+  s.event("tamed", f.sp === Species.Dog ? Bubble.Wolf : Bubble.Goat, `The ${people} keep ${w[1]} now: ${head ? `${head.name}'s family` : "a family"} at ${b.siteName} have ${flockWords(f)}, and they come when called.${first ? " Nobody anywhere has kept them before." : ""}`, f.x, f.y, head ? [head.id] : [], b.id, (first ? 2 : 1) * 16 + f.sp);
 }
 
 /* ---------------- minding the flock ---------------- */

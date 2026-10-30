@@ -81,7 +81,7 @@ export class PeopleLayer {
         /* every building beyond the first huts and pits, and a hut or pit being rebuilt: made of parts */
         const i = (w.y | 0) * this.world.w + (w.x | 0), snow = isSnowy(this.world.temp[i] / 255, this.world.biome[i], season, 0.5);
         const { stage, wear } = buildingStage(w.prog ?? 1, w.state);
-        const spr = buildingSprite({ line: w.kind, tier, style: w.style ?? "round", look: w.look ?? "plain", walls: w.walls ?? "poles", roof: w.roof ?? "thatch", stage, wear, snow, size: w.size ?? 1, v: shelterVariant(w.x, w.y), hide: w.hide ?? "#a47b52", trim: w.trim ?? "#b4553e", pitch: w.pitch ?? 1, windows: w.windows ?? 1, decor: w.decor ?? 1, up: w.up });
+        const spr = buildingSprite({ line: w.kind, tier, style: w.style ?? "round", look: w.look ?? "plain", walls: w.walls ?? "poles", roof: w.roof ?? "thatch", stage, wear, snow, size: w.size ?? 1, v: shelterVariant(w.x, w.y), hide: w.hide ?? "#a47b52", trim: w.trim ?? "#b4553e", pitch: w.pitch ?? 1, windows: w.windows ?? 1, decor: w.decor ?? 1, up: w.up, firing: w.firing });
         /* a hut being rebuilt is still the old hut underneath */
         if (w.up !== undefined && tier === 0 && (w.kind === 2 || w.kind === 3)) {
           const old = w.kind === 2 ? hutSprite({ style: w.style ?? "round", look: w.look ?? "plain", stage: 2, wear: hutStage(1, w.state).wear, snow, size: w.size ?? 1, v: shelterVariant(w.x, w.y), hide: w.hide ?? "#a47b52", trim: w.trim ?? "#b4553e" }) : pitSprite(!!w.open, w.food >= 3);

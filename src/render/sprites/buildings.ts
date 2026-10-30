@@ -1,7 +1,7 @@
 import { FN, shade, mix } from "../../shared/palette.ts";
 import { hash2 } from "../../shared/rng.ts";
 import type { HutLook, HutStyle } from "../../shared/people.ts";
-import { grid, put, rect, hline, vline, outlined, toCanvas, SpriteCache, type Grid } from "./grid.ts";
+import { grid, put, del, rect, hline, vline, outlined, toCanvas, SpriteCache, type Grid } from "./grid.ts";
 
 /*
   Buildings made of parts: walls of mud brick, wattle and daub, hewn timber or fitted
@@ -222,7 +222,7 @@ function roundhouse(b: BuildingLooks, v: number, seed: number): Grid {
   const g = grid(W, H), rib = grid(W, H);
   const built = b.stage >= 2 ? wallH : b.stage === 1 ? Math.ceil(wallH * 0.6) : 0;
   /* a round wall reads as a band with rounded ends */
-  if (built > 0) { wallBlock(g, 1, H - built, W - 2, built, b.walls, seed, b.wear); for (const y of [H - built]) { put(g, 1, y, null); put(g, W - 2, y, null); } }
+  if (built > 0) { wallBlock(g, 1, H - built, W - 2, built, b.walls, seed, b.wear); for (const y of [H - built]) { del(g, 1, y); del(g, W - 2, y); } }
   for (const x of [1, cx, W - 2]) vline(rib, x, roofH, wallH, POLE);
   hline(rib, 1, H - 1, W - 2, POLE);
   cone(g, rib, cx, 0, R, roofH, cold && b.roof === "thatch" ? "turf" : b.roof, seed, v, b.stage);
@@ -359,7 +359,7 @@ function wall(b: BuildingLooks): Grid {
   const v = b.v & 3, seed = 111 + v, W = 9, H = 11, g = grid(W, H);
   if (b.walls === "stone") { wallBlock(g, 0, 2, W, H - 2, "stone", seed, b.wear); for (let x = 0; x < W; x += 2) put(g, x, 1, M.stone[0]); }
   else for (let x = 0; x < W; x++) { const h = b.stage >= 2 ? 9 - (hash2(x, 0, seed) < 0.3 ? 1 : 0) : 4; for (let y = H - h; y < H; y++) put(g, x, y, x % 2 ? POLE : POLE_L); put(g, x, H - h - 1, x % 2 ? POLE_L : FRESH); }
-  if (b.wear >= 2) for (let x = 0; x < W; x++) if (hash2(x, 1, seed) < 0.4) for (let y = 0; y < H - 3; y++) put(g, x, y, null);
+  if (b.wear >= 2) for (let x = 0; x < W; x++) if (hash2(x, 1, seed) < 0.4) for (let y = 0; y < H - 3; y++) del(g, x, y);
   return g;
 }
 function monument(b: BuildingLooks): Grid {
@@ -367,7 +367,7 @@ function monument(b: BuildingLooks): Grid {
   for (let x = 1; x < W - 1; x++) put(g, x, H - 1, M.turf[1]);
   const h = b.stage >= 2 ? 15 : b.stage === 1 ? 7 : 3;
   for (let y = H - 1 - h; y < H - 1; y++) for (let x = cx - 2; x <= cx + 2; x++) { const hh = hash2(x, y, seed); put(g, x, y, x === cx - 2 ? M.stone[0] : x === cx + 2 ? M.stone[2] : hh < 0.15 ? M.stone[0] : hh > 0.85 ? M.stone[2] : M.stone[1]); }
-  put(g, cx - 2, H - 1 - h, null); put(g, cx + 2, H - 1 - h, null);
+  del(g, cx - 2, H - 1 - h); del(g, cx + 2, H - 1 - h);
   if (b.stage < 2) bundle(g, 7, H - 1, "stone");
   return g;
 }

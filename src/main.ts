@@ -207,7 +207,7 @@ function bindInput() {
   window.addEventListener("keydown", e => {
     if ((e.target as HTMLElement).tagName === "INPUT") return;
     held.add(e.key.toLowerCase());
-    if (e.key === "Escape") { if (tech && dock?.isOpen("tech") && tech.selected >= 0) { tech.selectNode(-1); tech.selected = -1; } const open = ["search", "journal", "tech", "bands", "modes"].find(k => dock?.isOpen(k)); if (open) dock!.set(open, false); else pin(0, 0); }
+    if (e.key === "Escape") { if (tech && dock?.isOpen("tech") && tech.selected >= 0) { tech.closeCard(); return; } const open = ["search", "journal", "tech", "bands", "modes"].find(k => dock?.isOpen(k)); if (open) dock!.set(open, false); else pin(0, 0); }
     if ((e.key === "/" || (e.key.toLowerCase() === "k" && (e.ctrlKey || e.metaKey))) && search) { e.preventDefault(); search.open(); return; }
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     const k = e.key.toLowerCase();

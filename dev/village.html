@@ -7,7 +7,10 @@
   Villages of checkpoint 2C, drawn by the game's own camp renderer from made-up snapshots: a
   round-hut village in summer with fields and pits, a longhouse village sunk under turf in the
   snow, a village of cones on stilts by the water, and the map's signs for a village, a
-  gathering and a ruin. People stand about, one raising a hut.
+  gathering and a ruin. People stand about, one raising a hut. Checkpoint 3A adds a town: houses
+  of mud brick over the old huts, one still being rebuilt, a granary on posts, a well, a kiln
+  smoking, a fold with goats and a dog at the hearth, a chief with the tall feather, and the
+  town's wider sign.
 */
 import { PeopleLayer } from "/src/render/people.ts";
 import { Camera } from "/src/render/camera.ts";
@@ -18,7 +21,7 @@ import { makeCulture, pickStyle } from "/src/sim/people/culture.ts";
 import { Rng } from "/src/shared/rng.ts";
 
 const W = 1400, H = 640, N = 64;
-function scene(title, { style, look, temp, season, hide, trim, shelter, zoom = 13, labels = false }) {
+function scene(title, { style, look, temp, season, hide, trim, shelter, zoom = 13, labels = false, town = false }) {
   const p = document.createElement("p"); p.textContent = title; document.body.append(p);
   const c = document.createElement("canvas"); c.width = W; c.height = H; document.body.append(c);
   const ctx = c.getContext("2d"); ctx.imageSmoothingEnabled = false;
@@ -33,28 +36,45 @@ function scene(title, { style, look, temp, season, hide, trim, shelter, zoom = 1
   const works = huts.map(([x, y], k) => ({ id: k + 1, kind: 2, x, y, wx: x, wy: y, state: k === 3 ? 0.4 : 1, food: 0, crop: "", prog: k === 4 ? 0.55 : 1, style, look, size: style === "long" && k === 0 ? 2 : 1, hide, trim }));
   works.push({ id: 20, kind: 3, x: cx - 3.2, y: cy - 0.8, wx: 0, wy: 0, state: 1, food: 20, crop: "", open: false });
   works.push({ id: 21, kind: 3, x: cx + 3.4, y: cy - 0.6, wx: 0, wy: 0, state: 1, food: 20, crop: "", open: true });
+  const flocks = [];
+  if (town) {
+    /* the first four huts are houses of mud brick now (the third worn, the fourth still being rebuilt from its hut); the fifth is a hut going up at the edge */
+    for (let k = 0; k < 4; k++) Object.assign(works[k], k === 3 ? { up: 0.6, prog: 1, state: 1 } : { tier: 1, def: "house1-mudbrick", walls: "mudbrick", roof: "thatch", prog: 1, state: k === 2 ? 0.5 : 1, owner: 0, pitch: 1, windows: 1, decor: 1 });
+    /* the pit by the first house is a granary on posts now; the village well, the potter's kiln lit, and the fold */
+    Object.assign(works[5], { tier: 1, def: "store1", walls: "timber", roof: "thatch", prog: 1, state: 1, food: 90, owner: 0 });
+    works.push({ id: 40, kind: 4, tier: 0, def: "well0", x: cx + 0.5, y: cy + 6.2, wx: cx + 0.5, wy: cy + 6.2, state: 1, food: 0, crop: "", prog: 1, owner: 2, walls: "stone", roof: "none" });
+    works.push({ id: 41, kind: 5, tier: 1, def: "kiln1", x: cx + 8.6, y: cy - 0.4, wx: cx + 8.6, wy: cy - 0.4, state: 1, food: 0, crop: "", prog: 1, owner: 0, walls: "daub", roof: "none", firing: true });
+    works.push({ id: 42, kind: 6, tier: 0, def: "pen0", x: cx - 10.5, y: cy - 1.2, wx: cx - 10.5, wy: cy - 1.2, state: 1, food: 0, crop: "", prog: 1, owner: 0, walls: "brush", roof: "none" });
+    /* six goats in the fold, a dog at the hearth */
+    flocks.push(cx - 10.5, cy - 1.4, 6, 6, cx + 1.4, cy + 0.9, 9, 1);
+  }
   if (look !== "wet") [[cx - 13, cy + 6], [cx - 10.6, cy + 6], [cx + 11, cy + 6.2]].forEach(([x, y], k) => works.push({ id: 30 + k, kind: 1, x, y, wx: x, wy: y, state: season === "winter" ? 0 : k === 2 ? 0.6 : 1, food: k === 0 ? 30 : 0, crop: "wild grain", fallow: season === "winter", tame: k === 0 ? 0.6 : 0 }));
   layer.works = works;
-  const camp = { id: 1, name: "Kele", x: cx, y: cy, color: "#d8584a", pop: 18, fire: 0.8, shelters: [cx - 1.5, cy + 4.2, cx + 1.8, cy + 4.4, huts[4][0] - 2.2, huts[4][1] + 0.5], huts: huts.flat(), shelter, food: 40, racks: [cx - 2.2, cy + 1] };
+  const camp = { id: 1, name: "Kele", x: cx, y: cy, color: "#d8584a", pop: town ? 104 : 18, fire: 0.8, shelters: town ? [] : [cx - 1.5, cy + 4.2, cx + 1.8, cy + 4.4, huts[4][0] - 2.2, huts[4][1] + 0.5], huts: huts.flat(), shelter, food: 40, racks: [cx - 2.2, cy + 1], flocks };
   /* people: a builder at the frame, others about camp */
   const cult = makeCulture(3, 3), anc = ancestryFor(0.5, 0.5, 0.5, rng), looks = [];
   const spots = [[huts[4][0] + 1.2, huts[4][1] + 0.6, Anim.Build, 1], [cx + 0.8, cy + 1.2, Anim.Sit, 0], [cx - 1.3, cy + 1.4, Anim.Cook, 0], [cx + 3.4, cy, Anim.Dig, 1], [cx - 8, cy + 5.5, Anim.Gather, 1], [cx + 2.5, cy + 3, Anim.Walk, 0], [cx - 3, cy - 0.2, Anim.Idle, 0]];
+  /* in the town: the chief standing by the well, a potter at the kiln, a herder at the fold, and one carrying clay */
+  if (town) spots.push([cx + 1.6, cy + 5.4, Anim.Idle, 1, PFlag.Chief | PFlag.Leader], [cx + 7.4, cy + 0.3, Anim.Cook, 1], [cx - 8.6, cy - 0.2, Anim.Idle, 0], [cx + 5.8, cy + 2.4, Anim.Walk, 0, PFlag.Carrying]);
   const data = new Float32Array(spots.length * PERSON_STRIDE);
   spots.forEach(([x, y, anim, dir], k) => {
     const sex = k % 2 ? "m" : "f", g = founderGenome(anc, rng), l = looksOf(g, [0, 0, 0, 0, 0]), h = hairAt(l, 30);
     const id = 100 + k;
     looks.push({ id, name: "x", sex, stage: "adult", band: 1, skin: l.mel, hair: h.hex, gray: 0, style: pickStyle(cult, sex, l.curl, rng), beard: sex === "m", eye: l.eye, wear: season === "winter" ? "furs" : sex === "f" ? cult.mildF : cult.mildM, top: cult.hide, bottom: cult.hideD, beads: true, trim: cult.dyes[0], paint: 0, tall: 0 });
-    const o = k * PERSON_STRIDE; data[o] = id; data[o + 1] = x; data[o + 2] = y; data[o + 3] = dir; data[o + 4] = anim; data[o + 5] = anim === Anim.Walk ? PFlag.Wood | PFlag.Carrying : 0;
+    const o = k * PERSON_STRIDE; data[o] = id; data[o + 1] = x; data[o + 2] = y; data[o + 3] = dir; data[o + 4] = anim; data[o + 5] = spots[k][4] ?? (anim === Anim.Walk ? PFlag.Wood | PFlag.Carrying : 0);
   });
   layer.setTick(data, spots.length, [camp], looks, performance.now());
   if (labels) {
     layer.villages = [
-      { id: 1, kind: "village", name: "Otisudo", gloss: "Otisu's Ford", x: cx, y: cy, pop: 54, bands: ["Kele", "Muwe"], color: "#d8584a", band: 1 },
-      { id: 2, kind: "gathering", name: "Sutlatlo", gloss: "", x: cx + 22, y: cy + 6, pop: 61, bands: ["Tyli", "Lini"], color: "#7fa8e6", band: 2 },
-      { id: 3, kind: "ruins", name: "Pokumeto", gloss: "Mammoth Fell", x: cx - 19, y: cy + 3, pop: 0, bands: [], color: "#9a8a6a", band: 0 },
+      /* a town's sign is wider, with three roofs; a hamlet's is the small tag */
+      { id: 1, kind: "village", name: "Otisudo", gloss: "Otisu's Ford", x: cx, y: cy, pop: 104, bands: ["Kele", "Muwe", "Tyli"], color: "#d8584a", band: 1, tier: 2 },
+      { id: 6, kind: "village", name: "Kelupo", gloss: "Kelu's Rest", x: cx + 14, y: cy - 9, pop: 12, bands: ["Kelu"], color: "#d8584a", band: 3, tier: 0 },
+      { id: 7, kind: "village", name: "Muwesa", gloss: "Muwe's Bend", x: cx - 16, y: cy - 8, pop: 41, bands: ["Muwe"], color: "#7fa8e6", band: 4, tier: 1 },
+      { id: 2, kind: "gathering", name: "Sutlatlo", gloss: "", x: cx + 22, y: cy + 6, pop: 61, bands: ["Tyli", "Lini"], color: "#7fa8e6", band: 2, tier: 0 },
+      { id: 3, kind: "ruins", name: "Pokumeto", gloss: "Mammoth Fell", x: cx - 27, y: cy + 3, pop: 0, bands: [], color: "#9a8a6a", band: 0, tier: 0 },
       /* two old ruins close together, to see the second sign lifted clear */
-      { id: 4, kind: "ruins", name: "Tenaki", gloss: "Tena's Hill", x: cx - 4, y: cy + 16, pop: 0, bands: [], color: "#9a8a6a", band: 0 },
-      { id: 5, kind: "ruins", name: "Wosuhe", gloss: "Cold Hearth", x: cx - 2, y: cy + 16.5, pop: 0, bands: [], color: "#9a8a6a", band: 0 },
+      { id: 4, kind: "ruins", name: "Tenaki", gloss: "Tena's Hill", x: cx - 4, y: cy + 16, pop: 0, bands: [], color: "#9a8a6a", band: 0, tier: 0 },
+      { id: 5, kind: "ruins", name: "Wosuhe", gloss: "Cold Hearth", x: cx - 2, y: cy + 16.5, pop: 0, bands: [], color: "#9a8a6a", band: 0, tier: 0 },
     ];
   }
   const out = [];
@@ -65,6 +85,8 @@ function scene(title, { style, look, temp, season, hide, trim, shelter, zoom = 1
 scene("Round huts (plain), summer: one going up, one worn, a pit open and one closed, fields with a tame crop, shelters for the rest", { style: "round", look: "plain", temp: 150, season: "summer", hide: "#c29a68", trim: "#b4553e", shelter: "dome" });
 scene("Longhouses sunk under turf (cold), in the snow; the fields rest", { style: "long", look: "cold", temp: 20, season: "winter", hide: "#e2d6ba", trim: "#4f6a8a", shelter: "leanto" });
 scene("Cones on stilts by the water (wet)", { style: "cone", look: "wet", temp: 170, season: "summer", hide: "#b48a5e", trim: "#d1a646", shelter: "tent" });
-scene("The map's signs: a village, a gathering and ruins", { style: "round", look: "hot", temp: 220, season: "summer", hide: "#c29a68", trim: "#6f8a44", shelter: "dome", zoom: 4.5, labels: true });
+scene("The map's signs: a town, a village, a hamlet, a gathering and ruins", { style: "round", look: "hot", temp: 220, season: "summer", hide: "#c29a68", trim: "#6f8a44", shelter: "dome", zoom: 4.5, labels: true });
+scene("A town of checkpoint 3A: houses of mud brick over the old huts (one worn, one still being rebuilt), a granary on posts, the village well with the chief beside it, the potter's kiln smoking, the fold with its goats, and a dog at the hearth", { style: "round", look: "plain", temp: 150, season: "summer", hide: "#c29a68", trim: "#b4553e", shelter: "dome", town: true });
+scene("The same town in the snow, from a people of cones", { style: "cone", look: "cold", temp: 20, season: "winter", hide: "#e2d6ba", trim: "#4f6a8a", shelter: "tent", town: true });
 window.done = true;
 </script></body></html>

@@ -6,7 +6,7 @@
 /* Every building of checkpoint 3A made of parts: houses of each people in each wall and roof, from frame to ruin and under snow; granaries, wells, kilns, pens; and the later ages' halls, shrines, posts, walls, monuments, docks, roads and bridges. */
 import { buildingSprite } from "/src/render/sprites/buildings.ts";
 const K = 4, c = document.getElementById("c"), x = c.getContext("2d");
-c.width = 1700; c.height = 3000; x.imageSmoothingEnabled = false;
+c.width = 1700; c.height = 4200; x.imageSmoothingEnabled = false;
 x.fillStyle = "#7c9a4c"; x.fillRect(0, 0, c.width, c.height);
 const draw = (cv, px, py) => x.drawImage(cv, px, py - cv.height * K, cv.width * K, cv.height * K);
 x.fillStyle = "#14110c"; x.font = "14px system-ui";

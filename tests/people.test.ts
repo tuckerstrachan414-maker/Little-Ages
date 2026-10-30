@@ -8,7 +8,7 @@ import { Society } from "../src/sim/people/society.ts";
 import { personDetail, bandDetail } from "../src/sim/people/inspect.ts";
 import { Goal, Place } from "../src/sim/people/person.ts";
 import { BLOCKED, Walker } from "../src/sim/people/walk.ts";
-import { DAY_SECONDS, DAYS_PER_SEASON, Flag, type WorldData } from "../src/shared/types.ts";
+import { DAY_SECONDS, DAYS_PER_SEASON, Flag, Species, type WorldData } from "../src/shared/types.ts";
 
 /* One medium world, shared: making it and settling its wildlife is the slow part. */
 const SEED = 7;
@@ -64,6 +64,15 @@ describe("people: founding", () => {
       expect(s.waterNear(b.x, b.y, 8)).not.toBeNull();
       expect(b.members.length).toBeGreaterThanOrEqual(12);
     }
+  });
+  it("a band's number is never given twice, even after the band is gone", () => {
+    const { s: t } = fresh("bands", 4);
+    const ids = new Set(t.bands.map(b => b.id)); expect(ids.size).toBe(t.bands.length);
+    const last = t.bands[t.bands.length - 1];
+    t.endBand(last, "is no more", false);
+    expect(t.bandById.has(last.id)).toBe(false);
+    const nb = t.newBand(t.bands[0].x, t.bands[0].y, t.bands[0].culture, t.bands[0].id);
+    expect(nb.id).not.toBe(last.id); expect(ids.has(nb.id)).toBe(false);
   });
   it("peoples of two bands share a culture, and different peoples do not", () => {
     const byCulture = new Map<number, number>();
@@ -165,13 +174,45 @@ describe("people: determinism and the cradle start", () => {
 
 describe("the rule: nothing is triggered by a date", () => {
   it("no simulation code fires events on a particular year or day", () => {
-    const dirs = ["src/sim/people/", "src/sim/tech/", "src/sim/tech/branches/", "src/sim/economy/", "src/sim/world/"];
-    const files = dirs.flatMap(dir => readdirSync(dir).filter(f => f.endsWith(".ts")).map(f => dir + f)).concat(["src/sim/resources.ts", "src/sim/ecology.ts", "src/sim/weather.ts"]);
+    /* every file under src/sim, however deep: the buildings, the herds, the land and the weather included */
+    const files = (readdirSync("src/sim", { recursive: true }) as string[]).filter(f => f.endsWith(".ts")).map(f => "src/sim/" + f);
+    expect(files.length).toBeGreaterThan(40);
+    expect(files).toContain("src/sim/buildings/build.ts"); expect(files).toContain("src/sim/wildlife.ts");
     for (const f of files) {
       const src = readFileSync(f, "utf8");
-      expect(src, f).not.toMatch(/\b(year|day)\s*===?\s*\d/);
+      expect(src, f).not.toMatch(/\b(year|day)\s*(===?|>=?|<=?)\s*\d/);
       expect(src, f).not.toMatch(/\btime\s*[<>]=?\s*\d{3,}/);
     }
     void Flag;
+  });
+});
+
+describe("a death in the middle of a tick", () => {
+  it("a band's last member, killed by a bear between one step and the next, does nothing more; the band ends and the world goes on", () => {
+    const { s } = fresh("bands", 6);
+    const b = s.bands.slice().sort((a, c) => a.members.length - c.members.length)[0];
+    const keep = b.members.map(id => s.byId.get(id)!).find(q => s.age(q) >= 18 && s.age(q) < 50) ?? s.byId.get(b.members[0])!;
+    for (const id of b.members.slice()) if (id !== keep.id) s.die(s.byId.get(id)!, "the test");
+    expect(b.members).toEqual([keep.id]);
+    expect(s.bandById.has(b.id)).toBe(true);
+    /* bold, unarmed and already hurt: the bear at their heels gets them sooner or later, and the blow is deadly */
+    keep.traits[0] = 1; keep.health = 0.02; keep.spear = 0; keep.carrier = 0;
+    const bear = { id: 99997, sp: Species.Bear, x: keep.x + 1, y: keep.y, n: 1, tx: keep.x + 1, ty: keep.y, state: 0, timer: 1e9, heading: 0, hunger: 1, prey: -1, cond: 1 };
+    s.wild.herds.push(bear);
+    /* a band of one who knows another camp would be merged into it at the day's end; they must meet the bear as a band of their own */
+    keep.places = keep.places.filter(pl => pl.k !== Place.Camp || pl.ref === b.id);
+    let time = s.time;
+    for (let k = 0; k < 900 && s.byId.has(keep.id); k++) { bear.x = keep.x + 1; bear.y = keep.y; time += 1; s.update(1, time, s.season); }
+    expect(s.byId.has(keep.id)).toBe(false);
+    expect(s.bandById.has(b.id)).toBe(false);
+    expect(s.people.includes(keep)).toBe(false);
+    /* it was the bear, in this band, and the band ended with them rather than being merged away */
+    expect(s.archive.get(keep.id)!.band).toBe(b.id);
+    expect(s.archive.get(keep.id)!.cause).toBe("a bear");
+    expect(s.events.some(e => e.kind === "band-end" && e.band === b.id)).toBe(true);
+    expect(s.stats.merges).toBe(0);
+    /* and the next tick is an ordinary one */
+    time += 1; s.update(1, time, s.season);
+    expect(s.people.every(q => s.bandById.has(q.band))).toBe(true);
   });
 });

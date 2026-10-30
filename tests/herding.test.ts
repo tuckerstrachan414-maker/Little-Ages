@@ -17,6 +17,9 @@ import { wants } from "../src/sim/buildings/wants.ts";
 import { personDetail, bandDetail } from "../src/sim/people/inspect.ts";
 import { flocksDay, keepYoung, youngOf, herdSpell, wolfRisk, hasDogs, capacityOf, flockSpot, flockWords, keepsWords, herdsLine, flockQuads, flocksOf, type Flock } from "../src/sim/people/herding.ts";
 import { Species, SPECIES_NAMES, DAY_SECONDS, DAYS_PER_SEASON, type WorldData } from "../src/shared/types.ts";
+import { Mat } from "../src/sim/economy/goods.ts";
+import { Bubble } from "../src/shared/people.ts";
+import { noteSite, eventName } from "../src/sim/people/villages.ts";
 
 /*
   Herding: the wild goats, sheep and boar of the land; the young of a kill carried home;
@@ -153,6 +156,8 @@ describe("the flock", () => {
     expect(B.n + B.young).toBeLessThanOrEqual(1);
     expect(s.stats.herds.escaped).toBeGreaterThan(0);
     expect(s.byId.get(B.home)!.mem.some(m => m.k === Mem.HerdLoss)).toBe(true);
+    /* a night's wandering off never weighs like a wolf raid, however many slipped away */
+    expect(s.byId.get(B.home)!.mem.some(m => m.k === Mem.HerdLoss && m.v >= -0.29)).toBe(true);
     expect(s.events.some(e => e.kind === "herd" && e.text.includes("wandered off"))).toBe(true);
   });
   it("a fold keeps even wild-hearted animals in", () => {
@@ -254,6 +259,10 @@ describe("how keeping animals comes to a people", () => {
     for (let k = 0; k < 600 && !dogs; k++) { b.yesterday.spoiled = 5; days(s, 1, 2); dogs = flocksOf(s, b).find(f => f.sp === Species.Dog); }
     expect(dogs).toBeTruthy();
     expect(dogs!.n + dogs!.young).toBeGreaterThanOrEqual(1); expect(dogs!.tame).toBeGreaterThanOrEqual(0.5);
+    /* pups with no grown dog among them are fed like any flock: their condition is a number, not nothing divided by nothing */
+    days(s, 1, 2);
+    expect(Number.isFinite(dogs!.cond)).toBe(true); expect(dogs!.cond).toBeGreaterThan(0);
+    expect(s.eco.hunt(b.x, b.y, 0)).toBe(0);
     expect(s.stats.herds.pups).toBe(2);
     const e = s.events.find(e => e.kind === "kept" && e.title === "Wolf pups taken in")!;
     expect(e).toBeTruthy(); expect(e.text).toContain("wolf pups"); expect(e.title).toBe("Wolf pups taken in");
@@ -318,5 +327,53 @@ describe("whose animals they are", () => {
     expect(keepsWords(s, p)).toBe("keeps 5 goats and a kid, and a dog");
     expect(herdsLine(s, b)).toBe("one family keeps 5 goats and a kid and a dog; the goats and dogs come when called");
     expect(bandDetail(s, b.id)!.herds).toContain("goats");
+  });
+});
+
+describe("what the cards and the chronicle say of the animals", () => {
+  it("tells a night's wandering off from a wolf raid, pups taken in from young carried home, and names what is carried", () => {
+    const { s } = fresh();
+    const b = bigBand(s), p = grown(s, b)[0];
+    const texts = () => personDetail(s, p.id)!.memories.map(m => m.text);
+    s.remember(p, Mem.HerdLoss, 0, Math.max(-0.29, -0.2 * 3), Species.Goat);
+    expect(texts()).toContain("An animal the family kept wandered off in the night");
+    s.remember(p, Mem.HerdLoss, 0, -0.4, Species.Sheep);
+    expect(texts()).toContain("Wolves got in among the animals the family keeps");
+    s.remember(p, Mem.Kept, 0, 0.4, Species.Dog);
+    expect(texts()).toContain("Took in wolf pups that came for the camp's scraps and fed them at the hearth");
+    s.remember(p, Mem.Kept, 0, 0.5, Species.Goat);
+    expect(texts()).toContain("Carried young animals home from a kill and fed them at the hearth");
+    p.carryKind = Mat.Clay; p.carryAmt = 6;
+    expect(personDetail(s, p.id)!.carrying).toBe("6 clay");
+    p.carryKind = Mat.Hides; p.carryAmt = 2;
+    expect(personDetail(s, p.id)!.carrying).toBe("2 hides");
+    p.carryKind = Mat.Wood; p.carryAmt = 1;
+    expect(personDetail(s, p.id)!.carrying).toBe("1 firewood");
+    p.carryKind = Mat.None; p.carryAmt = 0;
+    expect(personDetail(s, p.id)!.carrying).toBe("");
+  });
+  it("headlines dogs as dogs, and a taming can name the place it happened", () => {
+    const { s } = fresh();
+    const b = bigBand(s);
+    s.event("tamed", Bubble.Wolf, "The test keep dogs now.", b.x, b.y, [], b.id, 16 + Species.Dog);
+    expect(s.events.at(-1)!.title).toBe("A people keeps dogs");
+    s.event("tamed", Bubble.Wolf, "The test keep dogs now.", b.x, b.y, [], b.id, 32 + Species.Dog);
+    expect(s.events.at(-1)!.title).toBe("The first dogs anywhere");
+    s.event("tamed", Bubble.Goat, "The test keep goats now.", b.x, b.y, [], b.id, 16 + Species.Goat);
+    expect(s.events.at(-1)!.title).toBe("A people takes to herding");
+    s.event("tamed", Bubble.Goat, "The test keep goats now.", b.x, b.y, [], b.id, 32 + Species.Sheep);
+    expect(s.events.at(-1)!.title).toBe("The first tame animals anywhere");
+    /* the place keeps the name */
+    const x = b.x + 300, y = b.y + 300;
+    noteSite(s, "tamed", 0.95, 32 + Species.Goat, [], x, y);
+    const fold = eventName(s, x, y);
+    expect(fold?.gloss).toBe("Goat Fold"); expect(fold?.words).toEqual(["goat", "fold"]); expect(fold?.why).toContain("the first goats anyone tamed");
+    noteSite(s, "tamed", 0.97, 16 + Species.Dog, [], x + 60, y);
+    const hearth = eventName(s, x + 60, y);
+    expect(hearth?.gloss).toBe("Dog Hearth"); expect(hearth?.why).toContain("the dogs a family were the first of their people to keep there"); expect(hearth?.why).not.toContain("anyone");
+    /* sheep are sheep, not "sheeps" */
+    noteSite(s, "tamed", 0.96, 32 + Species.Sheep, [], x, y + 60);
+    const sheep = eventName(s, x, y + 60);
+    expect(sheep?.gloss).toBe("Sheep Fold"); expect(sheep?.why).toContain("the first sheep anyone tamed"); expect(sheep?.why).not.toContain("sheeps");
   });
 });

@@ -21,7 +21,8 @@ const stayAt = (s: Society, p: Person) => clamp01((s.time - s.band(p).movedAt) /
 
 export const HOOKS: Partial<Record<number, TechHooks>> = {
   /* dogs: someone with wolf pups grown at the hearth needs no other want to see what they are; without them, only the band's wants and wolves about speak for it */
-  [techIx("taming-dogs")]: { pressure(s, p, _k, c) { const d = TECHS[techIx("taming-dogs")]; return c.pups ? Math.max(0.5, genericPressure(s, p, d, c)) : c.wolves ? genericPressure(s, p, d, c) * 0.5 : 0; } },
+  /* dogs come only to someone minding wolf pups at the hearth: the story says so, and the flock must be there to tame */
+  [techIx("taming-dogs")]: { pressure(s, p, _k, c) { const d = TECHS[techIx("taming-dogs")]; return c.pups ? Math.max(0.5, genericPressure(s, p, d, c)) * (c.wolves ? 1.3 : 1) : 0; } },
   [Idea.MakeFire]: {
     pressure(s, p, k) {
       const b = s.band(p), out = b.fire <= 0;

@@ -74,6 +74,8 @@ export interface Band {
   seed: Record<string, number>;
   /** what the band is short of, 0..1 by Problem, worked out each morning (see tech/problems.ts) */
   problems: Float32Array;
+  /** people within sixteen tiles of camp, counted each morning with the problems; illness reads the raw count */
+  crowd: number;
   /** when meat or fish last came into camp */
   meatAt: number;
   /** when the wood coming back around this camp was last told */

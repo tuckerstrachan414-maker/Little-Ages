@@ -3,13 +3,16 @@
   fared, so a change to how they live can be checked against how they lived before it.
   node --experimental-strip-types scripts/sweep.ts --seeds 1-16 --years 10 [--jobs 4] [--save base.json] [--against base.json]
   Every run is the same as `npm run sim -- --size medium --seed N --years Y --bands 12 --summary`.
+  `--seeds` takes ranges and lists (`1-16`, `3,7,9-12`); `--save` is written again after every seed, so a
+  sweep that is stopped keeps the worlds it finished.
 */
 import { spawn } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { cpus } from "node:os";
 
 const arg = (k: string, d: string) => { const i = process.argv.indexOf(`--${k}`); return i >= 0 ? process.argv[i + 1] : d; };
-const [lo, hi] = arg("seeds", "1-16").split("-").map(Number);
+const seeds: number[] = [];
+for (const part of arg("seeds", "1-16").split(",")) { const [lo, hi] = part.split("-").map(Number); for (let s = lo; s <= (hi || lo); s++) seeds.push(s); }
 const years = arg("years", "10"), size = arg("size", "medium"), bands = arg("bands", "12"), jobs = +arg("jobs", String(Math.max(1, cpus().length)));
 const save = arg("save", ""), against = arg("against", "");
 type Row = Record<string, number | string>;
@@ -26,13 +29,12 @@ function runOne(seed: number): Promise<Row> {
   });
 }
 
-const seeds: number[] = []; for (let s = lo; s <= (hi || lo); s++) seeds.push(s);
 const rows: Row[] = [];
+const keep = () => { rows.sort((a, b) => +a.seed - +b.seed); if (save) writeFileSync(save, JSON.stringify(rows, null, 1)); };
 let next = 0;
 await Promise.all(Array.from({ length: Math.min(jobs, seeds.length) }, async () => {
-  while (next < seeds.length) { const seed = seeds[next++]; const r = await runOne(seed); rows.push(r); process.stderr.write(`seed ${seed} done in ${r.secs}s\n`); }
+  while (next < seeds.length) { const seed = seeds[next++]; const r = await runOne(seed); rows.push(r); keep(); process.stderr.write(`seed ${seed} done in ${r.secs}s (${rows.length} of ${seeds.length})\n`); }
 }));
-rows.sort((a, b) => +a.seed - +b.seed);
 const KEYS = ["pop", "pop25", "pop50", "deaths", "hunger", "illness", "moves", "long", "villages", "towns", "techs", "flocks", "secs"];
 const base: Row[] | null = against ? JSON.parse(readFileSync(against, "utf8")) : null;
 console.log(["seed", ...KEYS].map(k => k.padStart(9)).join(""));
@@ -61,5 +63,5 @@ if (base) {
 const ideas = new Map<string, number>(); for (const r of rows) for (const n of String(r.ideas).split("|").filter(Boolean)) ideas.set(n, (ideas.get(n) ?? 0) + 1);
 console.log(`Known at the end, in how many of ${rows.length} worlds: ${[...ideas].sort((a, b) => b[1] - a[1]).map(([n, c]) => `${n} ${c}`).join(", ")}`);
 for (const k of Object.keys(rows[0] ?? {})) if (!KEYS.includes(k) && !["seed", "years", "ideas"].includes(k)) console.log(`  ${k}: ${rows.map(r => r[k]).join(" ")}`);
-if (save) writeFileSync(save, JSON.stringify(rows, null, 1));
+keep();
 function fmt(v: number, k: string): string { return k === "long" ? v.toFixed(3) : k === "meanStay" || k === "secs" ? v.toFixed(1) : Number.isInteger(v) ? String(v) : v.toFixed(1); }

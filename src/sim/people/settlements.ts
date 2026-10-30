@@ -109,7 +109,13 @@ export function villageProblems(s: Society, v: Village): Float32Array {
 }
 /** The chief sets the village to a work it feels the need of: a well where the water is far, a granary where the pits overflow. */
 function chiefDay(s: Society, v: Village): void {
-  if (v.call) { const w = s.works.find(o => o.id === v.call!.work); if (!w || standing(w) || (w.prog ?? 0) <= 0) v.call = null; else return; }
+  /* a call stands while the work is going up; one nobody has answered in two years is given up, the marked-out frame with it */
+  if (v.call) {
+    const w = s.works.find(o => o.id === v.call!.work);
+    const given = !!w && (w.prog ?? 0) <= 0 && s.time - v.call.since > YEAR * 2;
+    if (given) { s.works = s.works.filter(o => o !== w); s.worksVersion++; }
+    if (!w || standing(w) || given) v.call = null; else return;
+  }
   const chief = s.byId.get(v.chief); if (!chief || !v.bands.includes(chief.band)) return;
   const b = s.band(chief), pr = villageProblems(s, v), adults = villageAdults(s, v);
   if (adults.length < 6) return;
