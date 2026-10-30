@@ -7,6 +7,7 @@ import { unpackHint } from "../tech/tree.ts";
 import { Work, worksAround } from "./works.ts";
 import { hutStands, pitFood } from "./homes.ts";
 import { Mat, MATS } from "../economy/goods.ts";
+import { speciesWords } from "./herding.ts";
 import type { Society } from "./society.ts";
 
 /*
@@ -125,11 +126,12 @@ export function eventName(s: Society, x: number, y: number): { words: string[]; 
     case "found": {
       const m = MATS[best.hint]; if (!m || !m.dug) return null;
       const land = m.id === Mat.Clay ? "bank" : m.id === Mat.Reeds ? "bed" : m.id === Mat.Salt ? "flat" : m.id === Mat.Stone ? "hill" : "rock";
-      return { words: [m.name, land], gloss: `${cap(m.name)} ${cap(land)}`, why: `for the ${m.name} ${who || "someone"} found there` };
+      return { words: [m.name, land], gloss: `${m.name.split(" ").map(cap).join(" ")} ${cap(land)}`, why: `for the ${m.name} ${who || "someone"} found there` };
     }
     case "tamed": {
-      const sp = best.hint & 15, w = (SPECIES_NAMES[sp] ?? "goats").split(" ").pop()!.replace(/s$/, ""), dogs = sp === Species.Dog;
-      return { words: [w, dogs ? "hearth" : "fold"], gloss: `${cap(w)} ${dogs ? "Hearth" : "Fold"}`, why: `for the first ${w}s anyone tamed, which ${who ? `${who}'s family` : "a family"} kept there` };
+      const sp = best.hint & 15, [one, many] = speciesWords(sp), dogs = sp === Species.Dog, fam = who ? `${who}'s family` : "a family";
+      const why = best.hint >> 4 === 2 ? `for the first ${many} anyone tamed, which ${fam} kept there` : `for the ${many} ${fam} were the first of their people to keep there`;
+      return { words: [one, dogs ? "hearth" : "fold"], gloss: `${cap(one)} ${dogs ? "Hearth" : "Fold"}`, why };
     }
     case "discover": {
       const d = IDEAS[unpackHint(best.hint).id]; if (!d) return null;

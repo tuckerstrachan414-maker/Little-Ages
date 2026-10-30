@@ -199,11 +199,18 @@ describe("a death in the middle of a tick", () => {
     keep.traits[0] = 1; keep.health = 0.02; keep.spear = 0; keep.carrier = 0;
     const bear = { id: 99997, sp: Species.Bear, x: keep.x + 1, y: keep.y, n: 1, tx: keep.x + 1, ty: keep.y, state: 0, timer: 1e9, heading: 0, hunger: 1, prey: -1, cond: 1 };
     s.wild.herds.push(bear);
+    /* a band of one who knows another camp would be merged into it at the day's end; they must meet the bear as a band of their own */
+    keep.places = keep.places.filter(pl => pl.k !== Place.Camp || pl.ref === b.id);
     let time = s.time;
     for (let k = 0; k < 900 && s.byId.has(keep.id); k++) { bear.x = keep.x + 1; bear.y = keep.y; time += 1; s.update(1, time, s.season); }
     expect(s.byId.has(keep.id)).toBe(false);
     expect(s.bandById.has(b.id)).toBe(false);
     expect(s.people.includes(keep)).toBe(false);
+    /* it was the bear, in this band, and the band ended with them rather than being merged away */
+    expect(s.archive.get(keep.id)!.band).toBe(b.id);
+    expect(s.archive.get(keep.id)!.cause).toBe("a bear");
+    expect(s.events.some(e => e.kind === "band-end" && e.band === b.id)).toBe(true);
+    expect(s.stats.merges).toBe(0);
     /* and the next tick is an ordinary one */
     time += 1; s.update(1, time, s.season);
     expect(s.people.every(q => s.bandById.has(q.band))).toBe(true);

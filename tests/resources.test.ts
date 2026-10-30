@@ -209,6 +209,10 @@ describe("a find names the place", () => {
     expect(eventName(s, x + 60, y)?.gloss).toBe("Flint Rock");
     noteSite(s, "found", 0.95, Mat.Salt, [], x, y + 60);
     expect(eventName(s, x, y + 60)?.gloss).toBe("Salt Flat");
+    /* a two-word material is title-cased through */
+    noteSite(s, "found", 0.95, Mat.Copper, [], x + 120, y);
+    const ore = eventName(s, x + 120, y);
+    expect(ore?.gloss).toBe("Copper Ore Rock"); expect(ore?.words).toEqual(["copper ore", "rock"]);
     /* a find of something that is not dug from the ground gives no name */
     noteSite(s, "found", 0.95, Mat.Meat, [], x + 60, y + 60);
     expect(eventName(s, x + 60, y + 60)).toBeNull();

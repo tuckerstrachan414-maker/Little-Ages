@@ -366,8 +366,14 @@ describe("what the cards and the chronicle say of the animals", () => {
     /* the place keeps the name */
     const x = b.x + 300, y = b.y + 300;
     noteSite(s, "tamed", 0.95, 32 + Species.Goat, [], x, y);
-    expect(eventName(s, x, y)?.gloss).toBe("Goat Fold");
+    const fold = eventName(s, x, y);
+    expect(fold?.gloss).toBe("Goat Fold"); expect(fold?.words).toEqual(["goat", "fold"]); expect(fold?.why).toContain("the first goats anyone tamed");
     noteSite(s, "tamed", 0.97, 16 + Species.Dog, [], x + 60, y);
-    expect(eventName(s, x + 60, y)?.gloss).toBe("Dog Hearth");
+    const hearth = eventName(s, x + 60, y);
+    expect(hearth?.gloss).toBe("Dog Hearth"); expect(hearth?.why).toContain("the dogs a family were the first of their people to keep there"); expect(hearth?.why).not.toContain("anyone");
+    /* sheep are sheep, not "sheeps" */
+    noteSite(s, "tamed", 0.96, 32 + Species.Sheep, [], x, y + 60);
+    const sheep = eventName(s, x, y + 60);
+    expect(sheep?.gloss).toBe("Sheep Fold"); expect(sheep?.why).toContain("the first sheep anyone tamed"); expect(sheep?.why).not.toContain("sheeps");
   });
 });
