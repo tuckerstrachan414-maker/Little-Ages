@@ -4,17 +4,19 @@
   node --experimental-strip-types scripts/sweep.ts --seeds 1-16 --years 10 [--jobs 4] [--save base.json] [--against base.json]
   Every run is the same as `npm run sim -- --size medium --seed N --years Y --bands 12 --summary`.
   `--seeds` takes ranges and lists (`1-16`, `3,7,9-12`); `--save` is written again after every seed, so a
-  sweep that is stopped keeps the worlds it finished.
+  sweep that is stopped keeps the worlds it finished, and `--resume` takes those up again and runs only
+  the seeds the saved file lacks; `--logs DIR` keeps each world's whole report as DIR/seed-N.txt.
 */
 import { spawn } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { cpus } from "node:os";
 
 const arg = (k: string, d: string) => { const i = process.argv.indexOf(`--${k}`); return i >= 0 ? process.argv[i + 1] : d; };
 const seeds: number[] = [];
 for (const part of arg("seeds", "1-16").split(",")) { const [lo, hi] = part.split("-").map(Number); for (let s = lo; s <= (hi || lo); s++) seeds.push(s); }
 const years = arg("years", "10"), size = arg("size", "medium"), bands = arg("bands", "12"), jobs = +arg("jobs", String(Math.max(1, cpus().length)));
-const save = arg("save", ""), against = arg("against", "");
+const save = arg("save", ""), against = arg("against", ""), logs = arg("logs", ""), resume = process.argv.includes("--resume");
+if (logs) mkdirSync(logs, { recursive: true });
 type Row = Record<string, number | string>;
 
 function runOne(seed: number): Promise<Row> {
@@ -23,17 +25,20 @@ function runOne(seed: number): Promise<Row> {
     let out = "", err = "";
     ch.stdout.on("data", d => (out += d)); ch.stderr.on("data", d => (err += d));
     ch.on("close", code => {
+      if (logs) writeFileSync(`${logs}/seed-${seed}.txt`, out + (err ? `\n--- stderr ---\n${err}` : ""));
       const line = out.split("\n").find(l => l.startsWith("SUMMARY "));
       if (code !== 0 || !line) fail(new Error(`seed ${seed} failed (${code}): ${err.slice(-2000)}`)); else done(JSON.parse(line.slice(8)));
     });
   });
 }
 
-const rows: Row[] = [];
+const rows: Row[] = resume && save && existsSync(save) ? JSON.parse(readFileSync(save, "utf8")) : [];
+const todo = seeds.filter(seed => !rows.some(r => r.seed === seed));
+if (rows.length) process.stderr.write(`${rows.length} seed(s) kept from ${save}; ${todo.length} to run\n`);
 const keep = () => { rows.sort((a, b) => +a.seed - +b.seed); if (save) writeFileSync(save, JSON.stringify(rows, null, 1)); };
 let next = 0;
-await Promise.all(Array.from({ length: Math.min(jobs, seeds.length) }, async () => {
-  while (next < seeds.length) { const seed = seeds[next++]; const r = await runOne(seed); rows.push(r); keep(); process.stderr.write(`seed ${seed} done in ${r.secs}s (${rows.length} of ${seeds.length})\n`); }
+await Promise.all(Array.from({ length: Math.min(jobs, todo.length) }, async () => {
+  while (next < todo.length) { const seed = todo[next++]; const r = await runOne(seed); rows.push(r); keep(); process.stderr.write(`seed ${seed} done in ${r.secs}s (${rows.length} of ${seeds.length})\n`); }
 }));
 const KEYS = ["pop", "pop25", "pop50", "deaths", "hunger", "illness", "moves", "long", "villages", "towns", "techs", "flocks", "secs"];
 const base: Row[] | null = against ? JSON.parse(readFileSync(against, "utf8")) : null;
