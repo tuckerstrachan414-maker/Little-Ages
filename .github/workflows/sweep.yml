@@ -1,7 +1,8 @@
 # The balance sweep of scripts/sweep.ts, one world per job, so sixteen seeds of a hundred years
 # run side by side instead of one after another: `--years 100` is an hour or three for one world.
 # Run it from the Actions tab (or `gh workflow run sweep.yml`) once it is on the default branch, or
-# from any branch by pushing a commit whose message carries `[sweep]`; the `collect` job prints
+# from any branch by pushing a commit whose message carries `[sweep]` (`[sweep new]` or `[sweep base]`
+# runs one side alone); the `collect` job prints
 # the rows of every world as JSON and keeps them as the `sweep-results` artifact, ready for
 # `scripts/sweep.ts --against`. The baseline is run from the commit named in `base` (the last
 # commit before checkpoint 3A by default), so a change can be read against how people lived before it.
@@ -17,23 +18,23 @@ on:
         default: "[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]"
       base:
         description: Commit to run the baseline from
-        default: b9b2275
+        default: b9b2275747e4c16a211e7a7129ad3bef0cafc7dd
   push:
     branches: ["**"]
 jobs:
   world:
-    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[sweep]')
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[sweep')
     runs-on: ubuntu-latest
     timeout-minutes: 355
     strategy:
       fail-fast: false
       matrix:
-        code: [new, base]
+        code: ${{ fromJSON(contains(github.event.head_commit.message, '[sweep base]') && '["base"]' || contains(github.event.head_commit.message, '[sweep new]') && '["new"]' || '["new","base"]') }}
         seed: ${{ fromJSON(inputs.seeds || '[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]') }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ matrix.code == 'base' && (inputs.base || 'b9b2275') || github.ref }}
+          ref: ${{ matrix.code == 'base' && (inputs.base || 'b9b2275747e4c16a211e7a7129ad3bef0cafc7dd') || github.ref }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
