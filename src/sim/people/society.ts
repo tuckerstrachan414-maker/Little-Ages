@@ -13,7 +13,7 @@ import { Goal, Mem, Place, St, YEAR, ageOf, stageOf, type Archived, type KnownPl
 import { decide, isInterruptible } from "./mind.ts";
 import { doStep, abandon } from "./doing.ts";
 import { weigh } from "./chronicle.ts";
-import { eat, household, appetiteOf, reconcileHearths, carryHearth, spoil, forgetDebts, shareRound, reachFood } from "./sharing.ts";
+import { eat, household, appetiteOf, reconcileHearths, carryHearth, spoil, forgetDebts, shareRound, reachFood, familyDays } from "./sharing.ts";
 import { type Feud, feudDay, feudsOnDeath, feudLeave, feudOf, grievance, handDown, maybeFight, sideOf, fadeGrudges } from "./feuds.ts";
 import { chooseLeaders } from "./leaders.ts";
 import { type IdeaLog, newIdeaLog, founderKnow, growUp, ideasDay, countBand, watch, bandKnows, noteKnown } from "./ideas.ts";
@@ -792,7 +792,8 @@ export class Society {
     /* health: hunger, thirst and cold wear it down; food and rest restore it */
     let dh = 0;
     const hurt = (k: number, v: number) => { dh -= v; p.harm[k] += v; };
-    if (p.food < 0.1) hurt(0, 0.14 * days);
+    /* the grown starve more slowly than the young and the old */
+    if (p.food < 0.1) hurt(0, (st === "adult" || st === "teen" ? 0.09 : 0.14) * days);
     if (p.water < 0.04) hurt(1, 0.5 * days);
     if (p.warmth < 0.25) hurt(2, (0.25 - p.warmth) * (st === "baby" || st === "toddler" || st === "elder" ? 2.4 : 1.6) * days);
     if (p.sick > 0) hurt(3, (p.sick > 1 ? 0.22 : 0.02) * days);
@@ -1052,7 +1053,9 @@ export class Society {
     const youngest = p.children.map(id => this.byId.get(id)).filter((c): c is Person => !!c).reduce((m, c) => Math.min(m, this.age(c)), 99);
     const nursing = youngest < 1.6 ? 0.12 : youngest < 2.6 ? 0.45 : 1;
     const fed = Math.max(0, Math.min(1, (p.condition - 0.35) / 0.65)) * Math.max(0, Math.min(1, p.health * 1.2 - 0.1));
-    if (this.rng.chance(0.02 * Math.max(0, peak) * nursing * fed)) { p.pregnantBy = dad.id; p.fatherGenome = dad.genome; p.due = this.time + YEAR * 0.75; this.dirty.add(p.id); }
+    /* and a family with little put by makes fewer children */
+    const stocked = Math.max(0.25, Math.min(1, familyDays(this, p) / 3));
+    if (this.rng.chance(0.02 * Math.max(0, peak) * nursing * fed * stocked)) { p.pregnantBy = dad.id; p.fatherGenome = dad.genome; p.due = this.time + YEAR * 0.75; this.dirty.add(p.id); }
   }
 
   private birth(mom: Person): void {
