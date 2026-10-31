@@ -280,8 +280,12 @@ describe("how keeping animals comes to a people", () => {
     expect(dogs!.tame).toBe(1);
     dogs!.n = 2; dogs!.young = 0;
     expect(hasDogs(s, b)).toBe(true);
-    /* unfed for days, dogs go their own way */
-    h.meat = 0; h.fish = 0; h.dried = 0; b.store.meat = 0; b.store.fish = 0; b.store.dried = 0;
+    /* with no flesh to spare, the dogs live on scraps of the family's plant food; unfed for days, they go their own way */
+    h.meat = 0; h.fish = 0; h.dried = 0; b.store.meat = 0; b.store.fish = 0; b.store.dried = 0; h.plant = 40;
+    days(s, 12, 3);
+    expect(dogs!.n).toBe(2);
+    expect(h.plant).toBeLessThan(40);
+    h.plant = 0;
     days(s, 12, 3);
     expect(dogs!.n).toBeLessThan(2);
     expect(s.stats.herds.strayed).toBeGreaterThan(0);

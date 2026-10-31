@@ -173,7 +173,7 @@ describe("pottery comes to those with clay at hand and food going bad", () => {
 });
 
 describe("a crowded camp", () => {
-  it("wears on the health by the people within sixteen tiles, counted raw: nothing at thirty, a sixth at forty, everything at ninety, half as much with a well", () => {
+  it("wears on the health by the people within sixteen tiles, counted raw: nothing at fifty, a fifth at seventy, everything at a hundred and fifty, half as much with a well", () => {
     const { s } = fresh(4);
     const b = s.bands[0], p = adults(s, b)[0], home = homeOf(p, s.byId, s.time);
     problemsDay(s, b);
@@ -181,12 +181,13 @@ describe("a crowded camp", () => {
     expect(b.crowd).toBe(counted);
     expect(b.problems[Problem.Crowding]).toBeCloseTo(Math.min(1, counted / 40), 5);
     b.crowd = 20; expect(crowding(s, b)).toBe(0);
-    b.crowd = 40; expect(crowding(s, b)).toBeCloseTo(1 / 6, 3);
-    b.crowd = 100; expect(crowding(s, b)).toBe(1);
+    b.crowd = 50; expect(crowding(s, b)).toBe(0);
+    b.crowd = 70; expect(crowding(s, b)).toBeCloseTo(0.2, 3);
     b.crowd = 150; expect(crowding(s, b)).toBe(1);
-    b.crowd = 60; const sixty = crowding(s, b); expect(sixty).toBeCloseTo(0.5, 3);
+    b.crowd = 200; expect(crowding(s, b)).toBe(1);
+    b.crowd = 100; const hundred = crowding(s, b); expect(hundred).toBeCloseTo(0.5, 3);
     const well = startBuilding(s, p, defById("well0"), b.x + 3, b.y + 2, "band", home); well.prog = 1; well.state = 1; well.needs = undefined;
-    expect(crowding(s, b)).toBeCloseTo(sixty / 2, 3);
+    expect(crowding(s, b)).toBeCloseTo(hundred / 2, 3);
     void home;
   });
 });
