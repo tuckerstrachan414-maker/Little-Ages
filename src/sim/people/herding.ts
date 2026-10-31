@@ -395,7 +395,7 @@ export function herdSpell(s: Society, p: Person, st: Step): void {
   const wolves = s.herdsNear(f.x, f.y, 14).some(o => o.sp === Species.Wolf && o.n > 0);
   const ctx: Ctx = {
     kept: s.time - f.kept > DAY_SECONDS * 20, young: f.young > 0, wolves, lost: f.lostAt > 0 && s.time - f.lostAt < DAY_SECONDS * 20,
-    goats: f.sp === Species.Goat || f.sp === Species.Sheep, cattle: f.sp === Species.Aurochs, pigs: f.sp === Species.Boar, pups: f.sp === Species.Dog && f.tame < 1,
+    goats: f.sp === Species.Goat || f.sp === Species.Sheep, cattle: f.sp === Species.Aurochs, pigs: f.sp === Species.Boar, pups: f.sp === Species.Dog,
   };
   inspire(s, p, St.Herd, ctx);
   if (f.cond < 0.4) s.bubble(p, Bubble.Goat, 2);
