@@ -793,7 +793,7 @@ export class Society {
     let dh = 0;
     const hurt = (k: number, v: number) => { dh -= v; p.harm[k] += v; };
     /* the grown starve more slowly than the young and the old */
-    if (p.food < 0.1) hurt(0, (st === "adult" || st === "teen" ? 0.09 : 0.14) * days);
+    if (p.food < 0.1) hurt(0, (st === "adult" ? 0.06 : st === "teen" ? 0.09 : 0.14) * days);
     if (p.water < 0.04) hurt(1, 0.5 * days);
     if (p.warmth < 0.25) hurt(2, (0.25 - p.warmth) * (st === "baby" || st === "toddler" || st === "elder" ? 2.4 : 1.6) * days);
     if (p.sick > 0) hurt(3, (p.sick > 1 ? 0.22 : 0.02) * days);
@@ -1054,7 +1054,7 @@ export class Society {
     const nursing = youngest < 1.6 ? 0.12 : youngest < 2.6 ? 0.45 : 1;
     const fed = Math.max(0, Math.min(1, (p.condition - 0.35) / 0.65)) * Math.max(0, Math.min(1, p.health * 1.2 - 0.1));
     /* and a family with little put by makes fewer children */
-    const stocked = Math.max(0.25, Math.min(1, familyDays(this, p) / 3));
+    const stocked = Math.max(0.2, Math.min(1, familyDays(this, p) / 5));
     if (this.rng.chance(0.02 * Math.max(0, peak) * nursing * fed * stocked)) { p.pregnantBy = dad.id; p.fatherGenome = dad.genome; p.due = this.time + YEAR * 0.75; this.dirty.add(p.id); }
   }
 
@@ -1371,6 +1371,24 @@ export class Society {
       known.push({ v: siteValue(founder, pl.x, pl.y, this.time) + (pl.k === Place.Site ? pl.q : 0), at: [pl.x, pl.y] });
     }
     known.sort((a, c) => c.v - a.v);
+    /*
+      A band that has built its huts and splits for room alone does not walk off into the wild:
+      the founder's households raise their own huts next door, nine to fourteen tiles from the old
+      fire, and the village grows by a quarter. Bad blood still goes far away.
+    */
+    const settled = why === "crowd" && [...b.homes.values()].some(h => h[2] > 0);
+    const village = settled ? this.villages.find(v => !v.abandoned && Math.hypot(v.x - b.x, v.y - b.y) < VILLAGE_R) : undefined;
+    const near: { v: number; at: [number, number]; near: boolean }[] = [];
+    if (settled) {
+      for (let k = 0; k < 16; k++) {
+        const a = this.rng.next() * Math.PI * 2, d = this.rng.range(9, 14), x = b.x + Math.cos(a) * d, y = b.y + Math.sin(a) * d;
+        if (!this.walker.dry(x, y) || !this.walker.reach(b.x, b.y, x, y) || !this.waterNear(x, y, b.well ? 12 : 6)) continue;
+        if (this.bands.some(o => o !== b && Math.hypot(o.x - x, o.y - y) < 7)) continue;
+        if (village && Math.hypot(village.x - x, village.y - y) > VILLAGE_R - 1) continue;
+        near.push({ v: this.habitability((y | 0) * this.w.w + (x | 0)), at: [x, y], near: true });
+      }
+      near.sort((a, c) => c.v - a.v);
+    }
     if (fw > 0.75) {
       /* nowhere known will do: the founder will lead them into fresh land, away from where this band has camped */
       const fresh: { v: number; at: [number, number] }[] = [];
@@ -1383,8 +1401,9 @@ export class Society {
       known.push(...fresh.sort((a, c) => c.v - a.v));
     }
     let spot: [number, number] | null = null, route: number[] | null = null;
-    for (const o of known.slice(0, 6)) {
-      const sp = this.campSpot(o.at[0], o.at[1], 12, [b.x, b.y], b); if (!sp) continue;
+    for (const o of [...near.slice(0, 4), ...known.slice(0, 6)]) {
+      const sp = this.campSpot(o.at[0], o.at[1], "near" in o ? 4 : 12, [b.x, b.y], b); if (!sp) continue;
+      if ("near" in o && this.bands.some(q => q !== b && Math.hypot(q.x - sp[0], q.y - sp[1]) < 6)) continue;
       const r = this.walker.route(b.x, b.y, sp[0], sp[1], 40000); if (!r) continue;
       spot = sp; route = r; break;
     }
