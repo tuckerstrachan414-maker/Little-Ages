@@ -8,7 +8,7 @@ import { St, Goal, step, type Person } from "../src/sim/people/person.ts";
 import { homeOf, type Band } from "../src/sim/people/band.ts";
 import { Idea, learn } from "../src/sim/people/ideas.ts";
 import { techIx, techByKey } from "../src/sim/tech/tree.ts";
-import { Work, worksDay, workById } from "../src/sim/people/works.ts";
+import { Work, worksDay, workById, addWork } from "../src/sim/people/works.ts";
 import { digPit, pitOf, pitRoom, pitSite, raise, hutOf, hutJob, hutHomes, hutStands, hutWords, hutDay } from "../src/sim/people/homes.ts";
 import { DEFS, Line, defById, baseDef, materialTotal, houseWords } from "../src/sim/buildings/defs.ts";
 import { startBuilding, startUpgrade, buildSpell, deliver, deliveredFraction, buildingDay, defOf, canStart, canUpgradeTo, standing, needsOf, undelivered, buildingOf, RAISE } from "../src/sim/buildings/build.ts";
@@ -279,5 +279,25 @@ describe("the potter's stand", () => {
     /* and on open ground the potter stands right at the mouth */
     const open = { x: spot![0], y: spot![1] - 1 } as Work;
     expect(kilnStand(s, open)).toEqual([open.x, open.y + 1]);
+  });
+});
+
+describe("a shared building's site in a crowded camp", () => {
+  it("looks further out, ring by ring, when the near rings are all huts", () => {
+    const { s } = fresh();
+    const b = s.bands[0], def = defById("well0");
+    /* huts on every side out to eight tiles: the rings the old search tried */
+    let n = 0;
+    for (let r = 2.5; r <= 8.5; r += 2) for (let k = 0; k < 10; k++) {
+      const a = k * 0.63 + r, x = b.x + Math.cos(a) * r, y = b.y + Math.sin(a) * r * 0.85;
+      if (!s.walker.dry(x, y)) continue;
+      addWork(s, { kind: Work.Hut, x, y, wx: x, wy: y, band: b.id, home: 1000 + n++, by: 0, t: s.time, state: 1, food: 0, crop: "", ripe: 0, prog: 1, built: s.time, style: "round", look: "plain", size: 1 });
+    }
+    expect(n).toBeGreaterThan(20);
+    const at = communalSite(s, b, def, 3);
+    expect(at).toBeTruthy();
+    const d = Math.hypot(at![0] - b.x, at![1] - b.y);
+    expect(d).toBeGreaterThan(8);
+    expect(d).toBeLessThan(12);
   });
 });

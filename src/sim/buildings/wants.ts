@@ -6,6 +6,7 @@ import { homeOf, type Band } from "../people/band.ts";
 import { Place, type Person } from "../people/person.ts";
 import { Problem } from "../tech/problems.ts";
 import { hutOf, hutStands, stayHope, clearAt } from "../people/homes.ts";
+import { VILLAGE_R } from "../people/villages.ts";
 import { Mat, MATS } from "../economy/goods.ts";
 import type { Society } from "../people/society.ts";
 import { techIx } from "../tech/tree.ts";
@@ -43,10 +44,12 @@ export function materialsInReach(s: Society, b: Band, def: BuildingDef, needs?: 
 /** The one material a site still wants most, if any. */
 export function nextMaterial(needs: Float32Array | undefined): number { let best = -1, bv = 0; if (needs) for (let m = 0; m < needs.length; m++) if (needs[m] > bv) { bv = needs[m]; best = m; } return best; }
 
-/** Somewhere near the camp's fire for a building the band or village shares: a few tiles out, on clear dry ground; a big camp, ringed with huts, looks a little further out. */
+/** Somewhere near the camp's fire for a building the band or village shares: a few tiles out, on clear dry ground; a big camp, ringed with huts, looks further out, ring by ring, as far as the edge of the place (a well must still stand within the camp's reach of water, a granary within the village). */
 export function communalSite(s: Society, b: Band, def: BuildingDef, seed: number): [number, number] | null {
-  for (let k = 0; k < 28; k++) {
-    const a = (seed * 0.73 + k * 0.9) % (Math.PI * 2), r = 3.5 + (k % 6) * 0.9, x = Math.floor(b.x + Math.cos(a) * r) + 0.5, y = Math.floor(b.y + Math.sin(a) * r * 0.85) + 0.5;
+  const v = s.villages.find(o => !o.abandoned && Math.hypot(o.x - b.x, o.y - b.y) < VILLAGE_R);
+  for (let k = 0; k < 60; k++) {
+    const a = (seed * 0.73 + k * 0.9) % (Math.PI * 2), r = 3.5 + (k % 10) * 0.85, x = Math.floor(b.x + Math.cos(a) * r) + 0.5, y = Math.floor(b.y + Math.sin(a) * r * 0.85) + 0.5;
+    if (v && Math.hypot(v.x - x, v.y - y) > VILLAGE_R + 1) continue;
     if (clearAt(s, b, x, y, def.reach, 0) && s.walker.reach(b.x, b.y, x, y)) return [x, y];
   }
   return null;
