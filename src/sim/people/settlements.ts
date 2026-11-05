@@ -109,10 +109,10 @@ export function villageProblems(s: Society, v: Village): Float32Array {
 }
 /** The chief sets the village to a work it feels the need of: a well where the water is far, a granary where the pits overflow. */
 function chiefDay(s: Society, v: Village): void {
-  /* a call stands while the work is going up; one nobody has answered in two years is given up, the marked-out frame with it */
+  /* a call stands while the work is going up; one not finished in two years is given up, the frame torn down, so the village is not stuck behind it */
   if (v.call) {
     const w = s.works.find(o => o.id === v.call!.work);
-    const given = !!w && (w.prog ?? 0) <= 0 && s.time - v.call.since > YEAR * 2;
+    const given = !!w && !standing(w) && s.time - v.call.since > YEAR * 2;
     if (given) { s.works = s.works.filter(o => o !== w); s.worksVersion++; }
     if (!w || standing(w) || given) v.call = null; else return;
   }
