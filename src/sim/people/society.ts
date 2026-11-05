@@ -1248,6 +1248,9 @@ export class Society {
           social += tiesTo(this, q, o) * 2;
         }
         if (!ok) continue;
+        /* a village of their own people with a well or a granary the whole place shares draws them: there is water and food put by, and company */
+        const vil = this.villages.find(o => !o.abandoned && o.culture === b.culture && o.pop > 0 && Math.hypot(o.x - pl.x, o.y - pl.y) < VILLAGE_R);
+        if (vil) social += Math.min(6, vil.communal.length * 2.5);
         const v = (siteValue(q, pl.x, pl.y, this.time) + (pl.k === Place.Site ? 8 + pl.q : 0)) * (1 - d / 300);
         mine.push({ v, at: [pl.x, pl.y], social });
       }
