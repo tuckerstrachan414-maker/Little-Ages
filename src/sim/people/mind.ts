@@ -372,7 +372,8 @@ export function decide(s: Society, p: Person, forced?: Goal): void {
   }
   /* --- buildings: what the household or the band is short of and someone knows how to build, or a hand lent to one going up --- */
   if (worker && !dark && !b.moving && age >= 14 && age < 66 && s.time - b.movedAt > DAY_SECONDS * 3 && foodDrive < 0.7 && p.injury < 0.3 && !p.pregnantBy) {
-    for (const wt of wants(s, p, b).slice(0, 2)) {
+    /* the three that matter most, whatever order the list puts them in: a kiln is not forgotten because a granary came first */
+    for (const wt of wants(s, p, b).sort((a, c) => c.v - a.v).slice(0, 3)) {
       const mk = buildPlan(s, p, b, wt); if (!mk) continue;
       add({ g: Goal.Construct, v: wt.v * (0.8 + tr[7] * 0.4) * (1 - foodDrive * 0.6) / (1 + busy(Goal.Construct) * 0.25), plan: mk, why: () => wt.why, icon: Bubble.Home });
     }
