@@ -108,8 +108,8 @@ export function wants(s: Society, p: Person, b: Band): Want[] {
       if (at) out.push({ def, x: at[0], y: at[1], v: 0.3 + pr[Problem.Water] * 0.45, owner: "band", home, why: `${p.name} is starting to dig a well at ${b.siteName}, because the water is a long walk from camp and the children go thirsty.` });
     }
   }
-  /* craft: pots that keep breaking at the open fire, and the kiln known */
-  if (!near.some(w => w.kind === Line.Kiln && (standing(w) || (w.prog ?? 1) < 1)) && (b.broke ?? 0) > 0 && s.time - (b.broke ?? 0) < DAY_SECONDS * 30) {
+  /* craft: pots that cracked at the open fire within the year, and the kiln known */
+  if (!near.some(w => w.kind === Line.Kiln && (standing(w) || (w.prog ?? 1) < 1)) && (b.broke ?? 0) > 0 && s.time - (b.broke ?? 0) < DAY_SECONDS * 160) {
     const def = defById("kiln0");
     if (canStart(p, def) && materialsInReach(s, b, def)) {
       const at = householdSite(s, b, def, home);

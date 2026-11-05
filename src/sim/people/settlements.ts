@@ -3,7 +3,7 @@ import { Bubble } from "../../shared/people.ts";
 import { Goal, YEAR, type Person } from "./person.ts";
 import type { Band } from "./band.ts";
 import { Work, worksAround } from "./works.ts";
-import { hutStands } from "./homes.ts";
+import { hutStands, pitFood, pitRoom } from "./homes.ts";
 import { standing, startBuilding, OWNER } from "../buildings/build.ts";
 import { DEFS, Line, defById } from "./../buildings/defs.ts";
 import { communalSite, materialsInReach } from "../buildings/wants.ts";
@@ -133,9 +133,10 @@ function chiefDay(s: Society, v: Village): void {
       }
     }
   }
-  /* more food put by than three households' pits can hold, and granaries known */
+  /* more food put by than three households' pits can hold, granaries known, and every granary the village shares already four-fifths full */
   const overflowing = villageBands(s, v).reduce((n, o) => n + (o.problems[Problem.Storage] > 0.5 ? Math.max(1, o.hearths.size) : 0), 0);
-  if (overflowing >= 3 && !communal.some(w => w.kind === Line.Store) && !worksAround(s, v.x, v.y, 14).some(w => w.kind === Line.Store && (w.owner ?? 0) >= 1 && (w.prog ?? 1) < 1)) {
+  const roomShared = communal.some(w => w.kind === Line.Store && pitFood(w) < pitRoom(w) * 0.8);
+  if (overflowing >= 3 && !roomShared && !worksAround(s, v.x, v.y, 14).some(w => w.kind === Line.Store && (w.owner ?? 0) >= 1 && (w.prog ?? 1) < 1)) {
     const def = defById("store1");
     if (adults.some(q => knows(q, GRANARY())) && materialsInReach(s, b, def)) {
       const at = communalSite(s, b, def, v.id + 7);
