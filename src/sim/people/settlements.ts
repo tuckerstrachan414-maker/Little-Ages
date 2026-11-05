@@ -121,14 +121,16 @@ function chiefDay(s: Society, v: Village): void {
   if (adults.length < 6) return;
   const { communal } = villageBuildings(s, v);
   const her = chief.sex === "f" ? "her" : "his";
-  if (pr[Problem.Water] > 0.5 && !communal.some(w => w.kind === Line.Well) && !worksAround(s, v.x, v.y, 14).some(w => w.kind === Line.Well && (w.prog ?? 1) < 1)) {
+  /* a well where the river is a long walk, or where so many live close that the river runs foul below the camps: a well halves the crowd's sickness */
+  const crowded = v.pop >= 60;
+  if ((pr[Problem.Water] > 0.5 || crowded) && !communal.some(w => w.kind === Line.Well) && !worksAround(s, v.x, v.y, 14).some(w => w.kind === Line.Well && (w.prog ?? 1) < 1)) {
     const def = defById("well0");
     if (adults.some(q => knows(q, WELLS())) && materialsInReach(s, b, def)) {
       const at = communalSite(s, b, def, v.id);
       if (at) {
         const w = startBuilding(s, chief, def, at[0], at[1], "settlement", 0);
         v.call = { work: w.id, since: s.time };
-        s.event("communal", Bubble.Drop, `${chief.name}, whom most at ${v.name} listen to, has set the village to digging a well: the river is a long walk, and the children go thirsty. ${her === "her" ? "She" : "He"} marked out the spot ${Math.round(Math.hypot(at[0] - v.x, at[1] - v.y))} paces from the fires.`, at[0], at[1], [chief.id], b.id, 0);
+        s.event("communal", Bubble.Drop, `${chief.name}, whom most at ${v.name} listen to, has set the village to digging a well: ${pr[Problem.Water] > 0.5 ? "the river is a long walk, and the children go thirsty" : `with ${v.pop} living so close, the water below the camps runs foul and the little ones sicken`}. ${her === "her" ? "She" : "He"} marked out the spot ${Math.round(Math.hypot(at[0] - v.x, at[1] - v.y))} paces from the fires.`, at[0], at[1], [chief.id], b.id, 0);
         return;
       }
     }

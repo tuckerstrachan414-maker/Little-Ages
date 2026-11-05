@@ -154,6 +154,29 @@ describe("the chief", () => {
   });
 });
 
+describe("the chief's well for a crowd", () => {
+  it("is dug when sixty live close together, though the river is near", () => {
+    const { s } = fresh(12);
+    const b = s.bands.slice().sort((a, c) => c.members.length - a.members.length)[0];
+    const v = villageOf(s, b);
+    for (const o of s.bands.slice()) { if (o === b) continue; for (const id of o.members.slice()) { if (b.members.length >= 64) break; const q = s.byId.get(id); if (q) s.moveTo(q, b); } }
+    villagesDay(s);
+    const all = b.members.map(id => s.byId.get(id)!).filter(q => s.age(q) >= 16), chief = grown(s, b)[0];
+    for (const q of all) q.follows = chief.id;
+    know(s, chief, "digging-sticks"); know(s, chief, "wells");
+    for (const o of s.bands) o.problems[Problem.Water] = 0;
+    b.water = [b.x + 1, b.y];
+    const before = s.events.length;
+    settlementsDay(s);
+    expect(v.pop).toBeGreaterThanOrEqual(60);
+    expect(v.chief).toBe(chief.id);
+    expect(v.call).toBeTruthy();
+    const w = s.works.find(o => o.id === v.call!.work)!;
+    expect(w.kind).toBe(Line.Well); expect(w.owner).toBe(OWNER.settlement);
+    expect(s.events.slice(before).some(e => e.kind === "communal" && e.text.includes("runs foul"))).toBe(true);
+  });
+});
+
 describe("the chief's granary", () => {
   it("is raised by the villagers while the call stands, and then is everyone's to put by in", () => {
     const { s } = fresh();
