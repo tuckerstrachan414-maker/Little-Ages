@@ -35,7 +35,8 @@ export function materialsInReach(s: Society, b: Band, def: BuildingDef, needs?: 
     if (list[m] <= 0) continue;
     if (m === Mat.Wood) { if (s.resources.forestLeft(b.x, b.y, 20) < 0.03) return false; continue; }
     if (!MATS[m].dug) return false;
-    if (!s.resources.knownDeposit(b.culture, b.x, b.y, 18, m)) return false;
+    /* a bank the people know within a long morning's walk: clay for a kiln is carried further than clay for a pot */
+    if (!s.resources.knownDeposit(b.culture, b.x, b.y, 30, m)) return false;
   }
   return true;
 }
