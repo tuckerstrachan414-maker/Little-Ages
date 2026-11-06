@@ -310,11 +310,11 @@ export function decide(s: Society, p: Person, forced?: Goal): void {
       const room = pitRoom(pit) - pitFood(pit), spare = keepable - app * keepDays;
       if (room > 2 && spare > app && (b.busy.get(Goal.Store) ?? 0) < 2) add({ g: Goal.Store, v: (0.22 + tr[7] * 0.2 + (leanWinter ? 0.2 : 0)) * clamp01(spare / (app * 4)) * (1 - hunger * 0.7), plan: () => [step(St.Go, pit.x, pit.y), step(St.Store, pit.x, pit.y, pit.id, 4)], why: () => `${p.name} is putting the family's ${hh && hh.dried > hh.plant ? "dried meat" : "plant food"} by in the pit, ${leanWinter ? "against the winter" : "where it keeps far longer than at the hearth"}.`, icon: Bubble.Home });
       const hd = hh ? storeFood(hh) / app : 0;
-      /* the granary everyone at the place shares: the family's spare goes there once its own pit is full, and comes back from there when the pit is bare */
+      /* the granary everyone at the place shares: what the family's own pit will not hold goes there, and comes back from there when the pit is bare */
       const shared = sharedStore(s, b);
       if (shared && shared !== pit && shared.foods) {
         const sroom = pitRoom(shared) - pitFood(shared);
-        if (room <= 2 && sroom > 2 && spare > app && (b.busy.get(Goal.Store) ?? 0) < 3) add({ g: Goal.Store, v: (0.2 + tr[7] * 0.2 + (leanWinter ? 0.2 : 0)) * clamp01(spare / (app * 4)) * (1 - hunger * 0.7), plan: () => [step(St.Go, shared.x, shared.y), step(St.Store, shared.x, shared.y, shared.id, 4)], why: () => `${p.name} is putting the family's spare ${hh && hh.dried > hh.plant ? "dried meat" : "plant food"} by in the granary everyone at ${b.siteName} shares, the family's own pit being full.`, icon: Bubble.Home });
+        if (spare - Math.max(0, room) > app && sroom > 2 && (b.busy.get(Goal.Store) ?? 0) < 3) add({ g: Goal.Store, v: (0.2 + tr[7] * 0.2 + (leanWinter ? 0.2 : 0)) * clamp01(spare / (app * 4)) * (1 - hunger * 0.7), plan: () => [step(St.Go, shared.x, shared.y), step(St.Store, shared.x, shared.y, shared.id, 4)], why: () => `${p.name} is putting the family's spare ${hh && hh.dried > hh.plant ? "dried meat" : "plant food"} by in the granary everyone at ${b.siteName} shares, more than the family's own pit will hold.`, icon: Bubble.Home });
         if (hd < 1 && pitFood(pit) <= 1 && pitFood(shared) > 1 && !night) add({ g: Goal.Fetch, v: (0.28 + Math.max(hunger, kidsHungry) * 0.9) * (1 - hd), plan: () => [step(St.Go, shared.x, shared.y), step(St.Fetch, shared.x, shared.y, shared.id, 3), step(St.Go, hx, hy)], why: () => `${p.name} is fetching food from the granary everyone at ${b.siteName} shares, because the hearth is bare and the family's pit is empty.`, icon: Bubble.Berries });
       }
       if (hd < 1 && pitFood(pit) > 1 && !night) add({ g: Goal.Fetch, v: (0.3 + Math.max(hunger, kidsHungry) * 0.9) * (1 - hd), plan: () => [step(St.Go, pit.x, pit.y), step(St.Fetch, pit.x, pit.y, pit.id, 3), step(St.Go, hx, hy)], why: () => `${p.name} is opening the family's pit for food, because the hearth is bare${kidsHungry > 0.3 ? " and the children are hungry" : ""}.`, icon: Bubble.Berries });
@@ -372,7 +372,8 @@ export function decide(s: Society, p: Person, forced?: Goal): void {
   }
   /* --- buildings: what the household or the band is short of and someone knows how to build, or a hand lent to one going up --- */
   if (worker && !dark && !b.moving && age >= 14 && age < 66 && s.time - b.movedAt > DAY_SECONDS * 3 && foodDrive < 0.7 && p.injury < 0.3 && !p.pregnantBy) {
-    for (const wt of wants(s, p, b).slice(0, 2)) {
+    /* the three that matter most, whatever order the list puts them in: a kiln is not forgotten because a granary came first */
+    for (const wt of wants(s, p, b).sort((a, c) => c.v - a.v).slice(0, 3)) {
       const mk = buildPlan(s, p, b, wt); if (!mk) continue;
       add({ g: Goal.Construct, v: wt.v * (0.8 + tr[7] * 0.4) * (1 - foodDrive * 0.6) / (1 + busy(Goal.Construct) * 0.25), plan: mk, why: () => wt.why, icon: Bubble.Home });
     }

@@ -64,7 +64,7 @@ const WORDS: Partial<Record<number, [string, string, string, string]>> = {
 export const MILKING = () => techIx("milking"), PENNING = () => techIx("penning");
 /** How many animals a household can keep without a fold, and a fold of each kind. */
 const LOOSE = 8, LOOSE_DOGS = 6;
-/** A young animal eats this much of the family's plant food a day while it is hand-fed; a dog this much meat or fish. */
+/** A young animal eats this much of the family's plant food a day while it is hand-fed; a dog this much meat or fish, or twice that in scraps of plant food. */
 const KID_FOOD = 0.2, DOG_FOOD = 0.1;
 /** Milk per grown animal a day, in days of food for one person. */
 const MILK: Partial<Record<number, number>> = { [Species.Goat]: 0.25, [Species.Sheep]: 0.2, [Species.Aurochs]: 0.6 };
@@ -317,6 +317,8 @@ function dogsFed(s: Society, b: Band, f: Flock): number {
   const h = b.hearths.get(f.home); if (h) flesh(h, want);
   /* the pot feeds the dogs too, when it has plenty */
   if (got < want && b.store.meat + b.store.fish + b.store.dried > b.appetite) flesh(b.store, want);
+  /* and scraps of the family's plant food when there is no flesh to spare: twice as much of it goes as far */
+  if (got < want && h) { const spare = Math.max(0, h.plant - householdAppetite(s, b, f.home) * 0.5), t = Math.min(spare, (want - got) * 2); if (t > 0) { h.plant -= t; got += t / 2; } }
   /* and dogs hunt for themselves a little */
   const hunted = f.n > 0 ? s.eco.hunt(f.x, f.y, 0.008 * f.n) * 0.2 : 0;
   const fed = Math.min(1, got / want + hunted);
@@ -393,7 +395,7 @@ export function herdSpell(s: Society, p: Person, st: Step): void {
   const wolves = s.herdsNear(f.x, f.y, 14).some(o => o.sp === Species.Wolf && o.n > 0);
   const ctx: Ctx = {
     kept: s.time - f.kept > DAY_SECONDS * 20, young: f.young > 0, wolves, lost: f.lostAt > 0 && s.time - f.lostAt < DAY_SECONDS * 20,
-    goats: f.sp === Species.Goat || f.sp === Species.Sheep, cattle: f.sp === Species.Aurochs, pigs: f.sp === Species.Boar, pups: f.sp === Species.Dog && f.tame < 1,
+    goats: f.sp === Species.Goat || f.sp === Species.Sheep, cattle: f.sp === Species.Aurochs, pigs: f.sp === Species.Boar, pups: f.sp === Species.Dog,
   };
   inspire(s, p, St.Herd, ctx);
   if (f.cond < 0.4) s.bubble(p, Bubble.Goat, 2);

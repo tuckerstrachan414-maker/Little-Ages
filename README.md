@@ -85,7 +85,10 @@ npm run sim -- --size medium --seed 7 --years 20 --bands 12   # watch people liv
 npm run sim -- --size medium --seed 7 --years 10 --wild       # just the wildlife
 node --experimental-strip-types scripts/sweep.ts --seeds 1-16 --years 10 --save base.json   # a balance sweep: many seeds at once
 node --experimental-strip-types scripts/sweep.ts --seeds 1-16 --years 10 --against base.json # ...and what a change did to them
+node --experimental-strip-types scripts/sweep.ts --seeds 1-16 --years 100 --save new.json --logs logs --resume   # a long one: every world's report kept, picked up where it left off
 ```
+
+A hundred-year sweep of sixteen worlds is some twenty hours of compute on four cores. `.github/workflows/sweep.yml` runs it on GitHub's runners in about an hour and a half, one job per world and per side: it starts on any push whose commit message carries `[sweep]` (`[sweep new]` or `[sweep base]` for one side alone), runs the baseline commit named in the workflow beside the pushed code, and its `collect` job prints both sides' summaries as JSON and keeps every world's report as an artifact.
 
 Since Milestone 3 the headless run also reports, each spring, what is known by branch and how far refined, the deposits found and dug out and the wood cut and grown back, the soil's wetness and the patches in drought, the wells standing, the buildings by kind, the settlements by tier with their chiefs and each people's age, the diet, illness deaths and herb tending, the pots, and the flocks by kind with what was carried home, born, lost, milked and eaten; `--summary` ends with the numbers the sweep compares (the head count at years 10, 25, 50 and 75, deaths by cause, villages and towns, ways known and when the first pots, wells, granaries, herds, dogs, bows and houses to last came, flocks and animals, refinement, seconds per year).
 

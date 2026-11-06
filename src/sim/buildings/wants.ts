@@ -6,6 +6,7 @@ import { homeOf, type Band } from "../people/band.ts";
 import { Place, type Person } from "../people/person.ts";
 import { Problem } from "../tech/problems.ts";
 import { hutOf, hutStands, stayHope, clearAt } from "../people/homes.ts";
+import { VILLAGE_R } from "../people/villages.ts";
 import { Mat, MATS } from "../economy/goods.ts";
 import type { Society } from "../people/society.ts";
 import { techIx } from "../tech/tree.ts";
@@ -35,17 +36,20 @@ export function materialsInReach(s: Society, b: Band, def: BuildingDef, needs?: 
     if (list[m] <= 0) continue;
     if (m === Mat.Wood) { if (s.resources.forestLeft(b.x, b.y, 20) < 0.03) return false; continue; }
     if (!MATS[m].dug) return false;
-    if (!s.resources.knownDeposit(b.culture, b.x, b.y, 18, m)) return false;
+    /* a bank the people know within a long morning's walk: clay for a kiln is carried further than clay for a pot */
+    if (!s.resources.knownDeposit(b.culture, b.x, b.y, 30, m)) return false;
   }
   return true;
 }
 /** The one material a site still wants most, if any. */
 export function nextMaterial(needs: Float32Array | undefined): number { let best = -1, bv = 0; if (needs) for (let m = 0; m < needs.length; m++) if (needs[m] > bv) { bv = needs[m]; best = m; } return best; }
 
-/** Somewhere near the camp's fire for a building the band or village shares: a few tiles out, on clear dry ground; a big camp, ringed with huts, looks a little further out. */
+/** Somewhere near the camp's fire for a building the band or village shares: a few tiles out, on clear dry ground; a big camp, ringed with huts, looks further out, ring by ring, as far as the edge of the place (a well must still stand within the camp's reach of water, a granary within the village). */
 export function communalSite(s: Society, b: Band, def: BuildingDef, seed: number): [number, number] | null {
-  for (let k = 0; k < 28; k++) {
-    const a = (seed * 0.73 + k * 0.9) % (Math.PI * 2), r = 3.5 + (k % 6) * 0.9, x = Math.floor(b.x + Math.cos(a) * r) + 0.5, y = Math.floor(b.y + Math.sin(a) * r * 0.85) + 0.5;
+  const v = s.villages.find(o => !o.abandoned && Math.hypot(o.x - b.x, o.y - b.y) < VILLAGE_R);
+  for (let k = 0; k < 60; k++) {
+    const a = (seed * 0.73 + k * 0.9) % (Math.PI * 2), r = 3.5 + (k % 10) * 0.85, x = Math.floor(b.x + Math.cos(a) * r) + 0.5, y = Math.floor(b.y + Math.sin(a) * r * 0.85) + 0.5;
+    if (v && Math.hypot(v.x - x, v.y - y) > VILLAGE_R + 1) continue;
     if (clearAt(s, b, x, y, def.reach, 0) && s.walker.reach(b.x, b.y, x, y)) return [x, y];
   }
   return null;
@@ -108,8 +112,8 @@ export function wants(s: Society, p: Person, b: Band): Want[] {
       if (at) out.push({ def, x: at[0], y: at[1], v: 0.3 + pr[Problem.Water] * 0.45, owner: "band", home, why: `${p.name} is starting to dig a well at ${b.siteName}, because the water is a long walk from camp and the children go thirsty.` });
     }
   }
-  /* craft: pots that keep breaking at the open fire, and the kiln known */
-  if (!near.some(w => w.kind === Line.Kiln && (standing(w) || (w.prog ?? 1) < 1)) && (b.broke ?? 0) > 0 && s.time - (b.broke ?? 0) < DAY_SECONDS * 30) {
+  /* craft: pots that cracked at the open fire within the year, and the kiln known */
+  if (!near.some(w => w.kind === Line.Kiln && (standing(w) || (w.prog ?? 1) < 1)) && (b.broke ?? 0) > 0 && s.time - (b.broke ?? 0) < DAY_SECONDS * 160) {
     const def = defById("kiln0");
     if (canStart(p, def) && materialsInReach(s, b, def)) {
       const at = householdSite(s, b, def, home);

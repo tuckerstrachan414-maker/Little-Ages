@@ -3,7 +3,7 @@ import { Bubble } from "../../shared/people.ts";
 import { Goal, YEAR, type Person } from "./person.ts";
 import type { Band } from "./band.ts";
 import { Work, worksAround } from "./works.ts";
-import { hutStands } from "./homes.ts";
+import { hutStands, pitFood, pitRoom } from "./homes.ts";
 import { standing, startBuilding, OWNER } from "../buildings/build.ts";
 import { DEFS, Line, defById } from "./../buildings/defs.ts";
 import { communalSite, materialsInReach } from "../buildings/wants.ts";
@@ -62,6 +62,8 @@ function tierDay(s: Society, v: Village): void {
   let tier = 0;
   if (v.pop >= 30 || houses >= 8) tier = 1;
   if (tier === 1 && v.pop >= 100 && communal.length >= 2 && crafts >= 1) tier = 2;
+  /* a town keeps its standing through a thin year or a kiln fallen in, while seventy still live there and a shared building stands */
+  if (tier === 1 && v.tier >= 2 && v.pop >= 70 && communal.length >= 1) tier = 2;
   /* a city waits for walls and a temple (a later checkpoint) */
   if (tier === v.tier) return;
   const up = tier > v.tier, was = v.tier; v.tier = tier; s.villagesVersion++;
@@ -109,10 +111,10 @@ export function villageProblems(s: Society, v: Village): Float32Array {
 }
 /** The chief sets the village to a work it feels the need of: a well where the water is far, a granary where the pits overflow. */
 function chiefDay(s: Society, v: Village): void {
-  /* a call stands while the work is going up; one nobody has answered in two years is given up, the marked-out frame with it */
+  /* a call stands while the work is going up; one not finished in two years is given up, the frame torn down, so the village is not stuck behind it */
   if (v.call) {
     const w = s.works.find(o => o.id === v.call!.work);
-    const given = !!w && (w.prog ?? 0) <= 0 && s.time - v.call.since > YEAR * 2;
+    const given = !!w && !standing(w) && s.time - v.call.since > YEAR * 2;
     if (given) { s.works = s.works.filter(o => o !== w); s.worksVersion++; }
     if (!w || standing(w) || given) v.call = null; else return;
   }
@@ -121,21 +123,24 @@ function chiefDay(s: Society, v: Village): void {
   if (adults.length < 6) return;
   const { communal } = villageBuildings(s, v);
   const her = chief.sex === "f" ? "her" : "his";
-  if (pr[Problem.Water] > 0.5 && !communal.some(w => w.kind === Line.Well) && !worksAround(s, v.x, v.y, 14).some(w => w.kind === Line.Well && (w.prog ?? 1) < 1)) {
+  /* a well where the river is a long walk, or where so many live close that the river runs foul below the camps: a well halves the crowd's sickness */
+  const crowded = v.pop >= 60;
+  if ((pr[Problem.Water] > 0.5 || crowded) && !communal.some(w => w.kind === Line.Well) && !worksAround(s, v.x, v.y, 14).some(w => w.kind === Line.Well && (w.prog ?? 1) < 1)) {
     const def = defById("well0");
     if (adults.some(q => knows(q, WELLS())) && materialsInReach(s, b, def)) {
       const at = communalSite(s, b, def, v.id);
       if (at) {
         const w = startBuilding(s, chief, def, at[0], at[1], "settlement", 0);
         v.call = { work: w.id, since: s.time };
-        s.event("communal", Bubble.Drop, `${chief.name}, whom most at ${v.name} listen to, has set the village to digging a well: the river is a long walk, and the children go thirsty. ${her === "her" ? "She" : "He"} marked out the spot ${Math.round(Math.hypot(at[0] - v.x, at[1] - v.y))} paces from the fires.`, at[0], at[1], [chief.id], b.id, 0);
+        s.event("communal", Bubble.Drop, `${chief.name}, whom most at ${v.name} listen to, has set the village to digging a well: ${pr[Problem.Water] > 0.5 ? "the river is a long walk, and the children go thirsty" : `with ${v.pop} living so close, the water below the camps runs foul and the little ones sicken`}. ${her === "her" ? "She" : "He"} marked out the spot ${Math.round(Math.hypot(at[0] - v.x, at[1] - v.y))} paces from the fires.`, at[0], at[1], [chief.id], b.id, 0);
         return;
       }
     }
   }
-  /* more food put by than three households' pits can hold, and granaries known */
+  /* more food put by than three households' pits can hold, granaries known, and every granary the village shares already four-fifths full */
   const overflowing = villageBands(s, v).reduce((n, o) => n + (o.problems[Problem.Storage] > 0.5 ? Math.max(1, o.hearths.size) : 0), 0);
-  if (overflowing >= 3 && !communal.some(w => w.kind === Line.Store) && !worksAround(s, v.x, v.y, 14).some(w => w.kind === Line.Store && (w.owner ?? 0) >= 1 && (w.prog ?? 1) < 1)) {
+  const roomShared = communal.some(w => w.kind === Line.Store && pitFood(w) < pitRoom(w) * 0.8);
+  if (overflowing >= 3 && !roomShared && !worksAround(s, v.x, v.y, 14).some(w => w.kind === Line.Store && (w.owner ?? 0) >= 1 && (w.prog ?? 1) < 1)) {
     const def = defById("store1");
     if (adults.some(q => knows(q, GRANARY())) && materialsInReach(s, b, def)) {
       const at = communalSite(s, b, def, v.id + 7);

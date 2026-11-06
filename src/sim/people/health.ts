@@ -47,8 +47,8 @@ export function illness(s: Society, p: Person, age: number, st: Stage): void {
   }
 }
 
-/** The illness stress of a crowded camp: nothing up to thirty people within sixteen tiles of it, rising to one at ninety; half as much with a well to drink from. */
+/** The illness stress of a crowded camp: nothing up to fifty people within sixteen tiles of it, rising to one at a hundred and fifty; half as much with a well to drink from. */
 export function crowding(s: Society, b: Band): number {
-  const crowd = clamp01((b.crowd - 30) / 60);
+  const crowd = clamp01((b.crowd - 50) / 100);
   return crowd > 0.02 ? crowd * (buildingsNear(s, b.x, b.y, 12, Line.Well).length ? 0.5 : 1) : 0;
 }

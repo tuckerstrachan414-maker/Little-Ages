@@ -11,7 +11,7 @@ import { techIx, techByKey, Era } from "../src/sim/tech/tree.ts";
 import { Problem } from "../src/sim/tech/problems.ts";
 import { addWork, Work, worksDay } from "../src/sim/people/works.ts";
 import { raise, hutOf, hutStands, hutJob, sharedStore, pitOf } from "../src/sim/people/homes.ts";
-import { villagesDay, type Village } from "../src/sim/people/villages.ts";
+import { villagesDay, VILLAGE_R, type Village } from "../src/sim/people/villages.ts";
 import { settlementsDay, cultureAge, listenedAt, villageBuildings, TIER_NAMES, isChief } from "../src/sim/people/settlements.ts";
 import { wants } from "../src/sim/buildings/wants.ts";
 import { Line } from "../src/sim/buildings/defs.ts";
@@ -78,6 +78,9 @@ describe("tiers", () => {
     expect(v.tier).toBe(2);
     expect(s.events.some(e => e.kind === "tier" && e.text.includes("grown into a town"))).toBe(true);
     expect(villageDetail(s, v.id)!.tier).toBe(2);
+    /* a thin year does not take a town's standing away; emptying does */
+    v.pop = 80; settlementsDay(s);
+    expect(v.tier).toBe(2);
     /* and back down when the people are gone */
     v.pop = 40; settlementsDay(s);
     expect(v.tier).toBe(1);
@@ -154,6 +157,29 @@ describe("the chief", () => {
   });
 });
 
+describe("the chief's well for a crowd", () => {
+  it("is dug when sixty live close together, though the river is near", () => {
+    const { s } = fresh(12);
+    const b = s.bands.slice().sort((a, c) => c.members.length - a.members.length)[0];
+    const v = villageOf(s, b);
+    for (const o of s.bands.slice()) { if (o === b) continue; for (const id of o.members.slice()) { if (b.members.length >= 64) break; const q = s.byId.get(id); if (q) s.moveTo(q, b); } }
+    villagesDay(s);
+    const all = b.members.map(id => s.byId.get(id)!).filter(q => s.age(q) >= 16), chief = grown(s, b)[0];
+    for (const q of all) q.follows = chief.id;
+    know(s, chief, "digging-sticks"); know(s, chief, "wells");
+    for (const o of s.bands) o.problems[Problem.Water] = 0;
+    b.water = [b.x + 1, b.y];
+    const before = s.events.length;
+    settlementsDay(s);
+    expect(v.pop).toBeGreaterThanOrEqual(60);
+    expect(v.chief).toBe(chief.id);
+    expect(v.call).toBeTruthy();
+    const w = s.works.find(o => o.id === v.call!.work)!;
+    expect(w.kind).toBe(Line.Well); expect(w.owner).toBe(OWNER.settlement);
+    expect(s.events.slice(before).some(e => e.kind === "communal" && e.text.includes("runs foul"))).toBe(true);
+  });
+});
+
 describe("the chief's granary", () => {
   it("is raised by the villagers while the call stands, and then is everyone's to put by in", () => {
     const { s } = fresh();
@@ -216,5 +242,30 @@ describe("a people's age", () => {
   });
   it("the building ways of this checkpoint are alive in the tree", () => {
     for (const k of ["granary", "mud-brick", "wattle-and-daub", "timber-framing"]) { const d = techByKey(k)!; expect(d.active, k).toBe(true); expect(d.story, k).toBeTruthy(); expect(d.during.length, k).toBeGreaterThan(0); }
+  });
+});
+
+describe("budding off", () => {
+  it("a band with huts that splits for room alone raises its new camp within the village, not far off in the wild", () => {
+    const { s } = fresh(12);
+    const b = s.bands.slice().sort((a, c) => c.members.length - a.members.length)[0];
+    const v = villageOf(s, b);
+    /* crowd it past forty with people from the other bands, and empty the store so the squeeze is felt */
+    for (const o of s.bands.slice()) { if (o === b) continue; for (const id of o.members.slice()) { if (b.members.length >= 44) break; const q = s.byId.get(id); if (q) s.moveTo(q, b); } }
+    expect(b.members.length).toBeGreaterThanOrEqual(40);
+    b.founded = s.time - DAY_SECONDS * 60; b.store.plant = 0; b.store.meat = 0; b.store.fish = 0; b.store.dried = 0; b.pit = 0;
+    for (const h of b.hearths.values()) { h.plant = 0; h.meat = 0; h.fish = 0; h.dried = 0; }
+    const ms = b.members.map(id => s.byId.get(id)!), adults = ms.filter(q => s.age(q) >= 18);
+    const before = s.bands.length;
+    (s as unknown as { weighSplit(b: Band, ms: Person[], adults: Person[]): void }).weighSplit(b, ms, adults);
+    expect(s.bands.length).toBe(before + 1);
+    const nb = s.bands[s.bands.length - 1];
+    expect(nb.parent).toBe(b.id);
+    /* they set out from the old fire for a spot of their own within the village */
+    const to = nb.moving!; expect(to).toBeTruthy();
+    expect(Math.hypot(to.x - v.x, to.y - v.y)).toBeLessThan(VILLAGE_R);
+    expect(Math.hypot(to.x - b.x, to.y - b.y)).toBeGreaterThanOrEqual(5);
+    const e = s.events.find(e => e.kind === "split")!;
+    expect(e).toBeTruthy(); expect(e.text).toContain(nb.name);
   });
 });

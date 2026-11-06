@@ -23,7 +23,7 @@ export const EATS = [0.01, 0.01, 0.018, 0.009, 0, 0.006, 0.006, 0.007, 0.009, 0]
 /* how much of that is grass rather than browse: deer and bears browse, the rest graze */
 export const GRASS = [0.15, 0.9, 0.7, 1, 0, 0.1, 0.4, 0.95, 0.3, 0];
 /* per animal per year: young raised when well fed, and deaths from age and accident */
-export const FECUND = [0.45, 0.36, 0.16, 0.36, 0.8, 0.25, 0.5, 0.45, 0.55, 0.8], MORTAL = [0.16, 0.11, 0.05, 0.11, 0.22, 0.08, 0.18, 0.18, 0.2, 0.2];
+export const FECUND = [0.45, 0.36, 0.16, 0.36, 0.8, 0.25, 0.4, 0.34, 0.45, 0.8], MORTAL = [0.16, 0.11, 0.05, 0.11, 0.22, 0.08, 0.18, 0.18, 0.2, 0.2];
 
 export class Wildlife {
   herds: Herd[] = [];

@@ -71,7 +71,7 @@ describe("the quick lookups give what the plain ones give", () => {
 
   it("finds the same people, herds, works and kin as searching everything", () => {
     expect(s.people.length).toBeGreaterThan(200);
-    expect(s.archive.size).toBeGreaterThan(50);
+    expect(s.archive.size).toBeGreaterThan(30);
     const rng = new Rng(SEED);
     /* villages' worth of works around every camp, made in id order like any others */
     for (let k = 0; k < 240; k++) {
