@@ -62,6 +62,8 @@ function tierDay(s: Society, v: Village): void {
   let tier = 0;
   if (v.pop >= 30 || houses >= 8) tier = 1;
   if (tier === 1 && v.pop >= 100 && communal.length >= 2 && crafts >= 1) tier = 2;
+  /* a town keeps its standing through a thin year or a kiln fallen in, while seventy still live there and a shared building stands */
+  if (tier === 1 && v.tier >= 2 && v.pop >= 70 && communal.length >= 1) tier = 2;
   /* a city waits for walls and a temple (a later checkpoint) */
   if (tier === v.tier) return;
   const up = tier > v.tier, was = v.tier; v.tier = tier; s.villagesVersion++;

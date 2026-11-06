@@ -78,6 +78,9 @@ describe("tiers", () => {
     expect(v.tier).toBe(2);
     expect(s.events.some(e => e.kind === "tier" && e.text.includes("grown into a town"))).toBe(true);
     expect(villageDetail(s, v.id)!.tier).toBe(2);
+    /* a thin year does not take a town's standing away; emptying does */
+    v.pop = 80; settlementsDay(s);
+    expect(v.tier).toBe(2);
     /* and back down when the people are gone */
     v.pop = 40; settlementsDay(s);
     expect(v.tier).toBe(1);
